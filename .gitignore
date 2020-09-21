@@ -1,0 +1,19 @@
+.DS_Store
+.idea/
+.vscode/
+
+build/
+tmp/
+temp/
+.build/
+
+# env variables
+ormconfig.json
+.env
+
+# package directories
+node_modules
+jspm_packages
+
+# Serverless directories
+.serverless

@@ -1,0 +1,17 @@
+{
+  "type": "aurora-data-api-pg",
+  "database": "pizzabase",
+  "secretArn": "arn:aws:secretsmanager:us-xx-x:xx:xx:xx",
+  "resourceArn": "arn:aws:rds:us-xx-x:xx:xx:xx",
+  "region": "us-xx-x",
+  "synchronize": true,
+  "logging": false,
+  "entities": ["src/entity/**/*.ts"],
+  "migrations": ["src/migration/**/*.ts"],
+  "subscribers": ["src/subscriber/**/*.ts"],
+  "cli": {
+    "entitiesDir": "src/entity",
+    "migrationsDir": "src/migration",
+    "subscribersDir": "src/subscriber"
+  }
+}
