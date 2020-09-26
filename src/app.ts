@@ -14,7 +14,7 @@ Routes.forEach(({ method, route, controller, action }) => {
     (req: Request, res: Response, next: NextFunction) => {
       const result = new (controller as any)()[action](req, res, next);
       if (result instanceof Promise) {
-        controllerResult.then((controllerResult) =>
+        result.then((controllerResult) =>
           controllerResult !== null && controllerResult !== undefined
             ? res.send(controllerResult)
             : undefined

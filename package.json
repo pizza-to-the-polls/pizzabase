@@ -7,6 +7,7 @@
     "ava": "^3.12.1",
     "node-mocks-http": "^1.9.0",
     "prettier": "^2.1.2",
+    "serverless-domain-manager": "^5.0.0",
     "serverless-plugin-typescript": "^1.1.9",
     "ts-node": "^3.3.0",
     "tsconfig-paths": "^3.9.0",

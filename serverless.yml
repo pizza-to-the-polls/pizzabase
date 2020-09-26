@@ -2,6 +2,10 @@ service: pizzabase
 
 frameworkVersion: "1"
 
+plugins:
+  - serverless-plugin-typescript
+  - serverless-domain-manager
+
 provider:
   name: aws
   runtime: nodejs12.x
@@ -11,8 +15,12 @@ provider:
     SS_AUTH_ID: ${env:SS_AUTH_ID}
     SS_AUTH_TOKEN: ${env:SS_AUTH_TOKEN}
 
-plugins:
-  - serverless-plugin-typescript
+  iamRoleStatements:
+    - Effect: 'Allow'
+      Action:
+        - 'secretsmanager:GetSecretValue'
+      Resource:
+        - 'arn:aws:secretsmanager:us-west-2:320802729995:secret:PizzaBase*'
 
 functions:
   app:
@@ -20,6 +28,14 @@ functions:
     events:
       - http: ANY /
       - http: "ANY {proxy+}"
+
+custom:
+  customDomain:
+    domainName: base.polls.pizza
+    basePath: ''
+    stage: ${self:provider.stage}
+    createRoute53Record: true
+
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
 #    Check the event documentation for details
