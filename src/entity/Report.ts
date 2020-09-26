@@ -16,11 +16,17 @@ export class Report {
   id: number;
 
   @Column()
-  @Index({ unique: true })
+  @Index()
   resource!: string;
 
   @Column({ name: "contact_info" })
   contactInfo!: string;
+
+  @Column({ name: 'is_open', default: true })
+  isOpen: boolean;
+
+  @Column({ name: 'is_at_polling_place', default: false })
+  isAtPollingPlace: boolean;
 
   @ManyToOne((type) => Location, (location) => location.reports)
   location!: Location;

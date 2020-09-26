@@ -9,6 +9,8 @@ import {
 } from "typeorm";
 import { Report } from "./Report";
 import { Order } from "./Order";
+import { NormalAddress } from "../lib/geocoder"
+
 
 @Entity()
 export class Location {
@@ -40,6 +42,9 @@ export class Location {
   @Column({ length: 5 })
   @Index()
   zip!: string;
+
+  @Column({ name: 'is_approved', default: false })
+  isApproved: boolean;
 
   @OneToMany((type) => Report, (report) => report.location)
   reports: Report[];

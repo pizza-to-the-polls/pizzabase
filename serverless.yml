@@ -8,6 +8,8 @@ provider:
   stage: prod
   region: us-west-2
   environment:
+    SS_AUTH_ID: ${env:SS_AUTH_ID}
+    SS_AUTH_TOKEN: ${env:SS_AUTH_TOKEN}
 
 plugins:
   - serverless-plugin-typescript

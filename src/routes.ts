@@ -1,28 +1,29 @@
-import { UserController } from "./controller/UserController";
+import { LocationController } from "./controller/LocationController";
+import { ReportController } from "./controller/ReportController";
 
 export const Routes = [
   {
     method: "get",
-    route: "/users",
-    controller: UserController,
+    route: "/locations",
+    controller: LocationController,
     action: "all",
   },
   {
     method: "get",
-    route: "/users/:id",
-    controller: UserController,
+    route: "/locations/:IdOrFullAddress",
+    controller: LocationController,
     action: "one",
   },
   {
-    method: "post",
-    route: "/users",
-    controller: UserController,
-    action: "save",
+    method: "put",
+    route: "/locations/:IdOrFullAddress",
+    controller: LocationController,
+    action: "update",
   },
   {
-    method: "delete",
-    route: "/users/:id",
-    controller: UserController,
-    action: "remove",
-  },
+    method: "put",
+    route: "/report",
+    controller: ReportController,
+    action: "create",
+  }
 ];
