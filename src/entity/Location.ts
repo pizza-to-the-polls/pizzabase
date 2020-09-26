@@ -9,7 +9,7 @@ import {
 } from "typeorm";
 import { Report } from "./Report";
 import { Order } from "./Order";
-import { NormalAddress } from "../lib/geocoder";
+import { NormalAddress } from "../lib/validator";
 
 @Entity()
 export class Location {
