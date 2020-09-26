@@ -7,7 +7,7 @@ const authId = process.env.SS_AUTH_ID;
 const authToken = process.env.SS_AUTH_TOKEN;
 const credentials = new SmartyStreetsCore.StaticCredentials(authId, authToken);
 
-let client = SmartyStreetsCore.buildClient.usExtract(credentials);
+const client = SmartyStreetsCore.buildClient.usExtract(credentials);
 
 export interface NormalAddress {
   latitude: number;
@@ -18,7 +18,7 @@ export interface NormalAddress {
   address: string;
   city: string;
   state: string;
-  zipCode: string;
+  zip: string;
 }
 
 const geocode = async (body: string): Promise<null | NormalAddress> => {
@@ -34,17 +34,17 @@ const geocode = async (body: string): Promise<null | NormalAddress> => {
     const {
       deliveryLine1: address,
       metadata: { latitude, longitude },
-      components: { cityName: city, state, zipCode },
+      components: { cityName: city, state, zipCode: zip },
     } = candidate;
 
-    const fullAddress = `${address} ${city} ${state} ${zipCode}`;
+    const fullAddress = `${address} ${city} ${state} ${zip}`;
 
     return {
       fullAddress,
       address,
       city,
       state,
-      zipCode,
+      zip,
       latitude,
       longitude,
     };

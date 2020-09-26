@@ -21,7 +21,10 @@ export class Order {
   @Column()
   pizzas!: number;
 
-  @ManyToOne((type) => Location, (location) => location.orders)
+  @ManyToOne((type) => Location, (location) => location.orders, {
+    eager: true,
+    nullable: false,
+  })
   location!: Location;
 
   @OneToMany((type) => Report, (report) => report.order)

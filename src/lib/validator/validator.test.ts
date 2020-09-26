@@ -29,7 +29,7 @@ test("validateRequest returns an error for empty request", async (t) => {
 test("validates the request is valid", async (t) => {
   t.deepEqual(
     await validateRequest({
-      url: "http://twitter.com/something/",
+      url: "http://twitter.com/something/?utm_diff",
       contact: "555-234-2345",
       address: "5335 S Kimbark Ave, Chicago IL 60615",
     }),
@@ -46,7 +46,7 @@ test("validates the request is valid", async (t) => {
         address: "5335 S Kimbark Ave",
         city: "Chicago",
         state: "IL",
-        zipCode: "60615",
+        zip: "60615",
       },
     }
   );

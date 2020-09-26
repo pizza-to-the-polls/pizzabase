@@ -1,7 +1,7 @@
 {
   "name": "pizzabase",
   "version": "0.0.1",
-  "description": "Awesome project developed with TypeORM.",
+  "description": "Pizza to the Polls order tracking service",
   "devDependencies": {
     "@types/node": "^8.10.64",
     "ava": "^3.12.1",

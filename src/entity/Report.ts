@@ -1,4 +1,5 @@
 import {
+  BaseEntity,
   Index,
   Entity,
   PrimaryGeneratedColumn,
@@ -9,32 +10,27 @@ import {
 } from "typeorm";
 import { Location } from "./Location";
 import { Order } from "./Order";
+import { NormalAddress } from "../lib/validator";
 
 @Entity()
-export class Report {
+export class Report extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
-
-  @Column()
-  @Index()
-  resource!: string;
 
   @Column({ name: "contact_info" })
   contactInfo!: string;
 
   @Column({ name: "url" })
+  @Index()
   reportURL!: string;
 
-  @Column({ name: "is_open", default: true })
-  isOpen: boolean;
-
-  @Column({ name: "is_at_polling_place", default: false })
-  isAtPollingPlace: boolean;
-
-  @ManyToOne((type) => Location, (location) => location.reports)
+  @ManyToOne((type) => Location, (location) => location.reports, {
+    eager: true,
+    nullable: false,
+  })
   location!: Location;
 
-  @ManyToOne((type) => Order, (order) => order.reports)
+  @ManyToOne((type) => Order, (order) => order.reports, { eager: true })
   order: Order;
 
   @CreateDateColumn({ name: "created_at" })
@@ -42,4 +38,20 @@ export class Report {
 
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
+
+  static async createNewReport(
+    contactInfo: string,
+    reportURL: string,
+    address: NormalAddress
+  ): Promise<Report> {
+    const report = new this();
+
+    report.contactInfo = contactInfo;
+    report.reportURL = reportURL;
+    report.location = await Location.getOrCreateFromAddress(address);
+
+    await report.save();
+
+    return report;
+  }
 }
