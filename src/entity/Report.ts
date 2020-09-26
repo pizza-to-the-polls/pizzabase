@@ -22,10 +22,13 @@ export class Report {
   @Column({ name: "contact_info" })
   contactInfo!: string;
 
-  @Column({ name: 'is_open', default: true })
+  @Column({ name: "url" })
+  reportURL!: string;
+
+  @Column({ name: "is_open", default: true })
   isOpen: boolean;
 
-  @Column({ name: 'is_at_polling_place', default: false })
+  @Column({ name: "is_at_polling_place", default: false })
   isAtPollingPlace: boolean;
 
   @ManyToOne((type) => Location, (location) => location.reports)

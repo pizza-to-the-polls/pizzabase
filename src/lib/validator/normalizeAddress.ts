@@ -11,7 +11,7 @@ let client = SmartyStreetsCore.buildClient.usExtract(credentials);
 
 export interface NormalAddress {
   latitude: number;
-  longitude: number,
+  longitude: number;
 
   fullAddress: string;
 
@@ -21,34 +21,23 @@ export interface NormalAddress {
   zipCode: string;
 }
 
-const geocode = async (body: string) : null | normalizedAddress => {
+const geocode = async (body: string): Promise<null | NormalAddress> => {
   const lookup = new Lookup(body);
   lookup.aggressive = true;
 
-  try {
-    const resp = await client.send(lookup);
-  } catch (e) {
-    console.error(e)
-  }
+  const { result } = await client.send(lookup);
+  const { addresses } = result || { addresses: [] };
+  const { candidates } = (addresses || [])[0] || { candidates: [] };
+  const candidate = (candidates || [])[0];
 
-  const { addresses } = result || {};
-
-  const [ addy ] = addresses || [];
-  const { candidates } = addy || {};
-  const [ candidate ] = candidates || {};
-
-  if( candidate ) {
+  if (candidate) {
     const {
       deliveryLine1: address,
       metadata: { latitude, longitude },
-      components: {
-        city,
-        state,
-        zipCode
-      }
+      components: { cityName: city, state, zipCode },
     } = candidate;
 
-    const fullAddress = `${address} ${city} ${state} ${zipCode}`
+    const fullAddress = `${address} ${city} ${state} ${zipCode}`;
 
     return {
       fullAddress,
@@ -58,10 +47,18 @@ const geocode = async (body: string) : null | normalizedAddress => {
       zipCode,
       latitude,
       longitude,
-    }
+    };
   }
-}
 
-export const normalizeAddress = async (address?: string) : NormalAddress | null  => (
-  address ? (await geocode(address)) : null
-)
+  return null;
+};
+
+export const normalizeAddress = async (
+  address?: string
+): Promise<NormalAddress | null> => {
+  try {
+    return address ? await geocode(address) : null;
+  } catch (e) {
+    console.error(e);
+  }
+};

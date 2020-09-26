@@ -25,5 +25,5 @@ export const Routes = [
     route: "/report",
     controller: ReportController,
     action: "create",
-  }
+  },
 ];
