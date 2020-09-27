@@ -3,11 +3,9 @@ import test from "ava";
 import { createConnection, getConnection } from "typeorm";
 
 export const setUpDB = async () => {
-  await createConnection({
+  const config: any = {
     type: "postgres",
     database: process.env.POSTGRES_DB || "pizzabaseTest",
-    password: process.env.POSTGRES_PASSWORD,
-    username: process.env.POSTGRES_USERNAME,
     dropSchema: true,
     synchronize: true,
     logging: false,
@@ -19,7 +17,14 @@ export const setUpDB = async () => {
       migrationsDir: "src/migration",
       subscribersDir: "src/subscriber",
     },
-  });
+  };
+
+  if (process.env.POSTGRES_PASSWORD)
+    config.password = process.env.POSTGRES_PASSWORD;
+  if (process.env.POSTGRES_PASSWORD)
+    config.username = process.env.POSTGRES_USERNAME;
+
+  await createConnection(config);
 };
 
 export const closeDB = async () => {

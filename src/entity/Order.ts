@@ -1,4 +1,5 @@
 import {
+  BaseEntity,
   Entity,
   PrimaryGeneratedColumn,
   Column,
@@ -11,7 +12,7 @@ import { Location } from "./Location";
 import { Report } from "./Report";
 
 @Entity()
-export class Order {
+export class Order extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
