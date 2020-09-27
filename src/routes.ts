@@ -37,6 +37,6 @@ export const Routes = [
     method: "get",
     route: "/",
     controller: RootController,
-    action: "root"
-  }
+    action: "root",
+  },
 ];

@@ -1,16 +1,21 @@
 import * as serverless from "serverless-http";
 import { createConnection } from "typeorm";
-import app from "./src/app";
+import app from "./app";
 
 const handler = serverless(app);
 
-module.exports.handler = async (event, context) => {
+let connection;
+
+const setUpDB = async () => {
   try {
-    await createConnection();
+    if (!connection) connection = await createConnection();
   } catch (e) {
     console.error("Could not create connection");
     throw e;
   }
+};
 
+module.exports.handler = async (event, context) => {
+  await setUpDB();
   return await handler(event, context);
 };
