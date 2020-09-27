@@ -34,7 +34,8 @@
     "prettier:fix": "prettier --write .",
     "lint": "tslint --project .",
     "lint:fix": "tslint --fix --force --project .",
-    "test": "ava"
+    "test": "ava",
+    "test:watch": "ava --watch"
   },
   "ava": {
     "extensions": [
