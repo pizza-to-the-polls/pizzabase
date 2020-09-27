@@ -6,6 +6,7 @@
     "@types/node": "^8.10.64",
     "ava": "^3.12.1",
     "node-mocks-http": "^1.9.0",
+    "nodemon": "^2.0.4",
     "prettier": "^2.1.2",
     "serverless-domain-manager": "^5.0.0",
     "serverless-plugin-typescript": "^1.1.9",
@@ -28,6 +29,7 @@
     "typeorm-aurora-data-api-driver": "^1.4.0"
   },
   "scripts": {
+    "dev": "nodemon --watch \"src/**\" --ext \"ts,json\" --ignore \"src/**/*.test.ts\" --exec npm run start",
     "start": "ts-node src/index.ts",
     "clean": "rm -rf .build && npm run prettier:fix && npm run lint:fix",
     "prettier": "prettier --check .",

@@ -4,7 +4,7 @@ import { Report } from "../entity/Report";
 import { validateRequest } from "../lib/validator";
 
 export class ReportController {
-  async create(request: Request, response: Response, next: NextFunction) {
+  async create(request: Request, response: Response, _next: NextFunction) {
     const {
       errors,
       normalizedAddress,
