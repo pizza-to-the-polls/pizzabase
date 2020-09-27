@@ -16,11 +16,11 @@ provider:
     SS_AUTH_TOKEN: ${env:SS_AUTH_TOKEN}
 
   iamRoleStatements:
-    - Effect: 'Allow'
+    - Effect: "Allow"
       Action:
-        - 'secretsmanager:GetSecretValue'
+        - "secretsmanager:GetSecretValue"
       Resource:
-        - 'arn:aws:secretsmanager:us-west-2:320802729995:secret:PizzaBase*'
+        - "arn:aws:secretsmanager:us-west-2:320802729995:secret:PizzaBase*"
 
 functions:
   app:
@@ -32,10 +32,9 @@ functions:
 custom:
   customDomain:
     domainName: base.polls.pizza
-    basePath: ''
+    basePath: ""
     stage: ${self:provider.stage}
     createRoute53Record: true
-
 #    The following are a few example events you can configure
 #    NOTE: Please make sure to change your handler code to work with those events
 #    Check the event documentation for details

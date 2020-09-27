@@ -5,7 +5,9 @@ import { createConnection, getConnection } from "typeorm";
 export const setUpDB = async () => {
   await createConnection({
     type: "postgres",
-    database: "pizzabaseTest",
+    database: process.env.POSTGRES_DB || "pizzabaseTest",
+    password: process.env.POSTGRES_PASSWORD,
+    username: process.env.POSTGRES_USERNAME,
     dropSchema: true,
     synchronize: true,
     logging: false,
