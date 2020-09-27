@@ -20,7 +20,7 @@ provider:
       Action:
         - "secretsmanager:GetSecretValue"
         - "secretsmanager:PutResourcePolicy"
-        - "secretsmanager:PutSecretValue",
+        - "secretsmanager:PutSecretValue"
         - "secretsmanager:DeleteSecret"
         - "secretsmanager:DescribeSecret"
         - "secretsmanager:TagResource"
