@@ -5,10 +5,8 @@ on:
     branches: [master]
 
 jobs:
-  build:
+  setup:
     runs-on: ubuntu-latest
-
-    needs: test
 
     steps:
       - uses: actions/checkout@v2
@@ -18,13 +16,55 @@ jobs:
         with:
           node-version: 12
 
+      - name: npm install dependencies
+        run: npm install
+
+  test:
+    runs-on: ubuntu-latest
+
+    needs: setup
+
+    services:
+      postgres:
+        image: postgres
+        env:
+          POSTGRES_PASSWORD: postgres
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+        ports:
+          - 5432:5432
+
+    steps:
+      - name: run prettier
+        run: npm run prettier
+
+      - name: run tslint
+        run: npm run lint
+
+      - name: run tests
+        run: npm run test
+        env:
+          SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
+          SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
+          POSTGRES_DB: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_USERNAME: postgres
+
+  build:
+    runs-on: ubuntu-latest
+
+    needs: [setup test]
+
+    steps:
+      - uses: actions/checkout@v2
+
       - name: create ormconfig.json
         run: echo $ORMCONFIG_JSON > $GITHUB_WORKSPACE/ormconfig.json
         env:
           SERVICE_JSON: ${{ secrets.ORMCONFIG_JSON }}
-
-      - name: npm install dependencies
-        run: npm install
 
       - name: Serverless
         uses: serverless/github-action@v1.53.0
