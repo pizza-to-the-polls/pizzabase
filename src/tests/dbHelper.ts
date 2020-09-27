@@ -1,5 +1,3 @@
-import test from "ava";
-
 import { createConnection, getConnection } from "typeorm";
 
 export const setUpDB = async () => {

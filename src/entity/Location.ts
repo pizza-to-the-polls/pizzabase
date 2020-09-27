@@ -21,9 +21,11 @@ export class Location extends BaseEntity {
   @Index({ unique: true })
   fullAddress!: string;
 
-  @Column("point")
-  @Index({ spatial: true })
-  latlng!: string;
+  @Column("double precision")
+  lat!: number;
+
+  @Column("double precision")
+  lng!: number;
 
   @Column()
   address!: string;
@@ -82,7 +84,8 @@ export class Location extends BaseEntity {
     loc.zip = zip;
     loc.city = city;
     loc.state = state;
-    loc.latlng = `${latitude}, ${longitude}`;
+    loc.lat = latitude;
+    loc.lng = longitude;
 
     await loc.save();
 

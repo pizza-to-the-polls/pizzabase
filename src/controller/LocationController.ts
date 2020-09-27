@@ -7,7 +7,7 @@ export class LocationController {
   }
 
   async one(request: Request, _response: Response, _next: NextFunction) {
-    return Location.findOne(request.params.fullAddress);
+    return Location.findOne({ where: { id: request.params.id } });
   }
 
   async upsert(request: Request, _response: Response, _next: NextFunction) {

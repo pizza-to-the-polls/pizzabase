@@ -11,24 +11,24 @@ export const Routes = [
   },
   {
     method: "get",
-    route: "/locations/:IdOrFullAddress",
+    route: "/locations/:id",
     controller: LocationController,
     action: "one",
   },
   {
     method: "put",
-    route: "/locations/:IdOrFullAddress/validate",
+    route: "/locations/:id/validate",
     controller: LocationController,
     action: "validate",
   },
   {
     method: "put",
-    route: "/locations/:IdOrFullAddress/order",
+    route: "/locations/:id/order",
     controller: LocationController,
     action: "order",
   },
   {
-    method: "put",
+    method: "post",
     route: "/report",
     controller: ReportController,
     action: "create",

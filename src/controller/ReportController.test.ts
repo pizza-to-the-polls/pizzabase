@@ -6,9 +6,9 @@ import dbHelper from "../tests/dbHelper";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 
-test.before(async (t) => await dbHelper.setUpDB());
+test.before(async (_t) => await dbHelper.setUpDB());
 
-test.after.always(async (t) => await dbHelper.closeDB());
+test.after.always(async (_t) => await dbHelper.closeDB());
 
 test("Sends 422 and errors on empty response", async (t) => {
   const controller = new ReportController();
