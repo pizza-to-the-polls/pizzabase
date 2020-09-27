@@ -22,6 +22,10 @@ provider:
       Resource:
         - "arn:aws:secretsmanager:us-west-2:320802729995:secret:PizzaBase*"
 
+package:
+  include:
+    - ormconfig.json
+
 functions:
   app:
     handler: handler.handler
