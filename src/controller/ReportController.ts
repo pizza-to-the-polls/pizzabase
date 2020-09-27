@@ -1,4 +1,3 @@
-import { getRepository } from "typeorm";
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
 import { validateRequest } from "../lib/validator";

@@ -43,12 +43,12 @@ export class Location extends BaseEntity {
   @Column({ name: "is_approved", default: false })
   isApproved: boolean;
 
-  @OneToMany((type) => Report, (report) => report.location, {
+  @OneToMany((_type) => Report, (report) => report.location, {
     onDelete: "RESTRICT",
   })
   reports: Report[];
 
-  @OneToMany((type) => Order, (order) => order.location, {
+  @OneToMany((_type) => Order, (order) => order.location, {
     onDelete: "RESTRICT",
   })
   orders: Order[];

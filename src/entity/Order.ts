@@ -22,13 +22,13 @@ export class Order extends BaseEntity {
   @Column()
   pizzas!: number;
 
-  @ManyToOne((type) => Location, (location) => location.orders, {
+  @ManyToOne((_type) => Location, (location) => location.orders, {
     eager: true,
     nullable: false,
   })
   location!: Location;
 
-  @OneToMany((type) => Report, (report) => report.order)
+  @OneToMany((_type) => Report, (report) => report.order)
   reports: Report;
 
   @CreateDateColumn({ name: "created_at" })

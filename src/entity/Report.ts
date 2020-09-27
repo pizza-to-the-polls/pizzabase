@@ -24,13 +24,13 @@ export class Report extends BaseEntity {
   @Index()
   reportURL!: string;
 
-  @ManyToOne((type) => Location, (location) => location.reports, {
+  @ManyToOne((_type) => Location, (location) => location.reports, {
     eager: true,
     nullable: false,
   })
   location!: Location;
 
-  @ManyToOne((type) => Order, (order) => order.reports, { eager: true })
+  @ManyToOne((_type) => Order, (order) => order.reports, { eager: true })
   order: Order;
 
   @CreateDateColumn({ name: "created_at" })
