@@ -1,5 +1,6 @@
 import { LocationController } from "./controller/LocationController";
 import { ReportController } from "./controller/ReportController";
+import { RootController } from "./controller/RootController";
 
 export const Routes = [
   {
@@ -16,9 +17,15 @@ export const Routes = [
   },
   {
     method: "put",
-    route: "/locations/:IdOrFullAddress",
+    route: "/locations/:IdOrFullAddress/validate",
     controller: LocationController,
-    action: "update",
+    action: "validate",
+  },
+  {
+    method: "put",
+    route: "/locations/:IdOrFullAddress/order",
+    controller: LocationController,
+    action: "order",
   },
   {
     method: "put",
@@ -26,4 +33,10 @@ export const Routes = [
     controller: ReportController,
     action: "create",
   },
+  {
+    method: "get",
+    route: "/",
+    controller: RootController,
+    action: "root"
+  }
 ];

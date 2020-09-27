@@ -45,7 +45,7 @@ package:
 
 functions:
   app:
-    handler: handler.handler
+    handler: src/lambda.handler
     events:
       - http: ANY /
       - http: "ANY {proxy+}"
