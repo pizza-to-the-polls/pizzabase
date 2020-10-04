@@ -52,17 +52,8 @@ functions:
       - http: "ANY {proxy+}"
 
 custom:
-  customDomains:
-    - http:
-      domainName: base.polls.pizza
-      basePath: ""
-      stage: ${self:provider.stage}
-      createRoute53Record: true
-    - http:
-      domainName: polls.pizza
-      basePath: ""
-      stage: ${self:provider.stage}
-    - http:
-      domainName: api.polls.pizza
-      basePath: ""
-      stage: ${self:provider.stage}
+  customDomain:
+    domainName: base.polls.pizza
+    basePath: ""
+    stage: ${self:provider.stage}
+    createRoute53Record: true
