@@ -57,3 +57,11 @@ custom:
     basePath: ""
     stage: ${self:provider.stage}
     createRoute53Record: true
+  customDomain:
+    domainName: polls.pizza
+    basePath: ""
+    stage: ${self:provider.stage}
+  customDomain:
+    domainName: api.polls.pizza
+    basePath: ""
+    stage: ${self:provider.stage}
