@@ -9,7 +9,7 @@ const app = express();
 
 app.use(
   cors({
-    origin: "*.polls.pizza, polls.pizza",
+    origin: "https://polls.pizza",
     optionsSuccessStatus: 200,
   })
 );
