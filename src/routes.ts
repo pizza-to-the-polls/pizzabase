@@ -2,7 +2,7 @@ import { LocationController } from "./controller/LocationController";
 import { ReportController } from "./controller/ReportController";
 import { RootController } from "./controller/RootController";
 
-export const PREFIX = `/api`
+export const PREFIX = `/api`;
 
 export const Routes = [
   {
