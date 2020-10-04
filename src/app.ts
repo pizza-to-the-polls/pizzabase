@@ -3,7 +3,7 @@ import * as bodyParser from "body-parser";
 import * as cors from "cors";
 
 import { Request, Response, NextFunction } from "express";
-import { Routes, PREFIX } from "./routes";
+import { Routes } from "./routes";
 
 const app = express();
 
@@ -15,9 +15,9 @@ app.use(
 );
 app.use(bodyParser.json());
 
-Routes.forEach(({ method, route, controller, action, noPrefix }) => {
+Routes.forEach(({ method, route, controller, action }) => {
   (app as any)[method](
-    `${noPrefix ? "" : PREFIX}${route}`,
+    route,
     (req: Request, res: Response, next: NextFunction) => {
       const result = new (controller as any)()[action](req, res, next);
       if (result instanceof Promise) {
