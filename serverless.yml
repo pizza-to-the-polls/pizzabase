@@ -52,19 +52,17 @@ functions:
       - http: "ANY {proxy+}"
 
 custom:
-  - http:
-    customDomain:
+  customDomains:
+    - http:
       domainName: base.polls.pizza
       basePath: ""
       stage: ${self:provider.stage}
       createRoute53Record: true
-  - http:
-    customDomain:
+    - http:
       domainName: polls.pizza
       basePath: ""
       stage: ${self:provider.stage}
-  - http:
-    customDomain:
+    - http:
       domainName: api.polls.pizza
       basePath: ""
       stage: ${self:provider.stage}
