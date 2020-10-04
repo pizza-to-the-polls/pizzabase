@@ -6,7 +6,7 @@ const handler = serverless(app);
 
 let connection: Connection | null;
 
-const setUpDB = async () : Connection => {
+const setUpDB = async (): Connection => {
   try {
     if (!connection) {
       return await createConnection();
