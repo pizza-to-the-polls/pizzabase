@@ -41,4 +41,11 @@ export const Routes = [
     controller: RootController,
     action: "root",
   },
+  {
+    method: "get",
+    route: "/",
+    controller: RootController,
+    action: "root",
+    noPrefix: true,
+  },
 ];

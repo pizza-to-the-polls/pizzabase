@@ -18,6 +18,7 @@
   "dependencies": {
     "aws-sdk": "^2.756.0",
     "body-parser": "^1.18.1",
+    "cors": "^2.8.5",
     "express": "^4.17.1",
     "node-fetch": "^2.6.1",
     "pg": "^7.3.0",

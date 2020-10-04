@@ -9,7 +9,7 @@ plugins:
 provider:
   name: aws
   runtime: nodejs12.x
-  timeout: 300
+  timeout: 360
   stage: prod
   region: us-west-2
   environment:
