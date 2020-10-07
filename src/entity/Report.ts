@@ -50,7 +50,9 @@ export class Report extends BaseEntity {
     report.reportURL = reportURL;
     report.location = await Location.getOrCreateFromAddress(address);
 
-    const reportExists = await this.findOne({ where: { reportURL } });
+    const reportExists = await this.findOne({
+      where: { reportURL, location: report.location },
+    });
     if (reportExists) report.order = reportExists.order;
 
     await report.save();

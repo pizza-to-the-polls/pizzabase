@@ -4,20 +4,10 @@ import { ReportController } from "./ReportController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 
-import dbHelper from "../tests/dbHelper";
-
 jest.mock("../lib/validator/normalizeAddress");
 jest.mock("node-fetch");
 
 import fetch from "node-fetch";
-
-beforeAll(async () => {
-  await dbHelper.setUpDB();
-});
-afterAll(async () => {
-  await dbHelper.closeDB();
-});
-afterEach(() => jest.clearAllMocks());
 
 test("Sends 422 and errors on empty response", async () => {
   const controller = new ReportController();
@@ -151,7 +141,7 @@ test("Re-used loc / new returns success, sets existing location, creates new rep
   ]);
 });
 
-test("Re-used loc / report success, sets existing location, creates new report", async () => {
+test("Re-used loc / re-used url, sets existing location, creates new report, does not zap", async () => {
   const url = "http://twitter.com/different/";
   const address = "5335 S Kimbark Ave Chicago IL 60615";
   const contact = "555-234-2345";
@@ -186,4 +176,48 @@ test("Re-used loc / report success, sets existing location, creates new report",
   expect(report.location.id).toBe(location.id);
 
   expect(fetch.mock.calls.length).toBe(0);
+});
+
+test("New loc / re-used url, creates new report, does not zap", async () => {
+  const url = "http://twitter.com/anewone/";
+  const address = "5050 S Kimbark Ave Chicago IL 60615";
+  const contact = "666-234-2345";
+
+  await Report.createNewReport("333-234-2345", url, {
+    latitude: 41.79907,
+    longitude: -87.58413,
+
+    fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+
+    address: "5335 S Kimbark Ave",
+    city: "Chicago",
+    state: "IL",
+    zip: "60615",
+  });
+
+  const controller = new ReportController();
+  const request = http_mocks.createRequest({
+    method: "POST",
+    body: { url, contact, address },
+  });
+
+  const response = http_mocks.createResponse();
+
+  const body = await controller.create(request, response, () => undefined);
+
+  expect(body).toEqual({ success: true });
+  expect(response.statusCode).toBe(200);
+
+  const report = await Report.findOne({ where: { contactInfo: contact } });
+  expect(report).toBeTruthy();
+
+  const { order: _order, location, ...rest } = report;
+
+  expect(fetch.mock.calls[0]).toEqual([
+    process.env.ZAP_NEW_REPORT,
+    {
+      ...rest,
+      ...location,
+    },
+  ]);
 });

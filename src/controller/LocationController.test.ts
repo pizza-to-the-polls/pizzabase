@@ -1,14 +1,11 @@
 import * as http_mocks from "node-mocks-http";
 
-import dbHelper from "../tests/dbHelper";
 import { LocationController } from "./LocationController";
 import { Location } from "../entity/Location";
 
 let location: Location | null;
 
 beforeAll(async () => {
-  await dbHelper.setUpDB();
-
   location = await Location.getOrCreateFromAddress({
     latitude: 41.79907,
     longitude: -87.58413,
@@ -20,9 +17,6 @@ beforeAll(async () => {
     state: "IL",
     zip: "60615",
   });
-});
-afterAll(async () => {
-  await dbHelper.closeDB();
 });
 
 test("Lists the locations", async () => {
