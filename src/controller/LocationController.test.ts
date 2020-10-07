@@ -1,16 +1,15 @@
-import anyTest, { TestInterface } from "ava";
 import * as http_mocks from "node-mocks-http";
 
-import { LocationController } from "./LocationController";
 import dbHelper from "../tests/dbHelper";
+import { LocationController } from "./LocationController";
 import { Location } from "../entity/Location";
 
-const test = anyTest as TestInterface<{ location: Location }>;
+let location: Location | null;
 
-test.before(async (t) => {
+beforeAll(async () => {
   await dbHelper.setUpDB();
 
-  const location = await Location.getOrCreateFromAddress({
+  location = await Location.getOrCreateFromAddress({
     latitude: 41.79907,
     longitude: -87.58413,
 
@@ -21,13 +20,12 @@ test.before(async (t) => {
     state: "IL",
     zip: "60615",
   });
-
-  t.context = { location };
+});
+afterAll(async () => {
+  await dbHelper.closeDB();
 });
 
-test.after.always(async (_t) => await dbHelper.closeDB());
-
-test("Lists the locations", async (t) => {
+test("Lists the locations", async () => {
   const controller = new LocationController();
 
   const body = await controller.all(
@@ -36,13 +34,13 @@ test("Lists the locations", async (t) => {
     () => undefined
   );
 
-  t.deepEqual(body, await Location.find());
+  expect(body).toEqual(await Location.find());
 });
 
-test("Gets a location", async (t) => {
+test("Gets a location", async () => {
   const controller = new LocationController();
 
-  const { id } = t.context ? t.context.location : null;
+  const { id } = location ? location : null;
 
   const body = await controller.one(
     http_mocks.createRequest({ params: { id: `${id}` } }),
@@ -50,5 +48,5 @@ test("Gets a location", async (t) => {
     () => undefined
   );
 
-  t.deepEqual(body, await Location.findOne({ where: { id } }));
+  expect(body).toEqual(await Location.findOne({ where: { id } }));
 });

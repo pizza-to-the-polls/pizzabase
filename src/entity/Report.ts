@@ -43,15 +43,18 @@ export class Report extends BaseEntity {
     contactInfo: string,
     reportURL: string,
     address: NormalAddress
-  ): Promise<Report> {
+  ): Promise<[Report, boolean]> {
     const report = new this();
 
     report.contactInfo = contactInfo;
     report.reportURL = reportURL;
     report.location = await Location.getOrCreateFromAddress(address);
 
+    const reportExists = await this.findOne({ where: { reportURL } });
+    if (reportExists) report.order = reportExists.order;
+
     await report.save();
 
-    return report;
+    return [report, !reportExists];
   }
 }

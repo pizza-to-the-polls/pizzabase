@@ -1,16 +1,25 @@
-import test from "ava";
 import * as http_mocks from "node-mocks-http";
 
 import { ReportController } from "./ReportController";
-import dbHelper from "../tests/dbHelper";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 
-test.before(async (_t) => await dbHelper.setUpDB());
+import dbHelper from "../tests/dbHelper";
 
-test.after.always(async (_t) => await dbHelper.closeDB());
+jest.mock("../lib/validator/normalizeAddress");
+jest.mock("node-fetch");
 
-test("Sends 422 and errors on empty response", async (t) => {
+import fetch from "node-fetch";
+
+beforeAll(async () => {
+  await dbHelper.setUpDB();
+});
+afterAll(async () => {
+  await dbHelper.closeDB();
+});
+afterEach(() => jest.clearAllMocks());
+
+test("Sends 422 and errors on empty response", async () => {
   const controller = new ReportController();
   const request = http_mocks.createRequest({
     method: "POST",
@@ -20,7 +29,7 @@ test("Sends 422 and errors on empty response", async (t) => {
 
   const body = await controller.create(request, response, () => undefined);
 
-  t.deepEqual(body, {
+  expect(body).toEqual({
     errors: {
       url: "Invalid URL - please supply a valid URL",
       contact:
@@ -29,10 +38,10 @@ test("Sends 422 and errors on empty response", async (t) => {
     },
   });
 
-  t.is(response.statusCode, 422);
+  expect(response.statusCode).toEqual(422);
 });
 
-test("Sends 422 and errors on invalid response", async (t) => {
+test("Sends 422 and errors on invalid response", async () => {
   const controller = new ReportController();
   const request = http_mocks.createRequest({
     method: "POST",
@@ -47,7 +56,7 @@ test("Sends 422 and errors on invalid response", async (t) => {
 
   const body = await controller.create(request, response, () => undefined);
 
-  t.deepEqual(body, {
+  expect(body).toEqual({
     errors: {
       url: "Invalid URL - please supply a valid URL",
       contact:
@@ -56,10 +65,10 @@ test("Sends 422 and errors on invalid response", async (t) => {
     },
   });
 
-  t.is(response.statusCode, 422);
+  expect(response.statusCode).toEqual(422);
 });
 
-test("New request/loc returns success, creates location and report", async (t) => {
+test("New request/loc returns success, creates location, report, zaps", async () => {
   const url = "http://twitter.com/something/";
   const address = "5335 S Kimbark Ave Chicago IL 60615";
   const contact = "555-234-2345";
@@ -74,21 +83,31 @@ test("New request/loc returns success, creates location and report", async (t) =
 
   const body = await controller.create(request, response, () => undefined);
 
-  t.deepEqual(body, { success: true });
-  t.is(response.statusCode, 200);
+  expect(body).toEqual({ success: true });
+  expect(response.statusCode).toEqual(200);
 
   const location = await Location.findOne({ where: { fullAddress: address } });
-  t.truthy(location);
-  t.falsy(location.isApproved);
+  expect(location).toBeTruthy();
+  expect(location.isApproved).toBeFalsy();
 
   const report = await Report.findOne({ where: { reportURL: url } });
-  t.truthy(report);
-  t.deepEqual(report.location, location);
-  t.falsy(report.order);
+  expect(report).toBeTruthy();
+  expect(report.location).toEqual(location);
+  expect(report.order).toBeFalsy();
+
+  const { order: _order, location: _loc, ...rest } = report;
+
+  expect(fetch.mock.calls[0]).toEqual([
+    process.env.ZAP_NEW_REPORT,
+    {
+      ...rest,
+      ...location,
+    },
+  ]);
 });
 
-test("Re-used loc / new returns success, sets existing location and creates new report", async (t) => {
-  const url = "http://twitter.com/something/";
+test("Re-used loc / new returns success, sets existing location, creates new report, zaps", async () => {
+  const url = "http://twitter.com/different/";
   const address = "5335 S Kimbark Ave Chicago IL 60615";
   const contact = "555-234-2345";
 
@@ -114,10 +133,57 @@ test("Re-used loc / new returns success, sets existing location and creates new 
 
   const body = await controller.create(request, response, () => undefined);
 
-  t.deepEqual(body, { success: true });
-  t.is(response.statusCode, 200);
+  expect(body).toEqual({ success: true });
+  expect(response.statusCode).toBe(200);
 
   const report = await Report.findOne({ where: { reportURL: url } });
-  t.truthy(report);
-  t.deepEqual(report.location.id, location.id);
+  expect(report).toBeTruthy();
+  expect(report.location.id).toBe(location.id);
+
+  const { order: _order, location: _loc, ...rest } = report;
+
+  expect(fetch.mock.calls[0]).toEqual([
+    process.env.ZAP_NEW_REPORT,
+    {
+      ...rest,
+      ...location,
+    },
+  ]);
+});
+
+test("Re-used loc / report success, sets existing location, creates new report", async () => {
+  const url = "http://twitter.com/different/";
+  const address = "5335 S Kimbark Ave Chicago IL 60615";
+  const contact = "555-234-2345";
+
+  const location = await Location.getOrCreateFromAddress({
+    latitude: 41.79907,
+    longitude: -87.58413,
+
+    fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+
+    address: "5335 S Kimbark Ave",
+    city: "Chicago",
+    state: "IL",
+    zip: "60615",
+  });
+
+  const controller = new ReportController();
+  const request = http_mocks.createRequest({
+    method: "POST",
+    body: { url, contact, address },
+  });
+
+  const response = http_mocks.createResponse();
+
+  const body = await controller.create(request, response, () => undefined);
+
+  expect(body).toEqual({ success: true });
+  expect(response.statusCode).toBe(200);
+
+  const report = await Report.findOne({ where: { reportURL: url } });
+  expect(report).toBeTruthy();
+  expect(report.location.id).toBe(location.id);
+
+  expect(fetch.mock.calls.length).toBe(0);
 });
