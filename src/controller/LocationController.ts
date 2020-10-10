@@ -7,6 +7,6 @@ export class LocationController {
   }
 
   async one(request: Request, _response: Response, _next: NextFunction) {
-    return Location.findOne({ where: { id: Number(request.params.id) } });
+    return Location.fidByIdOrFullAddress(request.params.idOrAddress || "");
   }
 }

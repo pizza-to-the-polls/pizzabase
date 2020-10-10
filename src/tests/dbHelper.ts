@@ -22,7 +22,12 @@ export const setUpDB = async () => {
   if (process.env.POSTGRES_PASSWORD)
     config.username = process.env.POSTGRES_USERNAME;
 
-  await createConnection(config);
+  try {
+    await createConnection(config);
+  } catch (e) {
+    console.error("Could not establish db connection - is your schema ok?");
+    throw e;
+  }
 };
 
 export const closeDB = async () => {

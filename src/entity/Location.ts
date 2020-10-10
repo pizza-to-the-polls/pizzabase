@@ -61,6 +61,16 @@ export class Location extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
+  static async fidByIdOrFullAddress(
+    idOrAddress: string
+  ): Promise<Location | null> {
+    return Location.findOne({
+      where: idOrAddress.match(/[a-z]/g)
+        ? { fullAddress: idOrAddress.replace(/\+|\%20/g, " ") }
+        : { id: Number(idOrAddress) },
+    });
+  }
+
   static async getOrCreateFromAddress(
     normalAddress: NormalAddress
   ): Promise<Location> {

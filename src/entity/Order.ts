@@ -23,7 +23,7 @@ export class Order extends BaseEntity {
   pizzas!: number;
 
   @Column()
-  restaurant!: string;
+  restaurant: string;
 
   @ManyToOne((_type) => Location, (location) => location.orders, {
     eager: true,

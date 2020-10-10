@@ -11,7 +11,7 @@ export const Routes = [
   },
   {
     method: "get",
-    route: "/locations/:id",
+    route: "/locations/:idOrAddress",
     controller: LocationController,
     action: "one",
   },

@@ -9,4 +9,5 @@ module.exports = {
     "^.+\\.(ts|tsx)$": "ts-jest",
   },
   setupFilesAfterEnv: ["<rootDir>/src/tests/jest.setup.ts"],
+  preset: "ts-jest",
 };

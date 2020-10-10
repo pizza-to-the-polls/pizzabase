@@ -19,28 +19,64 @@ beforeAll(async () => {
   });
 });
 
-test("Lists the locations", async () => {
-  const controller = new LocationController();
+describe("#one", () => {
+  test("Gets a location with an ID", async () => {
+    const controller = new LocationController();
 
-  const body = await controller.all(
-    http_mocks.createRequest(),
-    http_mocks.createResponse(),
-    () => undefined
-  );
+    const { id } = location ? location : null;
 
-  expect(body).toEqual(await Location.find());
+    const body = await controller.one(
+      http_mocks.createRequest({ params: { idOrAddress: `${id}` } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual(await Location.findOne({ where: { id } }));
+  });
+
+  test("Gets a location with a + encoded address", async () => {
+    const controller = new LocationController();
+
+    const { fullAddress, id } = location ? location : null;
+
+    const body = await controller.one(
+      http_mocks.createRequest({
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual(await Location.findOne({ where: { id } }));
+  });
+
+  test("Gets a location with a space encoded address", async () => {
+    const controller = new LocationController();
+
+    const { fullAddress, id } = location ? location : null;
+
+    const body = await controller.one(
+      http_mocks.createRequest({
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual(await Location.findOne({ where: { id } }));
+  });
 });
 
-test("Gets a location", async () => {
-  const controller = new LocationController();
+describe("#all", () => {
+  test("Lists the locations", async () => {
+    const controller = new LocationController();
 
-  const { id } = location ? location : null;
+    const body = await controller.all(
+      http_mocks.createRequest(),
+      http_mocks.createResponse(),
+      () => undefined
+    );
 
-  const body = await controller.one(
-    http_mocks.createRequest({ params: { id: `${id}` } }),
-    http_mocks.createResponse(),
-    () => undefined
-  );
-
-  expect(body).toEqual(await Location.findOne({ where: { id } }));
+    expect(body).toEqual(await Location.find());
+  });
 });

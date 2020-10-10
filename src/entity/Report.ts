@@ -33,6 +33,13 @@ export class Report extends BaseEntity {
   @ManyToOne((_type) => Order, (order) => order.reports, { eager: true })
   order: Order;
 
+  @Column({
+    name: "skipped_at",
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  skippedAt: Date;
+
   @CreateDateColumn({ name: "created_at" })
   createdAt;
 
