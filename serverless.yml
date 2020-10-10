@@ -15,6 +15,8 @@ provider:
   environment:
     SS_AUTH_ID: ${env:SS_AUTH_ID}
     SS_AUTH_TOKEN: ${env:SS_AUTH_TOKEN}
+    ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:

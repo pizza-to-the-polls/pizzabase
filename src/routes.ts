@@ -23,6 +23,12 @@ export const Routes = [
   },
   {
     method: "put",
+    route: "/locations/:id/skip",
+    controller: LocationController,
+    action: "skip",
+  },
+  {
+    method: "put",
     route: "/locations/:id/order",
     controller: LocationController,
     action: "order",

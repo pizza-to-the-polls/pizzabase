@@ -2,10 +2,18 @@ import * as http_mocks from "node-mocks-http";
 
 import { LocationController } from "./LocationController";
 import { Location } from "../entity/Location";
+import { Action } from "../entity/Action";
+import { Order } from "../entity/Order";
+import { Report } from "../entity/Report";
+
+jest.mock("node-fetch");
+jest.mock("../lib/validator/normalizeAddress");
+
+import fetch from "node-fetch";
 
 let location: Location | null;
 
-beforeAll(async () => {
+beforeEach(async () => {
   location = await Location.getOrCreateFromAddress({
     latitude: 41.79907,
     longitude: -87.58413,
@@ -16,6 +24,20 @@ beforeAll(async () => {
     city: "Chicago",
     state: "IL",
     zip: "60615",
+  });
+});
+
+describe("#all", () => {
+  test("Lists the locations", async () => {
+    const controller = new LocationController();
+
+    const body = await controller.all(
+      http_mocks.createRequest(),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual(await Location.find());
   });
 });
 
@@ -82,16 +104,101 @@ describe("#one", () => {
   });
 });
 
-describe("#all", () => {
-  test("Lists the locations", async () => {
-    const controller = new LocationController();
+describe("#validate", () => {
+  it("validates a location and logs the username", async () => {
+    const user = "jimmy";
 
-    const body = await controller.all(
-      http_mocks.createRequest(),
+    const { fullAddress, id, validatedAt } = location ? location : null;
+    expect(validatedAt).toBeNull();
+
+    const controller = new LocationController();
+    const body = await controller.validate(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: { user },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
       http_mocks.createResponse(),
       () => undefined
     );
 
-    expect(body).toEqual(await Location.find());
+    const updatedLoc = await Location.findOne({ where: { id } });
+
+    expect(updatedLoc.validatedAt).toBeTruthy();
+    expect(body).toEqual(updatedLoc);
+    const action = await Action.findOne({
+      where: { entityId: id, entityType: location.constructor.name },
+    });
+    expect(action.user).toEqual(user);
+  });
+
+  it("validates a location even without a username", async () => {
+    const { fullAddress, id } = location ? location : null;
+
+    const controller = new LocationController();
+    const body = await controller.validate(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: {},
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    const updatedLoc = await Location.findOne({ where: { id } });
+
+    expect(updatedLoc.validatedAt).toBeTruthy();
+    expect(body).toEqual(updatedLoc);
+    const action = await Action.findOne({
+      where: { entityId: id, entityType: location.constructor.name },
+    });
+    expect(action.user).toEqual("not specified");
+  });
+
+  it("once validate ", async () => {
+    const { fullAddress } = location ? location : null;
+
+    const [ordered] = await Report.createNewReport(
+      "333-234-2345",
+      "http://twitter.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+
+    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+
+    await Report.createNewReport("222-234-2345", "http://insta.com/what", {
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress,
+
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+
+    await new LocationController().validate(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: {},
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(fetch.mock.calls.length).toBe(1);
   });
 });

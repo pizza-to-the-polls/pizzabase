@@ -10,12 +10,19 @@ import {
 } from "typeorm";
 import { Report } from "./Report";
 import { Order } from "./Order";
+import { Action } from "./Action";
 import { NormalAddress } from "../lib/validator";
 
-@Entity()
+@Entity({ name: "locations" })
 export class Location extends BaseEntity {
   @PrimaryGeneratedColumn()
   id!: number;
+
+  @CreateDateColumn({ name: "created_at" })
+  createdAt;
+
+  @UpdateDateColumn({ name: "updated_at" })
+  updatedAt;
 
   @Column({ name: "full_address" })
   @Index({ unique: true })
@@ -42,8 +49,12 @@ export class Location extends BaseEntity {
   @Index()
   zip!: string;
 
-  @Column({ name: "is_approved", default: false })
-  isApproved: boolean;
+  @Column({
+    name: "validated_at",
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  validatedAt: Date | null;
 
   @OneToMany((_type) => Report, (report) => report.location, {
     onDelete: "RESTRICT",
@@ -55,16 +66,17 @@ export class Location extends BaseEntity {
   })
   orders: Order[];
 
-  @CreateDateColumn({ name: "created_at" })
-  createdAt;
+  async validate(validatedBy?: string): Promise<void> {
+    this.validatedAt = new Date();
 
-  @UpdateDateColumn({ name: "updated_at" })
-  updatedAt;
+    await this.save();
+    await Action.log(this, "validate", validatedBy);
+  }
 
   static async fidByIdOrFullAddress(
     idOrAddress: string
   ): Promise<Location | null> {
-    return Location.findOne({
+    return this.findOne({
       where: idOrAddress.match(/[a-z]/g)
         ? { fullAddress: idOrAddress.replace(/\+|\%20/g, " ") }
         : { id: Number(idOrAddress) },

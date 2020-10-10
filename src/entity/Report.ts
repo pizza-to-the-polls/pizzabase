@@ -12,7 +12,7 @@ import { Location } from "./Location";
 import { Order } from "./Order";
 import { NormalAddress } from "../lib/validator";
 
-@Entity()
+@Entity({ name: "reports" })
 export class Report extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;

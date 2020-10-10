@@ -1,6 +1,6 @@
 import { createConnection, getConnection } from "typeorm";
 
-export const setUpDB = async () => {
+const setUpDB = async () => {
   const config: any = {
     type: "postgres",
     database: process.env.POSTGRES_DB || "pizzabaseTest",
@@ -30,9 +30,33 @@ export const setUpDB = async () => {
   }
 };
 
-export const closeDB = async () => {
+const closeDB = async () => {
   const conn = await getConnection();
   await conn.close();
 };
 
-export default { setUpDB, closeDB };
+const getEntities = async () => {
+  const entities = [];
+  const conn = await getConnection();
+  (await conn.entityMetadatas).forEach((x) =>
+    entities.push({ name: x.name, tableName: x.tableName })
+  );
+  return entities;
+};
+
+const cleanAll = async () => {
+  const entities = await getEntities();
+  const conn = await getConnection();
+  try {
+    for (const entity of entities) {
+      const repository = await conn.getRepository(entity.name);
+      await repository.query(`TRUNCATE TABLE ${entity.tableName} CASCADE;`);
+    }
+  } catch (error) {
+    if (!`${error}`.includes("does not exist")) {
+      throw new Error(`ERROR: Cleaning test db: ${error}`);
+    }
+  }
+};
+
+export default { cleanAll, setUpDB, closeDB };
