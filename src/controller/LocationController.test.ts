@@ -20,6 +20,21 @@ beforeAll(async () => {
 });
 
 describe("#one", () => {
+  test("Tries to get a null location", async () => {
+    const controller = new LocationController();
+
+    const response = http_mocks.createResponse();
+
+    const body = await controller.one(
+      http_mocks.createRequest({ params: { idOrAddress: `not-real` } }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toEqual({ errors: ["Not found"] });
+  });
+
   test("Gets a location with an ID", async () => {
     const controller = new LocationController();
 
