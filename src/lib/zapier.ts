@@ -1,7 +1,7 @@
 import fetch from "node-fetch";
 
 import { Report } from "../entity/Report";
-import { toStateName } from "./states"
+import { toStateName } from "./states";
 
 export const zapNewReport = async (report: Report) => {
   const { location, ...rest } = report;
@@ -9,6 +9,6 @@ export const zapNewReport = async (report: Report) => {
   await fetch(process.env.ZAP_NEW_REPORT, {
     ...rest,
     ...report.location,
-    stateName: toStateName(report.location.state)
+    stateName: toStateName(report.location.state),
   });
 };

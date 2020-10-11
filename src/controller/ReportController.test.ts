@@ -94,7 +94,7 @@ describe("#create", () => {
       {
         ...rest,
         ...location,
-        stateName: "Illinois"
+        stateName: "Illinois",
       },
     ]);
   });
@@ -140,7 +140,7 @@ describe("#create", () => {
       {
         ...rest,
         ...location,
-        stateName: "Illinois"
+        stateName: "Illinois",
       },
     ]);
   });
@@ -222,7 +222,7 @@ describe("#create", () => {
       {
         ...rest,
         ...location,
-        stateName: "Oregon"
+        stateName: "Oregon",
       },
     ]);
   });

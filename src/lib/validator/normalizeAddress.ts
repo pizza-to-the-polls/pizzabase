@@ -1,4 +1,5 @@
 import * as SmartyStreetsSDK from "smartystreets-javascript-sdk";
+import { toStateName } from "../states";
 
 const SmartyStreetsCore = SmartyStreetsSDK.core;
 const Lookup = SmartyStreetsSDK.usExtract.Lookup;
@@ -36,6 +37,8 @@ const geocode = async (body: string): Promise<null | NormalAddress> => {
       metadata: { latitude, longitude },
       components: { cityName: city, state, zipCode: zip },
     } = candidate;
+
+    if (!toStateName(state)) return null;
 
     const fullAddress = `${address} ${city} ${state} ${zip}`;
 
