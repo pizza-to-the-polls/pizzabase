@@ -334,6 +334,23 @@ describe("#order", () => {
     expect(order.pizzas).toEqual(32);
   });
 
+  it("validates the order too", async () => {
+    const { fullAddress } = location ? location : null;
+
+    const controller = new LocationController();
+    await controller.order(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: { cost: "$500.23423" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    await location.reload();
+    expect(location.validatedAt).toBeTruthy();
+  });
+
   it("creates an order for all non-skipped reports", async () => {
     const { fullAddress } = location ? location : null;
 

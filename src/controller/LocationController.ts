@@ -71,6 +71,7 @@ export class LocationController {
     }
 
     await Order.placeOrder(order, location);
+    await location.validate(request.body?.user);
 
     return { success: true };
   }
