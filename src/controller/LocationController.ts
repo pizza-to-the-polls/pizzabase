@@ -1,7 +1,9 @@
 import { NextFunction, Request, Response } from "express";
 import { Location } from "../entity/Location";
+import { Order } from "../entity/Order";
 import { FindOr404 } from "./helper";
 import { zapNewReport } from "../lib/zapier";
+import { validateOrder } from "../lib/validator";
 
 export class LocationController {
   async all(_request: Request, _response: Response, _next: NextFunction) {
@@ -9,10 +11,19 @@ export class LocationController {
   }
 
   async one(request: Request, response: Response, _next: NextFunction) {
-    return FindOr404(
+    const locationOrError = FindOr404(
       await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
       response
     );
+    if (!(locationOrError instanceof Location)) return locationOrError;
+
+    const location: Location = locationOrError;
+
+    return {
+      ...location,
+      reports: await location.reports,
+      orders: await location.orders,
+    };
   }
 
   async validate(request: Request, response: Response, _next: NextFunction) {
@@ -21,13 +32,14 @@ export class LocationController {
       response
     );
     if (!(locationOrError instanceof Location)) return locationOrError;
+
     const location: Location = locationOrError;
 
     const openReports = await location.validate(request.body?.user);
 
     openReports.forEach(async (report) => await zapNewReport(report));
 
-    return location;
+    return { success: true };
   }
 
   async skip(request: Request, response: Response, _next: NextFunction) {
@@ -40,6 +52,26 @@ export class LocationController {
 
     await location.skip(request.body?.user);
 
-    return location;
+    return { success: true };
+  }
+
+  async order(request: Request, response: Response, _next: NextFunction) {
+    const locationOrError = FindOr404(
+      await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
+      response
+    );
+    if (!(locationOrError instanceof Location)) return locationOrError;
+
+    const location: Location = locationOrError;
+    const { errors, ...order } = validateOrder(request.body);
+
+    if (Object.keys(errors).length > 0) {
+      response.status(422);
+      return { errors };
+    }
+
+    await Order.placeOrder(order, location);
+
+    return { success: true };
   }
 }

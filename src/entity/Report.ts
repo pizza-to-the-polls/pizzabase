@@ -46,6 +46,10 @@ export class Report extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
+  static async bulkUpdate(query, set): Promise<void> {
+    this.createQueryBuilder().update(this).where(query).set(set).execute();
+  }
+
   static async createNewReport(
     contactInfo: string,
     reportURL: string,

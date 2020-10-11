@@ -24,7 +24,7 @@ export class Location extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
-  @Column({ name: "full_address" })
+  @Column({ name: "full_address", unique: true })
   @Index({ unique: true })
   fullAddress!: string;
 
@@ -59,12 +59,12 @@ export class Location extends BaseEntity {
   @OneToMany((_type) => Report, (report) => report.location, {
     onDelete: "RESTRICT",
   })
-  reports: Report[];
+  reports: Promise<Report[]>;
 
   @OneToMany((_type) => Order, (order) => order.location, {
     onDelete: "RESTRICT",
   })
-  orders: Order[];
+  orders: Promise<Order[]>;
 
   async validate(validatedBy?: string): Promise<Report[]> {
     this.validatedAt = new Date();
@@ -76,11 +76,10 @@ export class Location extends BaseEntity {
   }
 
   async skip(validatedBy?: string): Promise<void> {
-    await Report.createQueryBuilder()
-      .update(Report)
-      .set({ skippedAt: new Date() })
-      .where({ location: this, order: null, skippedAt: null })
-      .execute();
+    await Report.bulkUpdate(
+      { location: this, order: null, skippedAt: null },
+      { skippedAt: new Date() }
+    );
 
     await Action.log(this, "skipped", validatedBy);
   }

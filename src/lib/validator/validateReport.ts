@@ -2,13 +2,13 @@ import { normalizeAddress, NormalAddress } from "./normalizeAddress";
 import { normalizeURL } from "./normalizeURL";
 import { normalizeContact } from "./normalizeContact";
 
-export interface ValidationError {
+interface ValidationError {
   contact?: string;
   url?: string;
   address?: string;
 }
 
-export const validateRequest = async ({
+export const validateReport = async ({
   address,
   contact,
   url,

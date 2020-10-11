@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
-import { validateRequest } from "../lib/validator";
+import { validateReport } from "../lib/validator";
 import { zapNewReport } from "../lib/zapier";
 
 export class ReportController {
@@ -10,7 +10,7 @@ export class ReportController {
       normalizedAddress,
       reportURL,
       contactInfo,
-    } = await validateRequest(request.body || {});
+    } = await validateReport(request.body || {});
 
     if (Object.keys(errors).length > 0) {
       response.status(422);

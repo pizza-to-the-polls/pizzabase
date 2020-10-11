@@ -1,9 +1,9 @@
-import { validateRequest } from ".";
+import { validateReport } from ".";
 
 jest.mock("./normalizeAddress");
 
-test("validateRequest returns an error for not valid requests", async () => {
-  const { errors } = await validateRequest({
+test("validateReport returns an error for not valid requests", async () => {
+  const { errors } = await validateReport({
     url: "not-valid",
     contact: "not-valid",
     address: "not-valid",
@@ -16,8 +16,8 @@ test("validateRequest returns an error for not valid requests", async () => {
   });
 });
 
-test("validateRequest returns an error for empty request", async () => {
-  const { errors } = await validateRequest({});
+test("validateReport returns an error for empty request", async () => {
+  const { errors } = await validateReport({});
 
   expect(errors).toEqual({
     url: "Invalid URL - please supply a valid URL",
@@ -28,7 +28,7 @@ test("validateRequest returns an error for empty request", async () => {
 
 test("validates the request is valid", async () => {
   expect(
-    await validateRequest({
+    await validateReport({
       url: "http://twitter.com/something/?utm_diff",
       contact: "555-234-2345",
       address: "5335 S Kimbark Ave Chicago IL 60615",

@@ -12,23 +12,16 @@ import { Location } from "./Location";
 import { Report } from "./Report";
 import { Action } from "./Action";
 
-interface Details {
-  pizzas: string | number;
-  cost: string | number;
-  restaurant?: string;
-  user?: string;
-}
-
 @Entity({ name: "orders" })
 export class Order extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column()
-  cost!: number;
+  @Column({ type: "money" })
+  cost: number;
 
-  @Column()
-  pizzas!: number;
+  @Column("int")
+  pizzas: number;
 
   @Column({ nullable: true })
   restaurant: string | null;
@@ -49,22 +42,32 @@ export class Order extends BaseEntity {
   updatedAt;
 
   static async placeOrder(
-    { pizzas, cost, restaurant, user }: Details,
+    {
+      pizzas,
+      cost,
+      restaurant,
+      user,
+    }: {
+      pizzas: number;
+      cost: number;
+      restaurant?: string;
+      user?: string;
+    },
     location: Location
   ): Promise<Order> {
     const order = new this();
-    order.pizzas = Number(pizzas);
-    order.cost = Number(cost);
+
+    order.pizzas = pizzas;
+    order.cost = cost;
     order.restaurant = restaurant;
     order.location = location;
 
     await order.save();
 
-    await Report.createQueryBuilder()
-      .update(Report)
-      .set({ order })
-      .where({ location, order: null, skippedAt: null })
-      .execute();
+    await Report.bulkUpdate(
+      { location, order: null, skippedAt: null },
+      { order }
+    );
 
     await Action.log(order, "ordered", user);
 

@@ -57,10 +57,27 @@ describe("#one", () => {
     expect(body).toEqual({ errors: ["Not found"] });
   });
 
-  test("Gets a location with an ID", async () => {
+  test("Gets a location with an ID, returns orders and reports", async () => {
     const controller = new LocationController();
 
-    const { id } = location ? location : null;
+    const { id, fullAddress } = location ? location : null;
+
+    const [report] = await Report.createNewReport(
+      "333-234-2345",
+      "http://twitter.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+    const order = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
 
     const body = await controller.one(
       http_mocks.createRequest({ params: { idOrAddress: `${id}` } }),
@@ -68,14 +85,22 @@ describe("#one", () => {
       () => undefined
     );
 
-    await location.reload();
-    expect(body).toEqual(location);
+    await report.reload();
+    const { location: _locrep, order: _order, ...restReport } = report;
+    await order.reload();
+    const { location: _locor, ...restOrder } = order;
+
+    expect(body).toEqual({
+      ...location,
+      orders: [restOrder],
+      reports: [restReport],
+    });
   });
 
   test("Gets a location with a + encoded address", async () => {
     const controller = new LocationController();
 
-    const { fullAddress, id } = location ? location : null;
+    const { fullAddress } = location ? location : null;
 
     const body = await controller.one(
       http_mocks.createRequest({
@@ -85,7 +110,7 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual(await Location.findOne({ where: { id } }));
+    expect(body).toEqual({ ...location, reports: [], orders: [] });
   });
 
   test("Gets a location with a space encoded address", async () => {
@@ -101,8 +126,7 @@ describe("#one", () => {
       () => undefined
     );
 
-    await location.reload();
-    expect(body).toEqual(location);
+    expect(body).toEqual({ ...location, reports: [], orders: [] });
   });
 });
 
@@ -114,7 +138,7 @@ describe("#validate", () => {
     expect(validatedAt).toBeNull();
 
     const controller = new LocationController();
-    const body = await controller.validate(
+    await controller.validate(
       http_mocks.createRequest({
         method: "PATCH",
         body: { user },
@@ -124,10 +148,9 @@ describe("#validate", () => {
       () => undefined
     );
 
-    const updatedLoc = await Location.findOne({ where: { id } });
+    await location.reload();
+    expect(location.validatedAt).toBeTruthy();
 
-    expect(updatedLoc.validatedAt).toBeTruthy();
-    expect(body).toEqual(updatedLoc);
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
@@ -138,7 +161,7 @@ describe("#validate", () => {
     const { fullAddress, id } = location ? location : null;
 
     const controller = new LocationController();
-    const body = await controller.validate(
+    await controller.validate(
       http_mocks.createRequest({
         method: "PATCH",
         body: {},
@@ -150,14 +173,14 @@ describe("#validate", () => {
 
     await location.reload();
     expect(location.validatedAt).toBeTruthy();
-    expect(body).toEqual(location);
+
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
     expect(action.user).toEqual("not specified");
   });
 
-  it("once validate ", async () => {
+  it("validates and submits all open orders", async () => {
     const { fullAddress } = location ? location : null;
 
     const [ordered] = await Report.createNewReport(
@@ -244,7 +267,7 @@ describe("#skip", () => {
     );
 
     const controller = new LocationController();
-    const body = await controller.skip(
+    await controller.skip(
       http_mocks.createRequest({
         method: "PATCH",
         body: { user: "jimmy" },
@@ -255,7 +278,6 @@ describe("#skip", () => {
     );
 
     await location.reload();
-    expect(body).toEqual(location);
 
     const { user, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
@@ -267,5 +289,143 @@ describe("#skip", () => {
     expect(pending.skippedAt).toBeTruthy();
     await ordered.reload();
     expect(ordered.skippedAt).toBeFalsy();
+  });
+});
+
+describe("#order", () => {
+  it("returns validation errors", async () => {
+    const { fullAddress } = location ? location : null;
+
+    const controller = new LocationController();
+    const response = http_mocks.createResponse();
+    const body = await controller.order(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: {},
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      response,
+      () => undefined
+    );
+    expect(body).toEqual({
+      errors: {
+        cost: "Invalid Cost - please supply a cost of the order",
+      },
+    });
+    expect(response.statusCode).toEqual(422);
+  });
+
+  it("can create an order only with costs", async () => {
+    const { fullAddress } = location ? location : null;
+
+    const controller = new LocationController();
+    await controller.order(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: { cost: "$500.23423" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const [order] = await location.orders;
+
+    expect(order.cost).toEqual("$500.23");
+    expect(order.pizzas).toEqual(32);
+  });
+
+  it("creates an order for all non-skipped reports", async () => {
+    const { fullAddress } = location ? location : null;
+
+    const [ordered] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+
+    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+
+    const [skipped] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/different",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+    skipped.skippedAt = new Date();
+    await skipped.save();
+
+    const [pending] = await Report.createNewReport(
+      "222-234-2345",
+      "http://twitter.com/also-different",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+
+    const controller = new LocationController();
+    const response = http_mocks.createResponse();
+    const body = await controller.order(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: {
+          pizzas: "5",
+          cost: "$55.239",
+          restaurant: "mario's house",
+          user: "jim",
+        },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      response,
+      () => undefined
+    );
+    expect(body).toEqual({ success: true });
+    expect(response.statusCode).toEqual(200);
+
+    await pending.reload();
+    const order = pending.order;
+    expect(order).toBeTruthy();
+
+    expect(order.cost).toEqual("$55.24");
+    expect(order.pizzas).toEqual(5);
+    expect(order.restaurant).toEqual("mario's house");
+
+    const { user, actionType } = await Action.findOne({
+      where: { entityId: order.id, entityType: order.constructor.name },
+    });
+    expect(user).toEqual("jim");
+    expect(actionType).toEqual("ordered");
+
+    await ordered.reload();
+    expect(order).not.toEqual(ordered.order);
+
+    await skipped.reload();
+    expect(skipped.order).toBeFalsy();
   });
 });
