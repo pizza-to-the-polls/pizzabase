@@ -68,7 +68,8 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual(await Location.findOne({ where: { id } }));
+    await location.reload();
+    expect(body).toEqual(location);
   });
 
   test("Gets a location with a + encoded address", async () => {
@@ -90,7 +91,7 @@ describe("#one", () => {
   test("Gets a location with a space encoded address", async () => {
     const controller = new LocationController();
 
-    const { fullAddress, id } = location ? location : null;
+    const { fullAddress } = location ? location : null;
 
     const body = await controller.one(
       http_mocks.createRequest({
@@ -100,7 +101,8 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual(await Location.findOne({ where: { id } }));
+    await location.reload();
+    expect(body).toEqual(location);
   });
 });
 
@@ -146,10 +148,9 @@ describe("#validate", () => {
       () => undefined
     );
 
-    const updatedLoc = await Location.findOne({ where: { id } });
-
-    expect(updatedLoc.validatedAt).toBeTruthy();
-    expect(body).toEqual(updatedLoc);
+    await location.reload();
+    expect(location.validatedAt).toBeTruthy();
+    expect(body).toEqual(location);
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
@@ -200,5 +201,71 @@ describe("#validate", () => {
     );
 
     expect(fetch.mock.calls.length).toBe(1);
+  });
+});
+
+describe("#skip", () => {
+  it("skip a location, skips all reports, and logs the username", async () => {
+    const { fullAddress, id, validatedAt } = location ? location : null;
+    expect(validatedAt).toBeNull();
+
+    const [ordered] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+
+    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+
+    const [pending] = await Report.createNewReport(
+      "222-234-2345",
+      "http://twitter.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+
+    const controller = new LocationController();
+    const body = await controller.skip(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: { user: "jimmy" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    await location.reload();
+    expect(body).toEqual(location);
+
+    const { user, actionType } = await Action.findOne({
+      where: { entityId: id, entityType: location.constructor.name },
+    });
+    expect(user).toEqual("jimmy");
+    expect(actionType).toEqual("skipped");
+
+    await pending.reload();
+    expect(pending.skippedAt).toBeTruthy();
+    await ordered.reload();
+    expect(ordered.skippedAt).toBeFalsy();
   });
 });

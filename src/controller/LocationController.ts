@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from "express";
 import { Location } from "../entity/Location";
-import { Report } from "../entity/Report";
 import { FindOr404 } from "./helper";
 import { zapNewReport } from "../lib/zapier";
 
@@ -17,15 +16,29 @@ export class LocationController {
   }
 
   async validate(request: Request, response: Response, _next: NextFunction) {
-    const location = FindOr404(
+    const locationOrError = FindOr404(
       await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
       response
     );
-    if (response.statusCode === 404) return location;
+    if (!(locationOrError instanceof Location)) return locationOrError;
+    const location: Location = locationOrError;
 
-    await location.validate(request.body?.user);
-    const openReports = await Report.find({ where: { location, order: null } });
+    const openReports = await location.validate(request.body?.user);
+
     openReports.forEach(async (report) => await zapNewReport(report));
+
+    return location;
+  }
+
+  async skip(request: Request, response: Response, _next: NextFunction) {
+    const locationOrError = FindOr404(
+      await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
+      response
+    );
+    if (!(locationOrError instanceof Location)) return locationOrError;
+    const location: Location = locationOrError;
+
+    await location.skip(request.body?.user);
 
     return location;
   }

@@ -63,7 +63,7 @@ export class Order extends BaseEntity {
     await Report.createQueryBuilder()
       .update(Report)
       .set({ order })
-      .where({ location, order: null })
+      .where({ location, order: null, skippedAt: null })
       .execute();
 
     await Action.log(order, "ordered", user);

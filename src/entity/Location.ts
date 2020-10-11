@@ -66,11 +66,23 @@ export class Location extends BaseEntity {
   })
   orders: Order[];
 
-  async validate(validatedBy?: string): Promise<void> {
+  async validate(validatedBy?: string): Promise<Report[]> {
     this.validatedAt = new Date();
 
     await this.save();
-    await Action.log(this, "validate", validatedBy);
+    await Action.log(this, "validated", validatedBy);
+
+    return await await Report.find({ where: { location: this, order: null } });
+  }
+
+  async skip(validatedBy?: string): Promise<void> {
+    await Report.createQueryBuilder()
+      .update(Report)
+      .set({ skippedAt: new Date() })
+      .where({ location: this, order: null, skippedAt: null })
+      .execute();
+
+    await Action.log(this, "skipped", validatedBy);
   }
 
   static async fidByIdOrFullAddress(
