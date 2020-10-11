@@ -44,7 +44,7 @@
     "prettier:fix": "prettier --write .",
     "lint": "tslint --project .",
     "lint:fix": "tslint --fix --force --project .",
-    "test": "jest",
-    "test:watch": "jest --watchAll"
+    "test": "jest -w 1",
+    "test:watch": "jest -w 1 --watchAll"
   }
 }
