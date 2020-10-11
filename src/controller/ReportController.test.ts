@@ -94,6 +94,7 @@ describe("#create", () => {
       {
         ...rest,
         ...location,
+        stateName: "Illinois"
       },
     ]);
   });
@@ -139,6 +140,7 @@ describe("#create", () => {
       {
         ...rest,
         ...location,
+        stateName: "Illinois"
       },
     ]);
   });
@@ -182,7 +184,7 @@ describe("#create", () => {
 
   test("New loc / re-used url, creates new report, does not zap", async () => {
     const url = "http://twitter.com/anewone/";
-    const address = "550 Different Address City ST 12345";
+    const address = "550 Different Address City OR 12345";
     const contact = "666-234-2345";
 
     await Report.createNewReport("333-234-2345", url, {
@@ -220,6 +222,7 @@ describe("#create", () => {
       {
         ...rest,
         ...location,
+        stateName: "Oregon"
       },
     ]);
   });
