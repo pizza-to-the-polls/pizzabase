@@ -12,6 +12,7 @@ import { Report } from "./Report";
 import { Order } from "./Order";
 import { Action } from "./Action";
 import { NormalAddress } from "../lib/validator";
+import { toStateName } from "../lib/states";
 
 @Entity({ name: "locations" })
 export class Location extends BaseEntity {
@@ -65,6 +66,32 @@ export class Location extends BaseEntity {
     onDelete: "RESTRICT",
   })
   orders: Promise<Order[]>;
+
+  asJSON() {
+    const {
+      city,
+      state,
+      address,
+      zip,
+      fullAddress,
+      lat,
+      lng,
+      id,
+      validatedAt,
+    } = this;
+    return {
+      city,
+      state,
+      zip,
+      address,
+      fullAddress,
+      lat,
+      lng,
+      id,
+      validatedAt,
+      stateName: toStateName(state),
+    };
+  }
 
   async validate(validatedBy?: string): Promise<Report[]> {
     this.validatedAt = new Date();

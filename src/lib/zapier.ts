@@ -1,20 +1,16 @@
 import fetch from "node-fetch";
 
 import { Report } from "../entity/Report";
-import { toStateName } from "./states";
 
-const zapReport = async (report: Report, url: string) => {
-  const { location, ...rest } = report;
-
+const zapReport = async (report: Report, url: string) =>
   await fetch(url, {
     method: "POST",
-    body: {
-      ...rest,
-      ...report.location,
-      stateName: toStateName(report.location.state),
-    },
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      report: report.asJSON(),
+      location: report.location.asJSON(),
+    }),
   });
-};
 
 export const zapNewReport = async (report: Report) =>
   zapReport(report, process.env.ZAP_NEW_REPORT);

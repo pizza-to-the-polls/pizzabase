@@ -140,7 +140,7 @@ describe("#validate", () => {
     const controller = new LocationController();
     await controller.validate(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: { user },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -164,7 +164,7 @@ describe("#validate", () => {
     const controller = new LocationController();
     await controller.validate(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -189,7 +189,7 @@ describe("#validate", () => {
     const controller = new LocationController();
     const body = await controller.validate(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic badapikey` },
@@ -253,7 +253,7 @@ describe("#validate", () => {
 
     await new LocationController().validate(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -261,24 +261,17 @@ describe("#validate", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const { order: _order, location: loc, ...rest } = report;
 
     await report.reload();
-    await location.reload();
-    expect(fetch.mock.calls[0]).toEqual([
-      process.env.ZAP_NEW_REPORT,
-      {
-        body: {
-          ...rest,
-          ...loc,
-          updatedAt: location.updatedAt,
-          validatedAt: location.validatedAt,
-          order: null,
-          stateName: "Illinois",
-        },
-        method: "POST",
-      },
-    ]);
+
+    const [url, { body }] = fetch.mock.calls[0];
+    expect(url).toEqual(process.env.ZAP_NEW_REPORT);
+    expect(body).toEqual(
+      JSON.stringify({
+        report: report.asJSON(),
+        location: report.location.asJSON(),
+      })
+    );
   });
 });
 
@@ -324,7 +317,7 @@ describe("#skip", () => {
     const controller = new LocationController();
     await controller.skip(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: { user: "jimmy" },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -356,7 +349,7 @@ describe("#order", () => {
     const response = http_mocks.createResponse();
     const body = await controller.order(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -378,7 +371,7 @@ describe("#order", () => {
     const controller = new LocationController();
     await controller.order(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: { cost: "$500.23423" },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -398,7 +391,7 @@ describe("#order", () => {
     const controller = new LocationController();
     await controller.order(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: { cost: "$500.23423" },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -469,7 +462,7 @@ describe("#order", () => {
     const response = http_mocks.createResponse();
     const body = await controller.order(
       http_mocks.createRequest({
-        method: "PATCH",
+        method: "PUT",
         body: {
           pizzas: "5",
           cost: "$55.239",

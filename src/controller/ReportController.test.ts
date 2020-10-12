@@ -87,19 +87,14 @@ describe("#create", () => {
     expect(report.location).toEqual(location);
     expect(report.order).toBeFalsy();
 
-    const { order: _order, location: _loc, ...rest } = report;
-
-    expect(fetch.mock.calls[0]).toEqual([
-      process.env.ZAP_NEW_LOCATION,
-      {
-        body: {
-          ...rest,
-          ...location,
-          stateName: "Illinois",
-        },
-        method: "POST",
-      },
-    ]);
+    const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
+    expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
+    expect(zapBody).toEqual(
+      JSON.stringify({
+        report: report.asJSON(),
+        location: report.location.asJSON(),
+      })
+    );
   });
 
   test("Re-used loc / new returns success, sets existing location, creates new report, zaps new report", async () => {
@@ -138,19 +133,14 @@ describe("#create", () => {
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
 
-    const { order: _order, location: _loc, ...rest } = report;
-
-    expect(fetch.mock.calls[0]).toEqual([
-      process.env.ZAP_NEW_REPORT,
-      {
-        body: {
-          ...rest,
-          ...location,
-          stateName: "Illinois",
-        },
-        method: "POST",
-      },
-    ]);
+    const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
+    expect(zapUrl).toEqual(process.env.ZAP_NEW_REPORT);
+    expect(zapBody).toEqual(
+      JSON.stringify({
+        report: report.asJSON(),
+        location: report.location.asJSON(),
+      })
+    );
   });
 
   test("Re-used loc / re-used url, sets existing location, creates new report, does not zap", async () => {
@@ -223,18 +213,13 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { contactInfo: contact } });
     expect(report).toBeTruthy();
 
-    const { order: _order, location, ...rest } = report;
-
-    expect(fetch.mock.calls[0]).toEqual([
-      process.env.ZAP_NEW_LOCATION,
-      {
-        body: {
-          ...rest,
-          ...location,
-          stateName: "Oregon",
-        },
-        method: "POST",
-      },
-    ]);
+    const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
+    expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
+    expect(zapBody).toEqual(
+      JSON.stringify({
+        report: report.asJSON(),
+        location: report.location.asJSON(),
+      })
+    );
   });
 });
