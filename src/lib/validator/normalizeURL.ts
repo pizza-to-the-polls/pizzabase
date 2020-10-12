@@ -23,4 +23,6 @@ export const normalizeURL = (url?: string): null | string => {
   if (url.includes("tiktok.com")) {
     return removeSearchParams(url);
   }
+
+  return url;
 };

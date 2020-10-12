@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
 import { validateReport } from "../lib/validator";
-import { zapNewReport } from "../lib/zapier";
+import { zapNewReport, zapNewLocation } from "../lib/zapier";
 
 export class ReportController {
   async create(request: Request, response: Response, _next: NextFunction) {
@@ -23,7 +23,13 @@ export class ReportController {
       normalizedAddress
     );
 
-    if (isUnique) zapNewReport(report);
+    if (isUnique) {
+      if (report.location.validatedAt) {
+        await zapNewReport(report);
+      } else {
+        await zapNewLocation(report);
+      }
+    }
 
     return { success: true };
   }

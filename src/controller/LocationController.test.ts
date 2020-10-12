@@ -180,7 +180,7 @@ describe("#validate", () => {
     expect(action.user).toEqual("not specified");
   });
 
-  it("validates and submits all open orders", async () => {
+  it("validates and submits all open orders with unique urls", async () => {
     const { fullAddress } = location ? location : null;
 
     const [ordered] = await Report.createNewReport(
@@ -202,6 +202,19 @@ describe("#validate", () => {
     await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
 
     await Report.createNewReport("222-234-2345", "http://insta.com/what", {
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress,
+
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+
+    // Will skip the duplicate url report
+    await Report.createNewReport("555-234-2345", "http://insta.com/what", {
       latitude: 41.79907,
       longitude: -87.58413,
 

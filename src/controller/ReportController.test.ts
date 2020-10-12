@@ -59,7 +59,7 @@ describe("#create", () => {
     expect(response.statusCode).toEqual(422);
   });
 
-  test("New request/loc returns success, creates location, report, zaps", async () => {
+  test("New request/loc returns success, creates location, report, zaps new location", async () => {
     const url = "http://twitter.com/something/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
@@ -90,7 +90,7 @@ describe("#create", () => {
     const { order: _order, location: _loc, ...rest } = report;
 
     expect(fetch.mock.calls[0]).toEqual([
-      process.env.ZAP_NEW_REPORT,
+      process.env.ZAP_NEW_LOCATION,
       {
         ...rest,
         ...location,
@@ -99,7 +99,7 @@ describe("#create", () => {
     ]);
   });
 
-  test("Re-used loc / new returns success, sets existing location, creates new report, zaps", async () => {
+  test("Re-used loc / new returns success, sets existing location, creates new report, zaps new report", async () => {
     const url = "http://twitter.com/different/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
@@ -115,6 +115,8 @@ describe("#create", () => {
       state: "IL",
       zip: "60615",
     });
+    location.validatedAt = new Date();
+    await location.save();
 
     const controller = new ReportController();
     const request = http_mocks.createRequest({
@@ -182,7 +184,7 @@ describe("#create", () => {
     expect(fetch.mock.calls.length).toBe(0);
   });
 
-  test("New loc / re-used url, creates new report, does not zap", async () => {
+  test("New loc / re-used url, creates new report, zaps new location", async () => {
     const url = "http://twitter.com/anewone/";
     const address = "550 Different Address City OR 12345";
     const contact = "666-234-2345";
@@ -218,7 +220,7 @@ describe("#create", () => {
     const { order: _order, location, ...rest } = report;
 
     expect(fetch.mock.calls[0]).toEqual([
-      process.env.ZAP_NEW_REPORT,
+      process.env.ZAP_NEW_LOCATION,
       {
         ...rest,
         ...location,
