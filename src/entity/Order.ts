@@ -17,7 +17,7 @@ export class Order extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
 
-  @Column({ type: "money" })
+  @Column({ type: "double precision" })
   cost: number;
 
   @Column("int")

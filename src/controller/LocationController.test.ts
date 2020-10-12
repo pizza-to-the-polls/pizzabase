@@ -343,7 +343,7 @@ describe("#order", () => {
     );
     const [order] = await location.orders;
 
-    expect(order.cost).toEqual("$500.23");
+    expect(order.cost).toEqual(500.23);
     expect(order.pizzas).toEqual(32);
   });
 
@@ -442,7 +442,7 @@ describe("#order", () => {
     const order = pending.order;
     expect(order).toBeTruthy();
 
-    expect(order.cost).toEqual("$55.24");
+    expect(order.cost).toEqual(55.24);
     expect(order.pizzas).toEqual(5);
     expect(order.restaurant).toEqual("mario's house");
 
