@@ -10,26 +10,26 @@ import {
 @Entity({ name: "actions" })
 export class Action extends BaseEntity {
   @PrimaryGeneratedColumn()
-  id!: number;
+  id: number;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt;
 
   @Column()
   @Index()
-  user!: string;
+  user: string;
 
   @Column()
   @Index()
-  actionType!: string;
+  actionType: string;
 
   @Column()
   @Index()
-  entityId!: number;
+  entityId: number;
 
   @Column()
   @Index()
-  entityType!: string;
+  entityType: string;
 
   static async log(entity, actionType, user?: string): Promise<Action> {
     const action = new this();

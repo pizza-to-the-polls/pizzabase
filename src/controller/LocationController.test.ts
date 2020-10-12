@@ -54,7 +54,7 @@ describe("#one", () => {
     );
 
     expect(response.statusCode).toEqual(404);
-    expect(body).toEqual({ errors: ["Not found"] });
+    expect(body).toBeFalsy();
   });
 
   test("Gets a location with an ID, returns orders and reports", async () => {
@@ -143,6 +143,7 @@ describe("#validate", () => {
         method: "PATCH",
         body: { user },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -166,6 +167,7 @@ describe("#validate", () => {
         method: "PATCH",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -178,6 +180,25 @@ describe("#validate", () => {
       where: { entityId: id, entityType: location.constructor.name },
     });
     expect(action.user).toEqual("not specified");
+  });
+
+  it("return 401 status if bad api key", async () => {
+    const { fullAddress, id } = location ? location : null;
+
+    const response = http_mocks.createResponse();
+    const controller = new LocationController();
+    const body = await controller.validate(
+      http_mocks.createRequest({
+        method: "PATCH",
+        body: {},
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic badapikey` },
+      }),
+      response,
+      () => undefined
+    );
+    expect(body).toBeFalsy();
+    expect(response.statusCode).toEqual(401);
   });
 
   it("validates and submits all open orders with unique urls", async () => {
@@ -231,6 +252,7 @@ describe("#validate", () => {
         method: "PATCH",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -285,6 +307,7 @@ describe("#skip", () => {
         method: "PATCH",
         body: { user: "jimmy" },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -316,6 +339,7 @@ describe("#order", () => {
         method: "PATCH",
         body: {},
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
       () => undefined
@@ -337,6 +361,7 @@ describe("#order", () => {
         method: "PATCH",
         body: { cost: "$500.23423" },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -356,6 +381,7 @@ describe("#order", () => {
         method: "PATCH",
         body: { cost: "$500.23423" },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -431,6 +457,7 @@ describe("#order", () => {
           user: "jim",
         },
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
       () => undefined

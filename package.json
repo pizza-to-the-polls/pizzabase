@@ -33,7 +33,8 @@
     "serverless-http": "^2.6.0",
     "smartystreets-javascript-sdk": "^1.5.0",
     "typeorm": "0.2.26",
-    "typeorm-aurora-data-api-driver": "^1.4.0"
+    "typeorm-aurora-data-api-driver": "^1.4.0",
+    "uuid": "^8.3.1"
   },
   "scripts": {
     "dev": "nodemon --watch \"src/**\" --ext \"ts,json\" --ignore \"src/**/*.test.ts\" --exec npm run start",
