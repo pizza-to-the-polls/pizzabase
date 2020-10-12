@@ -92,9 +92,12 @@ describe("#create", () => {
     expect(fetch.mock.calls[0]).toEqual([
       process.env.ZAP_NEW_LOCATION,
       {
-        ...rest,
-        ...location,
-        stateName: "Illinois",
+        body: {
+          ...rest,
+          ...location,
+          stateName: "Illinois",
+        },
+        method: "POST",
       },
     ]);
   });
@@ -140,9 +143,12 @@ describe("#create", () => {
     expect(fetch.mock.calls[0]).toEqual([
       process.env.ZAP_NEW_REPORT,
       {
-        ...rest,
-        ...location,
-        stateName: "Illinois",
+        body: {
+          ...rest,
+          ...location,
+          stateName: "Illinois",
+        },
+        method: "POST",
       },
     ]);
   });
@@ -222,9 +228,12 @@ describe("#create", () => {
     expect(fetch.mock.calls[0]).toEqual([
       process.env.ZAP_NEW_LOCATION,
       {
-        ...rest,
-        ...location,
-        stateName: "Oregon",
+        body: {
+          ...rest,
+          ...location,
+          stateName: "Oregon",
+        },
+        method: "POST",
       },
     ]);
   });

@@ -7,9 +7,12 @@ const zapReport = async (report: Report, url: string) => {
   const { location, ...rest } = report;
 
   await fetch(url, {
-    ...rest,
-    ...report.location,
-    stateName: toStateName(report.location.state),
+    method: "POST",
+    body: {
+      ...rest,
+      ...report.location,
+      stateName: toStateName(report.location.state),
+    },
   });
 };
 

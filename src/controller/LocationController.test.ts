@@ -201,7 +201,7 @@ describe("#validate", () => {
     expect(response.statusCode).toEqual(401);
   });
 
-  it("validates and submits all open orders with unique urls", async () => {
+  it("validates and submits all open reports with unique urls", async () => {
     const { fullAddress } = location ? location : null;
 
     const [ordered] = await Report.createNewReport(
@@ -222,17 +222,21 @@ describe("#validate", () => {
 
     await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
 
-    await Report.createNewReport("222-234-2345", "http://insta.com/what", {
-      latitude: 41.79907,
-      longitude: -87.58413,
+    const [report] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
 
-      fullAddress,
+        fullAddress,
 
-      address: "5335 S Kimbark Ave",
-      city: "Chicago",
-      state: "IL",
-      zip: "60615",
-    });
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
 
     // Will skip the duplicate url report
     await Report.createNewReport("555-234-2345", "http://insta.com/what", {
@@ -257,8 +261,24 @@ describe("#validate", () => {
       http_mocks.createResponse(),
       () => undefined
     );
+    const { order: _order, location: loc, ...rest } = report;
 
-    expect(fetch.mock.calls.length).toBe(1);
+    await report.reload();
+    await location.reload();
+    expect(fetch.mock.calls[0]).toEqual([
+      process.env.ZAP_NEW_REPORT,
+      {
+        body: {
+          ...rest,
+          ...loc,
+          updatedAt: location.updatedAt,
+          validatedAt: location.validatedAt,
+          order: null,
+          stateName: "Illinois",
+        },
+        method: "POST",
+      },
+    ]);
   });
 });
 
