@@ -36,11 +36,12 @@ const closeDB = async () => {
 };
 
 const getEntities = async () => {
+  const exclude = ["api_keys"];
   const entities = [];
   const conn = await getConnection();
-  (await conn.entityMetadatas).forEach((x) =>
-    entities.push({ name: x.name, tableName: x.tableName })
-  );
+  (await conn.entityMetadatas).forEach(({ name, tableName }) => {
+    if (!exclude.includes(tableName)) entities.push({ name, tableName });
+  });
   return entities;
 };
 
