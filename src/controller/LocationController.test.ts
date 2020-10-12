@@ -14,7 +14,7 @@ import fetch from "node-fetch";
 let location: Location | null;
 
 beforeEach(async () => {
-  location = await Location.getOrCreateFromAddress({
+  location = await Location.createFromAddress({
     latitude: 41.79907,
     longitude: -87.58413,
 

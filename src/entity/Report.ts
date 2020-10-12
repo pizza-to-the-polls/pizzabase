@@ -54,12 +54,15 @@ export class Report extends BaseEntity {
     contactInfo: string,
     reportURL: string,
     address: NormalAddress
-  ): Promise<[Report, boolean]> {
+  ): Promise<[Report, { isUniqueReport: boolean; isNewLocation: boolean }]> {
     const report = new this();
 
     report.contactInfo = contactInfo;
     report.reportURL = reportURL;
-    report.location = await Location.getOrCreateFromAddress(address);
+    const [location, isNewLocation] = await Location.getOrCreateFromAddress(
+      address
+    );
+    report.location = location;
 
     const reportExists = await this.findOne({
       where: { reportURL, location: report.location },
@@ -68,6 +71,6 @@ export class Report extends BaseEntity {
 
     await report.save();
 
-    return [report, !reportExists];
+    return [report, { isUniqueReport: !reportExists, isNewLocation }];
   }
 }

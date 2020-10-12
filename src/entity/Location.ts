@@ -94,7 +94,7 @@ export class Location extends BaseEntity {
     });
   }
 
-  static async getOrCreateFromAddress(
+  static async createFromAddress(
     normalAddress: NormalAddress
   ): Promise<Location> {
     const {
@@ -106,22 +106,31 @@ export class Location extends BaseEntity {
       latitude,
       longitude,
     } = normalAddress;
+
+    const location = new this();
+
+    location.fullAddress = fullAddress;
+    location.address = address;
+    location.zip = zip;
+    location.city = city;
+    location.state = state;
+    location.lat = latitude;
+    location.lng = longitude;
+
+    await location.save();
+
+    return location;
+  }
+  static async getOrCreateFromAddress(
+    normalAddress: NormalAddress
+  ): Promise<[Location, boolean]> {
+    const { fullAddress } = normalAddress;
     const exists = await this.findOne({ where: { fullAddress } });
 
-    if (exists) return exists;
+    if (exists) return [exists, false];
 
-    const loc = new this();
+    const location = await this.createFromAddress(normalAddress);
 
-    loc.fullAddress = fullAddress;
-    loc.address = address;
-    loc.zip = zip;
-    loc.city = city;
-    loc.state = state;
-    loc.lat = latitude;
-    loc.lng = longitude;
-
-    await loc.save();
-
-    return loc;
+    return [location, true];
   }
 }

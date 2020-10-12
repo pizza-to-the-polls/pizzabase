@@ -17,17 +17,16 @@ export class ReportController {
       return { errors };
     }
 
-    const [report, isUnique] = await Report.createNewReport(
-      contactInfo,
-      reportURL,
-      normalizedAddress
-    );
+    const [
+      report,
+      { isUniqueReport, isNewLocation },
+    ] = await Report.createNewReport(contactInfo, reportURL, normalizedAddress);
 
-    if (isUnique) {
+    if (isUniqueReport) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
-        await zapNewLocation(report);
+        if (isNewLocation) await zapNewLocation(report);
       }
     }
 

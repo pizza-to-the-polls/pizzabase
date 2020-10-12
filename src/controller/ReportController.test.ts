@@ -107,7 +107,7 @@ describe("#create", () => {
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
 
-    const location = await Location.getOrCreateFromAddress({
+    const location = await Location.createFromAddress({
       latitude: 41.79907,
       longitude: -87.58413,
 
