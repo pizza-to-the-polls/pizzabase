@@ -9,7 +9,9 @@ const app = express();
 
 app.use(
   cors({
-    origin: "https://polls.pizza",
+    origin: process.env.NODE_ENV === "dev" ? "*" : "https://polls.pizza",
+    methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
+    allowedHeaders: "Content-Type,Authorization",
     optionsSuccessStatus: 200,
   })
 );
