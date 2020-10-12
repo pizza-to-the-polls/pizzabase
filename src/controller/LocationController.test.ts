@@ -183,7 +183,7 @@ describe("#validate", () => {
   });
 
   it("return 401 status if bad api key", async () => {
-    const { fullAddress, id } = location ? location : null;
+    const { fullAddress } = location ? location : null;
 
     const response = http_mocks.createResponse();
     const controller = new LocationController();
