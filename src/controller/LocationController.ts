@@ -34,8 +34,8 @@ export class LocationController {
 
     return {
       ...location,
-      reports: await location.reports,
-      orders: await location.orders,
+      reports: (await location.reports).map((report) => report.asJSON()),
+      orders: (await location.orders).map((report) => report.asJSON()),
     };
   }
 

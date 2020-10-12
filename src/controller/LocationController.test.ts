@@ -86,14 +86,12 @@ describe("#one", () => {
     );
 
     await report.reload();
-    const { location: _locrep, order: _order, ...restReport } = report;
     await order.reload();
-    const { location: _locor, ...restOrder } = order;
 
     expect(body).toEqual({
       ...location,
-      orders: [restOrder],
-      reports: [restReport],
+      orders: [order.asJSON()],
+      reports: [report.asJSON()],
     });
   });
 

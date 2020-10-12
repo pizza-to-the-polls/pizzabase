@@ -41,6 +41,15 @@ export class Order extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
+  asJSON() {
+    const { pizzas, restaurant, createdAt } = this;
+    return {
+      pizzas,
+      restaurant,
+      createdAt,
+    };
+  }
+
   static async placeOrder(
     {
       pizzas,
