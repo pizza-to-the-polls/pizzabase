@@ -17,19 +17,19 @@ export const Routes = [
   },
   {
     method: "put",
-    route: "/locations/:id/validate",
+    route: "/locations/:idOrAddress/validate",
     controller: LocationController,
     action: "validate",
   },
   {
     method: "put",
-    route: "/locations/:id/skip",
+    route: "/locations/:idOrAddress/skip",
     controller: LocationController,
     action: "skip",
   },
   {
     method: "put",
-    route: "/locations/:id/order",
+    route: "/locations/:idOrAddress/order",
     controller: LocationController,
     action: "order",
   },
