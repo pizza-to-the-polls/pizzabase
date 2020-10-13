@@ -37,7 +37,7 @@ describe("#all", () => {
       () => undefined
     );
 
-    expect(body).toEqual(await Location.find());
+    expect(body).toEqual((await Location.find()).map((loc) => loc.asJSON()));
   });
 });
 
@@ -89,7 +89,7 @@ describe("#one", () => {
     await order.reload();
 
     expect(body).toEqual({
-      ...location,
+      ...location.asJSON(),
       orders: [order.asJSON()],
       reports: [report.asJSON()],
     });
@@ -108,7 +108,7 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual({ ...location, reports: [], orders: [] });
+    expect(body).toEqual({ ...location.asJSON(), reports: [], orders: [] });
   });
 
   test("Gets a location with a space encoded address", async () => {
@@ -124,7 +124,7 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual({ ...location, reports: [], orders: [] });
+    expect(body).toEqual({ ...location.asJSON(), reports: [], orders: [] });
   });
 });
 

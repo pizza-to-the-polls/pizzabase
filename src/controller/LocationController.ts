@@ -21,7 +21,7 @@ export class LocationController {
   }
 
   async all(_request: Request, _response: Response, _next: NextFunction) {
-    return Location.find();
+    return (await Location.find()).map((loc) => loc.asJSON());
   }
 
   async one(request: Request, response: Response, next: NextFunction) {
@@ -33,7 +33,7 @@ export class LocationController {
     if (!location) return;
 
     return {
-      ...location,
+      ...location.asJSON(),
       reports: (await location.reports).map((report) => report.asJSON()),
       orders: (await location.orders).map((report) => report.asJSON()),
     };
