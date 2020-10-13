@@ -7,7 +7,7 @@ const zapReport = async (report: Report, url: string) =>
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
-      report: report.asJSON(),
+      report: report.asJSONPrivate(),
       location: report.location.asJSON(),
     }),
   });

@@ -52,6 +52,12 @@ export class Report extends BaseEntity {
     return { createdAt, id, skippedAt, reportURL, contactInfo };
   }
 
+  asJSONPrivate() {
+    const { contactInfo } = this;
+
+    return { ...this.asJSON(), contactInfo };
+  }
+
   static async bulkUpdate(query, set): Promise<void> {
     this.createQueryBuilder().update(this).where(query).set(set).execute();
   }

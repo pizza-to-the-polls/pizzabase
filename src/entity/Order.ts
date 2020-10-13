@@ -42,8 +42,9 @@ export class Order extends BaseEntity {
   updatedAt;
 
   asJSON() {
-    const { pizzas, restaurant, createdAt } = this;
+    const { id, pizzas, restaurant, createdAt } = this;
     return {
+      id,
       pizzas,
       restaurant,
       createdAt,

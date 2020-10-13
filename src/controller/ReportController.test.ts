@@ -91,7 +91,7 @@ describe("#create", () => {
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
-        report: report.asJSON(),
+        report: report.asJSONPrivate(),
         location: report.location.asJSON(),
       })
     );
@@ -137,7 +137,7 @@ describe("#create", () => {
     expect(zapUrl).toEqual(process.env.ZAP_NEW_REPORT);
     expect(zapBody).toEqual(
       JSON.stringify({
-        report: report.asJSON(),
+        report: report.asJSONPrivate(),
         location: report.location.asJSON(),
       })
     );
@@ -217,7 +217,7 @@ describe("#create", () => {
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
-        report: report.asJSON(),
+        report: report.asJSONPrivate(),
         location: report.location.asJSON(),
       })
     );
