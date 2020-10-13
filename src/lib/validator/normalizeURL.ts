@@ -5,7 +5,9 @@ const isValidURL = (url?: string): boolean =>
 
 const removeSearchParams = (url: string) => url.split("?")[0];
 
-export const normalizeURL = (url?: string): null | string => {
+export const normalizeURL = (maybeUrl?: string): null | string => {
+  const url = (maybeUrl || "").replace(/<[^>]*>/g, "");
+
   if (!isValidURL(url)) return null;
 
   if (url.includes("twitter.com")) {

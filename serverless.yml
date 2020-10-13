@@ -18,6 +18,7 @@ provider:
     NODE_ENV: prod
     ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
+    GOOGLE_MAPS_KEY: ${env:GOOGLE_MAPS_KEY}
 
   iamRoleStatements:
     - Effect: "Allow"

@@ -79,3 +79,4 @@ jobs:
           SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
           ZAP_NEW_REPORT: ${{ secrets.ZAP_NEW_REPORT }}
           ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
+          GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}

@@ -266,7 +266,7 @@ describe("#validate", () => {
     expect(url).toEqual(process.env.ZAP_NEW_REPORT);
     expect(body).toEqual(
       JSON.stringify({
-        report: report.asJSON(),
+        report: report.asJSONPrivate(),
         location: report.location.asJSON(),
       })
     );
