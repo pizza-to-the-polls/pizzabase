@@ -25,10 +25,10 @@ export class Report extends BaseEntity {
   reportURL!: string;
 
   @Column({ name: "location_id", type: "int", nullable: true })
-  location_id: number | null;
+  locationId: number | null;
 
   @Column({ name: "order_id", type: "int", nullable: true })
-  order_id: number | null;
+  orderId: number | null;
 
   @ManyToOne((_type) => Location, (location) => location.reports, {
     eager: true,
