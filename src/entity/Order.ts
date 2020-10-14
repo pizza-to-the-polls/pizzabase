@@ -26,6 +26,9 @@ export class Order extends BaseEntity {
   @Column({ nullable: true })
   restaurant: string | null;
 
+  @Column({ name: "order_id", type: 'int', nullable: true })
+  order_id: number | null;
+
   @ManyToOne((_type) => Location, (location) => location.orders, {
     eager: true,
     nullable: false,
