@@ -30,7 +30,6 @@ export class Order extends BaseEntity {
   @ManyToOne((_type) => Location, (location) => location.orders, {
     eager: true,
     nullable: false,
-    name: "location_id",
   })
   @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
   location!: Location;
