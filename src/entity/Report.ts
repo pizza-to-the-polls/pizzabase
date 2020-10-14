@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
@@ -27,14 +28,14 @@ export class Report extends BaseEntity {
   @ManyToOne((_type) => Location, (location) => location.reports, {
     eager: true,
     nullable: false,
-    name: "location_id",
   })
+  @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
   location: Location;
 
   @ManyToOne((_type) => Order, (order) => order.reports, {
     eager: true,
-    name: "order_id",
   })
+  @JoinColumn([{ name: "order_id", referencedColumnName: "id" }])
   order: Order;
 
   @Column({

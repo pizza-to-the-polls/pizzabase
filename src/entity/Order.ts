@@ -5,6 +5,7 @@ import {
   Column,
   ManyToOne,
   OneToMany,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
@@ -31,6 +32,7 @@ export class Order extends BaseEntity {
     nullable: false,
     name: "location_id",
   })
+  @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
   location!: Location;
 
   @OneToMany((_type) => Report, (report) => report.order)
