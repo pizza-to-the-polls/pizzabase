@@ -59,8 +59,8 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       {}
     );
 
-    if( !num || !street || !city || !state || !zip ) {
-      return null
+    if (!num || !street || !city || !state || !zip) {
+      return null;
     }
 
     const address = `${num} ${street}`;

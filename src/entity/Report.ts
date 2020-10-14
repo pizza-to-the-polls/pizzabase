@@ -24,10 +24,10 @@ export class Report extends BaseEntity {
   @Index()
   reportURL!: string;
 
-  @Column({ name: "location_id", type: 'int', nullable: true })
+  @Column({ name: "location_id", type: "int", nullable: true })
   location_id: number | null;
 
-  @Column({ name: "order_id", type: 'int', nullable: true })
+  @Column({ name: "order_id", type: "int", nullable: true })
   order_id: number | null;
 
   @ManyToOne((_type) => Location, (location) => location.reports, {
