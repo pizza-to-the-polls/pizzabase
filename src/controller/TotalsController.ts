@@ -4,7 +4,9 @@ import { getConnection } from "typeorm";
 export class TotalsController {
   private toNumber(object) {
     return Object.keys(object).reduce((obj, el) => {
-      obj[el] = Number(object[el]);
+      obj[el] = `${object[el]}`.includes(".")
+        ? Number(Math.floor(object[el] * 100) / 100)
+        : Number(object[el]);
       return obj;
     }, {});
   }
