@@ -30,12 +30,14 @@ export class Report extends BaseEntity {
     nullable: false,
   })
   @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
+  @Index()
   location: Location;
 
   @ManyToOne((_type) => Order, (order) => order.reports, {
     eager: true,
   })
   @JoinColumn([{ name: "order_id", referencedColumnName: "id" }])
+  @Index()
   order: Order;
 
   @Column({
@@ -64,7 +66,9 @@ export class Report extends BaseEntity {
   }
 
   static async bulkUpdate(query, set): Promise<void> {
-    this.createQueryBuilder().update(this).where(query).set(set).execute();
+    if ((await this.count(query)) > 0) {
+      this.createQueryBuilder().update(this).where(query).set(set).execute();
+    }
   }
 
   static async createNewReport(

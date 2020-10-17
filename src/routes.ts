@@ -1,8 +1,21 @@
 import { LocationController } from "./controller/LocationController";
 import { ReportController } from "./controller/ReportController";
 import { RootController } from "./controller/RootController";
+import { TotalsController } from "./controller/TotalsController";
 
 export const Routes = [
+  {
+    method: "get",
+    route: "/totals",
+    controller: TotalsController,
+    action: "overall",
+  },
+  {
+    method: "get",
+    route: "/totals/:year",
+    controller: TotalsController,
+    action: "yearly",
+  },
   {
     method: "get",
     route: "/locations",
