@@ -15,7 +15,7 @@ describe("#recent", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const orders = await Order.find({ take: 2, order: { createdAt: "desc" } });
+    const orders = await Order.find({ take: 2, order: { createdAt: "DESC" } });
     expect(body).toEqual({
       count: await Order.count(),
       results: orders.map((order) => ({
@@ -35,7 +35,7 @@ describe("#recent", () => {
     const orders = await Order.find({
       take: 4,
       skip: 4,
-      order: { createdAt: "desc" },
+      order: { createdAt: "DESC" },
     });
     expect(body).toEqual({
       count: await Order.count(),
