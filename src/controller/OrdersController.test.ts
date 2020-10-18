@@ -11,7 +11,7 @@ describe("#recent", () => {
 
   it("returns a limited number of orders", async () => {
     const body = await controller.recent(
-      http_mocks.createRequest({ params: { limit: 2 } }),
+      http_mocks.createRequest({ query: { limit: 2 } }),
       http_mocks.createResponse(),
       () => undefined
     );
@@ -30,7 +30,7 @@ describe("#recent", () => {
 
   it("returns page 2 limited number of orders", async () => {
     const body = await controller.recent(
-      http_mocks.createRequest({ params: { limit: 4, page: 1 } }),
+      http_mocks.createRequest({ query: { limit: 4, page: 1 } }),
       http_mocks.createResponse(),
       () => undefined
     );
