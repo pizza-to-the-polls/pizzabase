@@ -18,10 +18,13 @@ describe("#recent", () => {
     const orders = await Order.find({ take: 2, order: { createdAt: "DESC" } });
     expect(body).toEqual({
       count: await Order.count(),
-      results: orders.map((order) => ({
-        ...order.asJSON(),
-        ...order.location.asJSON(),
-      })),
+      results: await Promise.all(
+        orders.map(async (order) => ({
+          ...order.asJSON(),
+          location: order.location.asJSON(),
+          reports: (await order.reports).map((report) => report.asJSON()),
+        }))
+      ),
     });
   });
 
@@ -39,10 +42,13 @@ describe("#recent", () => {
     });
     expect(body).toEqual({
       count: await Order.count(),
-      results: orders.map((order) => ({
-        ...order.asJSON(),
-        ...order.location.asJSON(),
-      })),
+      results: await Promise.all(
+        orders.map(async (order) => ({
+          ...order.asJSON(),
+          location: order.location.asJSON(),
+          reports: (await order.reports).map((report) => report.asJSON()),
+        }))
+      ),
     });
   });
 });

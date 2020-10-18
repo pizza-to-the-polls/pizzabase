@@ -35,7 +35,7 @@ export class Order extends BaseEntity {
   location!: Location;
 
   @OneToMany((_type) => Report, (report) => report.order)
-  reports: Report;
+  reports: Promise<Report[]>;
 
   @CreateDateColumn({ name: "created_at" })
   createdAt;

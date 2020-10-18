@@ -10,15 +10,19 @@ export class OrdersController {
     const skip = Number(request.params.page || 0) * limit;
 
     const [orders, count] = await Order.findAndCount({
-      join: { alias: "location" },
+      relations: ["reports"],
       order: { createdAt: "DESC" },
       take,
       skip,
     });
-    const results = orders.map((order) => ({
-      ...order.asJSON(),
-      ...order.location.asJSON(),
-    }));
+
+    const results = await Promise.all(
+      orders.map(async (order) => ({
+        ...order.asJSON(),
+        location: order.location.asJSON(),
+        reports: (await order.reports).map((report) => report.asJSON()),
+      }))
+    );
     return { results, count };
   }
 }

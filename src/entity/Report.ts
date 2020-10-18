@@ -19,11 +19,11 @@ export class Report extends BaseEntity {
   id: number;
 
   @Column({ name: "contact_info" })
-  contactInfo!: string;
+  contactInfo: string;
 
   @Column({ name: "url" })
   @Index()
-  reportURL!: string;
+  reportURL: string;
 
   @ManyToOne((_type) => Location, (location) => location.reports, {
     eager: true,
@@ -54,9 +54,9 @@ export class Report extends BaseEntity {
   updatedAt;
 
   asJSON() {
-    const { createdAt, id, reportURL, contactInfo } = this;
+    const { createdAt, id, reportURL } = this;
 
-    return { createdAt, id, reportURL, contactInfo };
+    return { createdAt, id, reportURL };
   }
 
   asJSONPrivate() {
