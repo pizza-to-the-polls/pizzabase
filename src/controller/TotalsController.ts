@@ -31,7 +31,8 @@ export class TotalsController {
     return this.toNumber(
       (
         await manager.query(
-          `${this.QUERY} WHERE date_part('year', orders.created_at) = ${year}`
+          `${this.QUERY} WHERE date_part('year', orders.created_at) = ?`,
+          [year]
         )
       )[0]
     );
