@@ -8,6 +8,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { Truck } from "./Truck";
 import { Report } from "./Report";
 import { Order } from "./Order";
 import { Action } from "./Action";
@@ -66,6 +67,11 @@ export class Location extends BaseEntity {
     onDelete: "RESTRICT",
   })
   orders: Promise<Order[]>;
+
+  @OneToMany((_type) => Truck, (truck) => truck.location, {
+    onDelete: "RESTRICT",
+  })
+  trucks: Promise<Truck[]>;
 
   asJSON() {
     const {
