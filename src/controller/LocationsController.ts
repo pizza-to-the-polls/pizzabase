@@ -5,7 +5,7 @@ import { FindOr404, isAuthorized } from "./helper";
 import { zapNewReport } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 
-export class LocationController {
+export class LocationsController {
   private async authorizeAndFindLocation(
     request: Request,
     response: Response,
@@ -20,8 +20,17 @@ export class LocationController {
     );
   }
 
-  async all(_request: Request, _response: Response, _next: NextFunction) {
-    return (await Location.find()).map((loc) => loc.asJSON());
+  async all(request: Request, _response: Response, _next: NextFunction) {
+    const limit = Number(request.params.limit || 100);
+    const take = limit < 100 ? limit : 100;
+    const skip = Number(request.params.page || 0) * limit;
+
+    const [locations, count] = await Location.findAndCount({ take, skip });
+
+    return {
+      results: locations.map((loc) => loc.asJSON()),
+      count,
+    };
   }
 
   async one(request: Request, response: Response, next: NextFunction) {

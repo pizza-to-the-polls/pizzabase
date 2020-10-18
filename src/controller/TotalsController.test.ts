@@ -4,6 +4,8 @@ import { TotalsController } from "./TotalsController";
 import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
 
+const controller = new TotalsController();
+
 describe("#overall", () => {
   it("returns the totals for the overall", async () => {
     const states = ["OR", "WA", "CA", "ID", "MT"];
@@ -43,8 +45,6 @@ describe("#overall", () => {
         }
       }
     }
-
-    const controller = new TotalsController();
 
     const body = await controller.overall(
       http_mocks.createRequest(),
@@ -95,8 +95,6 @@ describe("#yearly", () => {
         }
       }
     }
-
-    const controller = new TotalsController();
 
     const thisBody = await controller.yearly(
       http_mocks.createRequest({

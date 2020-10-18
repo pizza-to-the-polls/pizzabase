@@ -1,6 +1,6 @@
 import * as http_mocks from "node-mocks-http";
 
-import { LocationController } from "./LocationController";
+import { LocationsController } from "./LocationsController";
 import { Location } from "../entity/Location";
 import { Action } from "../entity/Action";
 import { Order } from "../entity/Order";
@@ -12,6 +12,7 @@ jest.mock("../lib/validator/normalizeAddress");
 import fetch from "node-fetch";
 
 let location: Location | null;
+const controller = new LocationsController();
 
 beforeEach(async () => {
   location = await Location.createFromAddress({
@@ -29,22 +30,21 @@ beforeEach(async () => {
 
 describe("#all", () => {
   test("Lists the locations", async () => {
-    const controller = new LocationController();
-
     const body = await controller.all(
       http_mocks.createRequest(),
       http_mocks.createResponse(),
       () => undefined
     );
 
-    expect(body).toEqual((await Location.find()).map((loc) => loc.asJSON()));
+    expect(body).toEqual({
+      results: (await Location.find()).map((loc) => loc.asJSON()),
+      count: 1,
+    });
   });
 });
 
 describe("#one", () => {
   test("Tries to get a null location", async () => {
-    const controller = new LocationController();
-
     const response = http_mocks.createResponse();
 
     const body = await controller.one(
@@ -58,8 +58,6 @@ describe("#one", () => {
   });
 
   test("Gets a location with an ID, returns orders and reports", async () => {
-    const controller = new LocationController();
-
     const { id, fullAddress } = location ? location : null;
 
     const [report] = await Report.createNewReport(
@@ -96,8 +94,6 @@ describe("#one", () => {
   });
 
   test("Gets a location with a + encoded address", async () => {
-    const controller = new LocationController();
-
     const { fullAddress } = location ? location : null;
 
     const body = await controller.one(
@@ -112,8 +108,6 @@ describe("#one", () => {
   });
 
   test("Gets a location with a space encoded address", async () => {
-    const controller = new LocationController();
-
     const { fullAddress } = location ? location : null;
 
     const body = await controller.one(
@@ -134,8 +128,6 @@ describe("#validate", () => {
 
     const { fullAddress, id, validatedAt } = location ? location : null;
     expect(validatedAt).toBeNull();
-
-    const controller = new LocationController();
     await controller.validate(
       http_mocks.createRequest({
         method: "PUT",
@@ -158,8 +150,6 @@ describe("#validate", () => {
 
   it("validates a location even without a username", async () => {
     const { fullAddress, id } = location ? location : null;
-
-    const controller = new LocationController();
     await controller.validate(
       http_mocks.createRequest({
         method: "PUT",
@@ -184,7 +174,6 @@ describe("#validate", () => {
     const { fullAddress } = location ? location : null;
 
     const response = http_mocks.createResponse();
-    const controller = new LocationController();
     const body = await controller.validate(
       http_mocks.createRequest({
         method: "PUT",
@@ -249,7 +238,7 @@ describe("#validate", () => {
       zip: "60615",
     });
 
-    await new LocationController().validate(
+    await new LocationsController().validate(
       http_mocks.createRequest({
         method: "PUT",
         body: {},
@@ -311,8 +300,6 @@ describe("#skip", () => {
         zip: "60615",
       }
     );
-
-    const controller = new LocationController();
     await controller.skip(
       http_mocks.createRequest({
         method: "PUT",
@@ -342,8 +329,6 @@ describe("#skip", () => {
 describe("#order", () => {
   it("returns validation errors", async () => {
     const { fullAddress } = location ? location : null;
-
-    const controller = new LocationController();
     const response = http_mocks.createResponse();
     const body = await controller.order(
       http_mocks.createRequest({
@@ -365,8 +350,6 @@ describe("#order", () => {
 
   it("can create an order only with costs", async () => {
     const { fullAddress } = location ? location : null;
-
-    const controller = new LocationController();
     await controller.order(
       http_mocks.createRequest({
         method: "PUT",
@@ -385,8 +368,6 @@ describe("#order", () => {
 
   it("validates the order too", async () => {
     const { fullAddress } = location ? location : null;
-
-    const controller = new LocationController();
     await controller.order(
       http_mocks.createRequest({
         method: "PUT",
@@ -455,8 +436,6 @@ describe("#order", () => {
         zip: "60615",
       }
     );
-
-    const controller = new LocationController();
     const response = http_mocks.createResponse();
     const body = await controller.order(
       http_mocks.createRequest({

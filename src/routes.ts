@@ -1,7 +1,8 @@
-import { LocationController } from "./controller/LocationController";
+import { LocationsController } from "./controller/LocationsController";
 import { ReportController } from "./controller/ReportController";
 import { RootController } from "./controller/RootController";
 import { TotalsController } from "./controller/TotalsController";
+import { OrdersController } from "./controller/OrdersController";
 
 export const Routes = [
   {
@@ -19,37 +20,43 @@ export const Routes = [
   {
     method: "get",
     route: "/locations",
-    controller: LocationController,
+    controller: LocationsController,
     action: "all",
   },
   {
     method: "get",
     route: "/locations/:idOrAddress",
-    controller: LocationController,
+    controller: LocationsController,
     action: "one",
   },
   {
     method: "put",
     route: "/locations/:idOrAddress/validate",
-    controller: LocationController,
+    controller: LocationsController,
     action: "validate",
   },
   {
     method: "put",
     route: "/locations/:idOrAddress/skip",
-    controller: LocationController,
+    controller: LocationsController,
     action: "skip",
   },
   {
     method: "put",
     route: "/locations/:idOrAddress/order",
-    controller: LocationController,
+    controller: LocationsController,
     action: "order",
   },
   {
     method: "post",
     route: "/report",
     controller: ReportController,
+    action: "create",
+  },
+  {
+    method: "post",
+    route: "/order",
+    controller: OrderController,
     action: "create",
   },
   {
