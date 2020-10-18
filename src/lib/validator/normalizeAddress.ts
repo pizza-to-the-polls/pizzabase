@@ -36,7 +36,6 @@ const geocode = async (body: string): Promise<null | NormalAddress> =>
   (await smartyGeocode(body)) || (await gmapsGeocode(body));
 
 const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
-  console.log(`${gmapsURL}?key=${gmapsKey}&address=${body}`);
   const resp = await fetch(`${gmapsURL}?key=${gmapsKey}&address=${body}`);
   const { results } = await resp.json();
   const [result] = results || [];
