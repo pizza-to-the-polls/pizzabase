@@ -11,7 +11,7 @@ export class OrdersController {
 
     const [orders, count] = await Order.findAndCount({
       join: { alias: "location" },
-      order: { createdAt: "desc" },
+      order: { createdAt: "DESC" },
       take,
       skip,
     });

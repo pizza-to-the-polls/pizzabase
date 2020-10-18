@@ -74,19 +74,17 @@ const backfillReport = async (data: { [key: string]: string }) => {
 (async () => {
   await createConnection();
 
-  const data: { [key: string]: string }[] = await new Promise(
-    (resolve) => {
-      const rows = [];
-      fs.createReadStream(process.argv[2])
-        .pipe(csv())
-        .on("data", (row) => {
-          rows.push(row);
-        })
-        .on("end", () => {
-          resolve(rows);
-        });
-    }
-  );
+  const data: { [key: string]: string }[] = await new Promise((resolve) => {
+    const rows = [];
+    fs.createReadStream(process.argv[2])
+      .pipe(csv())
+      .on("data", (row) => {
+        rows.push(row);
+      })
+      .on("end", () => {
+        resolve(rows);
+      });
+  });
 
   for (let num = 9; num < data.length; ++num) {
     try {
