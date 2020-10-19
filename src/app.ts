@@ -5,11 +5,17 @@ import * as cors from "cors";
 import { Request, Response, NextFunction } from "express";
 import { Routes } from "./routes";
 
+const ALLOWED_ORIGINS = ["polls.pizza", "localhost"];
+
 const app = express();
 
 app.use(
   cors({
-    origin: process.env.NODE_ENV === "dev" ? "*" : "https://polls.pizza",
+    origin: (origin, callback) => {
+      if ((origin || "").match(new RegExp(ALLOWED_ORIGINS.join("|"))))
+        return callback(null, origin);
+      callback(null, process.env.STATIC_SITE || "http://polls.pizza");
+    },
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     allowedHeaders: "Content-Type,Authorization",
     optionsSuccessStatus: 200,
