@@ -20,6 +20,7 @@ export const normalizeURL = (maybeUrl?: string): null | string => {
 
   if (url.includes("facebook.com")) {
     if (url.includes("facebook.com/story")) return null;
+    if (url.includes("facebook.com/photo")) return null;
     return removeSearchParams(url);
   }
 
