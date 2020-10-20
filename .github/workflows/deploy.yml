@@ -77,7 +77,7 @@ jobs:
       - name: deploy to aws
         uses: serverless/github-action@v1.53.0
         with:
-          args: deploy
+          args: deploy --stage prod
         env:
           AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
@@ -86,3 +86,4 @@ jobs:
           ZAP_NEW_REPORT: ${{ secrets.ZAP_NEW_REPORT }}
           ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+          STATIC_SITE: 'https://polls.pizza'

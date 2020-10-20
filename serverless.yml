@@ -20,6 +20,9 @@ provider:
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
     GOOGLE_MAPS_KEY: ${env:GOOGLE_MAPS_KEY}
 
+    ALLOWED_ORIGINS: ${env:ALLOWED_ORIGINS}
+    STATIC_SITE: ${env:STATIC_SITE}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:
