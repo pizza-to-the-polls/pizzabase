@@ -14,7 +14,7 @@ import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
 
-@Entity()
+@Entity({ name: "trucks" })
 export class Truck extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;
