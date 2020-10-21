@@ -3,6 +3,9 @@ import * as http_mocks from "node-mocks-http";
 import { OrdersController } from "./OrdersController";
 import { buildTestData } from "../tests/factories";
 import { Order } from "../entity/Order";
+import { Location } from "../entity/Location";
+
+jest.mock("../lib/validator/normalizeAddress");
 
 const controller = new OrdersController();
 
@@ -50,5 +53,78 @@ describe("#recent", () => {
         }))
       ),
     });
+  });
+});
+
+describe("#create", () => {
+  it("returns validation errors", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.create(
+      http_mocks.createRequest({
+        method: "POST",
+        body: { address: null, cost: null },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+    expect(body).toEqual({
+      errors: {
+        cost: "Invalid Cost - please supply a cost of the order",
+        address: "Invalid address - please supply a valid address",
+      },
+    });
+    expect(response.statusCode).toEqual(422);
+  });
+
+  it("can create an order on an existing location", async () => {
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    await controller.create(
+      http_mocks.createRequest({
+        method: "POST",
+        body: { cost: "$500.23423", address: location.fullAddress },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    await location.reload();
+    const [order] = await location.orders;
+
+    expect(order.cost).toEqual(500.23);
+    expect(order.pizzas).toEqual(32);
+    expect(location.validatedAt).toBeTruthy();
+  });
+
+  it("can create an order on a new location", async () => {
+    await controller.create(
+      http_mocks.createRequest({
+        method: "POST",
+        body: {
+          cost: "$500.23423",
+          address: "550 Different Address City OR 12345",
+        },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const order = await Order.findOne({ where: { cost: 500.23 } });
+
+    expect(order.pizzas).toEqual(32);
+    expect(order.location.fullAddress).toEqual(
+      "550 Different Address City OR 12345"
+    );
+    expect(order.location.validatedAt).toBeTruthy();
   });
 });

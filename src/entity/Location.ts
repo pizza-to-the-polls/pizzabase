@@ -7,12 +7,15 @@ import {
   Index,
   CreateDateColumn,
   UpdateDateColumn,
+  MoreThan,
 } from "typeorm";
+import { Truck } from "./Truck";
 import { Report } from "./Report";
 import { Order } from "./Order";
 import { Action } from "./Action";
 import { NormalAddress } from "../lib/validator";
 import { toStateName } from "../lib/states";
+import { TRUCK_DECAY } from "../lib/constants";
 
 @Entity({ name: "locations" })
 export class Location extends BaseEntity {
@@ -67,6 +70,23 @@ export class Location extends BaseEntity {
   })
   orders: Promise<Order[]>;
 
+  @OneToMany((_type) => Truck, (truck) => truck.location, {
+    onDelete: "RESTRICT",
+  })
+  trucks: Promise<Truck[]>;
+
+  async activeTruck(): Promise<Truck> {
+    return Truck.findOne({
+      where: {
+        location: this,
+        createdAt: MoreThan(new Date(Number(new Date()) - TRUCK_DECAY)),
+      },
+    });
+  }
+  async hasTruck(): Promise<boolean> {
+    return !!(await this.activeTruck());
+  }
+
   asJSON() {
     const {
       city,
@@ -79,6 +99,7 @@ export class Location extends BaseEntity {
       id,
       validatedAt,
     } = this;
+
     return {
       city,
       state,
@@ -92,6 +113,12 @@ export class Location extends BaseEntity {
       stateName: toStateName(state),
     };
   }
+  async asJSONPrivate() {
+    return {
+      ...this.asJSON(),
+      hasTruck: await this.hasTruck(),
+    };
+  }
 
   async validate(validatedBy?: string): Promise<Report[]> {
     this.validatedAt = new Date();
@@ -99,16 +126,23 @@ export class Location extends BaseEntity {
     await this.save();
     await Action.log(this, "validated", validatedBy);
 
-    return await await Report.find({ where: { location: this, order: null } });
+    return await Report.find({ where: { location: this, order: null } });
   }
 
-  async skip(validatedBy?: string): Promise<void> {
-    await Report.bulkUpdate(
-      { location: this, order: null, skippedAt: null },
-      { skippedAt: new Date() }
-    );
+  async skip(skippedBy?: string): Promise<void> {
+    await Report.updateOpen(this, { skippedAt: new Date() });
 
-    await Action.log(this, "skipped", validatedBy);
+    await Action.log(this, "skipped", skippedBy);
+  }
+
+  async assignTruck(assignedBy?: string, identifier?: string): Promise<Truck> {
+    const truck = await Truck.createForLocation(this, identifier);
+    await Report.updateOpen(this, { truck });
+
+    await this.validate(assignedBy);
+    await Action.log(this, "assigned truck", assignedBy);
+
+    return truck;
   }
 
   static async fidByIdOrFullAddress(

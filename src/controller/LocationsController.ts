@@ -43,8 +43,9 @@ export class LocationsController {
 
     return {
       ...location.asJSON(),
+      hasTruck: await location.hasTruck(),
       reports: (await location.reports).map((report) => report.asJSON()),
-      orders: (await location.orders).map((report) => report.asJSON()),
+      orders: (await location.orders).map((order) => order.asJSON()),
     };
   }
 
@@ -82,6 +83,19 @@ export class LocationsController {
     return { success: true };
   }
 
+  async truck(request: Request, response: Response, next: NextFunction) {
+    const location: Location | null = await this.authorizeAndFindLocation(
+      request,
+      response,
+      next
+    );
+
+    if (!location) return;
+
+    await location.assignTruck(request.body?.user, request.body?.city_state);
+    return { success: true };
+  }
+
   async order(request: Request, response: Response, next: NextFunction) {
     const location: Location | null = await this.authorizeAndFindLocation(
       request,
@@ -90,7 +104,7 @@ export class LocationsController {
     );
     if (!location) return;
 
-    const { errors, ...order } = validateOrder(request.body);
+    const { errors, ...order } = await validateOrder(request.body);
 
     if (Object.keys(errors).length > 0) {
       response.status(422);
@@ -98,7 +112,6 @@ export class LocationsController {
     }
 
     await Order.placeOrder(order, location);
-    await location.validate(request.body?.user);
 
     return { success: true };
   }

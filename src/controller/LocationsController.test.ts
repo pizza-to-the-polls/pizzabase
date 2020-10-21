@@ -87,7 +87,7 @@ describe("#one", () => {
     await order.reload();
 
     expect(body).toEqual({
-      ...location.asJSON(),
+      ...(await location.asJSONPrivate()),
       orders: [order.asJSON()],
       reports: [report.asJSON()],
     });
@@ -104,7 +104,11 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual({ ...location.asJSON(), reports: [], orders: [] });
+    expect(body).toEqual({
+      ...(await location.asJSONPrivate()),
+      reports: [],
+      orders: [],
+    });
   });
 
   test("Gets a location with a space encoded address", async () => {
@@ -118,7 +122,11 @@ describe("#one", () => {
       () => undefined
     );
 
-    expect(body).toEqual({ ...location.asJSON(), reports: [], orders: [] });
+    expect(body).toEqual({
+      ...(await location.asJSONPrivate()),
+      reports: [],
+      orders: [],
+    });
   });
 });
 
@@ -256,7 +264,7 @@ describe("#validate", () => {
     expect(body).toEqual(
       JSON.stringify({
         report: report.asJSONPrivate(),
-        location: report.location.asJSON(),
+        location: await report.location.asJSONPrivate(),
       })
     );
   });
@@ -315,6 +323,7 @@ describe("#skip", () => {
 
     const { user, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
+      order: { id: "DESC" },
     });
     expect(user).toEqual("jimmy");
     expect(actionType).toEqual("skipped");
@@ -323,6 +332,71 @@ describe("#skip", () => {
     expect(pending.skippedAt).toBeTruthy();
     await ordered.reload();
     expect(ordered.skippedAt).toBeFalsy();
+  });
+});
+
+describe("#skip", () => {
+  it("assign a truck, associates all locations, logs the username", async () => {
+    const { fullAddress, id, validatedAt } = location ? location : null;
+    expect(validatedAt).toBeNull();
+
+    const [ordered] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+
+    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+
+    const [pending] = await Report.createNewReport(
+      "222-234-2345",
+      "http://twitter.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+    await controller.truck(
+      http_mocks.createRequest({
+        method: "PUT",
+        body: { user: "jimmy", city_state: "annarbor-mi" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    await location.reload();
+    expect(await location.hasTruck()).toBeTruthy();
+    const { user, actionType } = await Action.findOne({
+      where: { entityId: id, entityType: location.constructor.name },
+      order: { id: "DESC" },
+    });
+    expect(user).toEqual("jimmy");
+    expect(actionType).toEqual("assigned truck");
+
+    await pending.reload();
+    expect(pending.truck).toBeTruthy();
+    await ordered.reload();
+    expect(ordered.truck).toBeFalsy();
   });
 });
 

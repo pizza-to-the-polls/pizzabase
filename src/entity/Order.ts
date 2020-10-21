@@ -9,6 +9,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
 import { Action } from "./Action";
@@ -53,6 +54,20 @@ export class Order extends BaseEntity {
     };
   }
 
+  static async placeOrderForAddress(
+    orderParams: {
+      pizzas: number;
+      cost: number;
+      restaurant?: string;
+      user?: string;
+    },
+    address: NormalAddress
+  ): Promise<Order> {
+    const [location] = await Location.getOrCreateFromAddress(address);
+
+    return await this.placeOrder(orderParams, location);
+  }
+
   static async placeOrder(
     {
       pizzas,
@@ -76,10 +91,8 @@ export class Order extends BaseEntity {
 
     await order.save();
 
-    await Report.bulkUpdate(
-      { location, order: null, skippedAt: null },
-      { order }
-    );
+    await Report.updateOpen(location, { order });
+    await location.validate(user);
 
     await Action.log(order, "ordered", user);
 
