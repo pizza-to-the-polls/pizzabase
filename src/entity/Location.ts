@@ -75,13 +75,16 @@ export class Location extends BaseEntity {
   })
   trucks: Promise<Truck[]>;
 
-  async hasTruck(): Promise<boolean> {
-    return !!(await Truck.findOne({
+  async activeTruck(): Promise<Truck> {
+    return Truck.findOne({
       where: {
         location: this,
-        createdAt: MoreThan(new Date(new Date() - TRUCK_DECAY)),
+        createdAt: MoreThan(new Date(Number(new Date()) - TRUCK_DECAY)),
       },
-    }));
+    });
+  }
+  async hasTruck(): Promise<boolean> {
+    return !!(await this.activeTruck());
   }
 
   asJSON() {
@@ -123,20 +126,23 @@ export class Location extends BaseEntity {
     await this.save();
     await Action.log(this, "validated", validatedBy);
 
-    return await await Report.find({ where: { location: this, order: null } });
+    return await Report.find({ where: { location: this, order: null } });
   }
 
-  async skip(validatedBy?: string): Promise<void> {
+  async skip(skippedBy?: string): Promise<void> {
     await Report.updateOpen(this, { skippedAt: new Date() });
 
-    await Action.log(this, "skipped", validatedBy);
+    await Action.log(this, "skipped", skippedBy);
   }
 
-  async assignTruck(assignedBy?: string, identifier?: string): Promise<void> {
+  async assignTruck(assignedBy?: string, identifier?: string): Promise<Truck> {
     const truck = await Truck.createForLocation(this, identifier);
     await Report.updateOpen(this, { truck });
 
+    await this.validate(assignedBy);
     await Action.log(this, "assigned truck", assignedBy);
+
+    return truck;
   }
 
   static async fidByIdOrFullAddress(

@@ -10,6 +10,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
 } from "typeorm";
+import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
 
@@ -38,13 +39,22 @@ export class Truck extends BaseEntity {
   @Column({ nullable: true })
   identifier: string | null;
 
+  static async createForAddress(
+    address: NormalAddress,
+    identifier?: string,
+    assignedBy?: string
+  ): Promise<Truck> {
+    const [location] = await Location.getOrCreateFromAddress(address);
+    return await location.assignTruck(assignedBy, identifier);
+  }
+
   static async createForLocation(
     location: Location,
     identifier?: string
   ): Promise<Truck> {
     const truck = new this();
     truck.location = location;
-    if (identifier) truck.identifier = identifier;
+    truck.identifier = identifier || `${location.city}-${location.state}`;
     await truck.save();
 
     return truck;

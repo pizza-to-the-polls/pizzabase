@@ -6,11 +6,13 @@ const isValidURL = (url?: string): boolean =>
 const removeSearchParams = (url: string) => url.split("?")[0];
 
 export const normalizeURL = (maybeUrl?: string): null | string => {
-  const url = (maybeUrl || "").replace(/<[^>]*>/g, "");
+  const url = (maybeUrl || "").replace(/<[^>]*>/g, "").toLowerCase();
 
   if (!isValidURL(url)) return null;
 
   if (url.includes("twitter.com")) {
+    if (url === "https://twitter.com/pizzatothepolls") return null;
+    if (url === "https://twitter.com/") return null;
     return removeSearchParams(url);
   }
 
@@ -19,8 +21,8 @@ export const normalizeURL = (maybeUrl?: string): null | string => {
   }
 
   if (url.includes("facebook.com")) {
-    if (url.includes("facebook.com/story")) return null;
-    if (url.includes("facebook.com/photo")) return null;
+    if (url === "https://facebook.com/story") return null;
+    if (url === "https://facebook.com/photo") return null;
     return removeSearchParams(url);
   }
 

@@ -9,7 +9,7 @@ const zapReport = async (report: Report, url: string): Promise<void> =>
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({
       report: report.asJSONPrivate(),
-      location: report.location.asJSON(),
+      location: await report.location.asJSONPrivate(),
     }),
   }));
 

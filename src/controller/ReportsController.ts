@@ -3,7 +3,7 @@ import { Report } from "../entity/Report";
 import { validateReport } from "../lib/validator";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 
-export class ReportController {
+export class ReportsController {
   async create(request: Request, response: Response, _next: NextFunction) {
     const {
       errors,
@@ -17,13 +17,13 @@ export class ReportController {
       return { errors };
     }
 
-    const [report, { isUniqueReport }] = await Report.createNewReport(
+    const [report, { isUniqueReport, hasTruck }] = await Report.createNewReport(
       contactInfo,
       reportURL,
       normalizedAddress
     );
 
-    if (isUniqueReport) {
+    if (isUniqueReport && !hasTruck) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
@@ -31,6 +31,10 @@ export class ReportController {
       }
     }
 
-    return { success: true };
+    return {
+      address: report.location.fullAddress,
+      duplicate_url: !isUniqueReport,
+      has_truck: hasTruck,
+    };
   }
 }
