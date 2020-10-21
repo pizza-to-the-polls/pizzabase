@@ -83,8 +83,6 @@ jobs:
           AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
           SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
-          ZAP_NEW_REPORT: ${{ secrets.ZAP_NEW_REPORT }}
-          ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           ALLOWED_ORIGINS: 'polls.pizza,localhost'
           STATIC_SITE: https://next.polls.pizza/
