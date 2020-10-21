@@ -7,6 +7,7 @@ import {
   Index,
   CreateDateColumn,
   UpdateDateColumn,
+  MoreThan,
 } from "typeorm";
 import { Truck } from "./Truck";
 import { Report } from "./Report";
@@ -14,6 +15,7 @@ import { Order } from "./Order";
 import { Action } from "./Action";
 import { NormalAddress } from "../lib/validator";
 import { toStateName } from "../lib/states";
+import { TRUCK_DECAY } from "../lib/constants";
 
 @Entity({ name: "locations" })
 export class Location extends BaseEntity {
@@ -73,6 +75,15 @@ export class Location extends BaseEntity {
   })
   trucks: Promise<Truck[]>;
 
+  async hasTruck(): Promise<boolean> {
+    return !!(await Truck.findOne({
+      where: {
+        location: this,
+        createdAt: MoreThan(new Date(new Date() - TRUCK_DECAY)),
+      },
+    }));
+  }
+
   asJSON() {
     const {
       city,
@@ -85,6 +96,7 @@ export class Location extends BaseEntity {
       id,
       validatedAt,
     } = this;
+
     return {
       city,
       state,
@@ -98,6 +110,12 @@ export class Location extends BaseEntity {
       stateName: toStateName(state),
     };
   }
+  async asJSONPrivate() {
+    return {
+      ...this.asJSON(),
+      hasTruck: await this.hasTruck(),
+    };
+  }
 
   async validate(validatedBy?: string): Promise<Report[]> {
     this.validatedAt = new Date();
@@ -109,12 +127,16 @@ export class Location extends BaseEntity {
   }
 
   async skip(validatedBy?: string): Promise<void> {
-    await Report.bulkUpdate(
-      { location: this, order: null, skippedAt: null },
-      { skippedAt: new Date() }
-    );
+    await Report.updateOpen(this, { skippedAt: new Date() });
 
     await Action.log(this, "skipped", validatedBy);
+  }
+
+  async assignTruck(assignedBy?: string, identifier?: string): Promise<void> {
+    const truck = await Truck.createForLocation(this, identifier);
+    await Report.updateOpen(this, { truck });
+
+    await Action.log(this, "assigned truck", assignedBy);
   }
 
   static async fidByIdOrFullAddress(

@@ -76,10 +76,7 @@ export class Order extends BaseEntity {
 
     await order.save();
 
-    await Report.bulkUpdate(
-      { location, order: null, skippedAt: null },
-      { order }
-    );
+    await Report.updateOpen(location, { order });
 
     await Action.log(order, "ordered", user);
 
