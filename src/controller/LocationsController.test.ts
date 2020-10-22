@@ -336,7 +336,7 @@ describe("#skip", () => {
   });
 });
 
-describe("#skip", () => {
+describe("#truck", () => {
   it("assign a truck, associates all locations, logs the username", async () => {
     const { fullAddress, id, validatedAt } = location ? location : null;
     expect(validatedAt).toBeNull();

@@ -66,16 +66,23 @@ describe("#create", () => {
     const url = "http://twitter.com/something/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
+    const waitTime = "5";
+    const canDistribute = true;
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address },
+      body: { url, contact, address, waitTime, canDistribute },
     });
 
     const response = http_mocks.createResponse();
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: true,
+      willReceive: true,
+    });
     expect(response.statusCode).toEqual(200);
 
     const location = await Location.findOne({
@@ -103,6 +110,8 @@ describe("#create", () => {
     const url = "http://twitter.com/different/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
+    const waitTime = "5";
+    const canDistribute = true;
 
     const location = await Location.createFromAddress({
       latitude: 41.79907,
@@ -120,14 +129,19 @@ describe("#create", () => {
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address },
+      body: { url, contact, address, waitTime, canDistribute },
     });
 
     const response = http_mocks.createResponse();
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: true,
+      willReceive: true,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { reportURL: url } });
@@ -148,29 +162,41 @@ describe("#create", () => {
     const url = "http://twitter.com/different/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
+    const waitTime = "5";
+    const canDistribute = true;
 
-    const [existingReport] = await Report.createNewReport(contact, url, {
-      latitude: 41.79907,
-      longitude: -87.58413,
+    const [existingReport] = await Report.createNewReport(
+      contact,
+      url,
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
 
-      fullAddress: address,
+        fullAddress: address,
 
-      address: "5335 S Kimbark Ave",
-      city: "Chicago",
-      state: "IL",
-      zip: "60615",
-    });
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      },
+      { canDistribute: true }
+    );
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address },
+      body: { url, contact, address, waitTime, canDistribute },
     });
 
     const response = http_mocks.createResponse();
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: true });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: false,
+      willReceive: false,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { reportURL: url } });
@@ -206,7 +232,12 @@ describe("#create", () => {
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: true,
+      willReceive: false,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { contactInfo: contact } });
@@ -251,7 +282,12 @@ describe("#create", () => {
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: true, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: true,
+      isUnique: true,
+      willReceive: false,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { reportURL: url } });
