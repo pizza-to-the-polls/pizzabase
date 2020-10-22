@@ -59,11 +59,15 @@ export class Upload extends BaseEntity {
       throw new Error("Too many uploads");
     }
     const upload = new this();
-    upload.ipAddress = ipAddress;
-    upload.filePath = `uploads/${uuidv4()}.${fileExt}`;
 
     const [location] = await Location.getOrCreateFromAddress(normalizedAddress);
     upload.location = location;
+    const { city, state } = location;
+
+    upload.ipAddress = ipAddress;
+    upload.filePath = `uploads/${city}-${state}-${
+      uuidv4().split("-")[0]
+    }.${fileExt}`;
 
     await upload.save();
 

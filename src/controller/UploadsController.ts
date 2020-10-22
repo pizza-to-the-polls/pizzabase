@@ -15,7 +15,7 @@ export class UploadsController {
     }
 
     try {
-      return presignUpload(
+      return await presignUpload(
         await Upload.createOrRateLimit(request.ip, uploadParams)
       );
     } catch (e) {

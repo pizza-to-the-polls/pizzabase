@@ -1,9 +1,9 @@
-export const presignUpload = async ({ id, fileName }) => {
+export const presignUpload = async ({ id, filePath }) => {
   return {
     presigned: {
       url: "https://s3.bucket.com/launchpad",
       fields: {
-        key: fileName,
+        key: filePath,
         bucket: "s3.bucket.com",
         "X-Amz-Algorithm": "algo",
         "X-Amz-Credential": "AWS4-HMAC-SHA256",
@@ -13,5 +13,6 @@ export const presignUpload = async ({ id, fileName }) => {
       },
     },
     id,
+    filePath,
   };
 };

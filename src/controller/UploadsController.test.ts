@@ -118,6 +118,7 @@ describe("#create", () => {
     const upload = await Upload.findOne({ order: { id: "DESC" } });
 
     expect((body as any).id).toEqual(upload.id);
+    expect((body as any).filePath).toEqual(upload.filePath);
     expect(upload.filePath).toContain(".png");
     expect(upload.location.id).toEqual(location.id);
   });
