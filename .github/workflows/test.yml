@@ -50,6 +50,10 @@ jobs:
   build:
     runs-on: ubuntu-latest
 
+    env:
+      AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+      AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+
     needs: test
 
     steps:
@@ -68,21 +72,16 @@ jobs:
         env:
           ORMCONFIG_JSON: ${{ secrets.STAGING_ORMCONFIG_JSON }}
 
-      - name: sync schema
-        run: npm run schema:sync
-        env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-
       - name: deploy to aws
         uses: serverless/github-action@v1.53.0
         with:
           args: deploy --stage dev
         env:
-          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
-          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
           SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
           SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           ALLOWED_ORIGINS: 'polls.pizza,localhost'
           STATIC_SITE: https://next.polls.pizza
+
+      - name: sync schema
+        run: npm run schema:sync

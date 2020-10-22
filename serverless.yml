@@ -56,7 +56,9 @@ functions:
     handler: src/lambda.handler
     events:
       - http: ANY /
+        cors: true
       - http: "ANY {proxy+}"
+        cors: true
 
 custom:
   customDomain:
