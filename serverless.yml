@@ -56,13 +56,11 @@ functions:
     handler: src/lambda.handler
     events:
       - http: ANY /
-        cors: true
       - http: "ANY {proxy+}"
-        cors: true
 
 custom:
   customDomain:
     domainName: base.polls.pizza
     basePath: ""
-    stage: ${self:provider.stage}
+    stage: prod
     createRoute53Record: true
