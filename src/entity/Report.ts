@@ -34,7 +34,7 @@ export class Report extends BaseEntity {
   @Column({ name: "wait_time", nullable: true })
   waitTime: string;
 
-  @Column({ name: "canDistribute", default: false })
+  @Column({ name: "can_distribute", default: false })
   canDistribute: boolean;
 
   @Column({ name: "url" })
@@ -94,7 +94,7 @@ export class Report extends BaseEntity {
         location,
         ...OPEN_QUERY,
       },
-      order: { id: "ASC" },
+      order: { canDistribute: "ASC", id: "ASC" },
     });
   }
   static async updateOpen(location: Location, set): Promise<void> {
