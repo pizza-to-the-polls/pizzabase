@@ -13,8 +13,8 @@ import {
 import { Location } from "./Location";
 import { Order } from "./Order";
 import { Truck } from "./Truck";
+import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
-import { REPORT_DECAY } from "../lib/constants";
 
 const OPEN_QUERY = {
   order: null,

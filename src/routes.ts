@@ -4,6 +4,7 @@ import { TrucksController } from "./controller/TrucksController";
 import { RootController } from "./controller/RootController";
 import { TotalsController } from "./controller/TotalsController";
 import { OrdersController } from "./controller/OrdersController";
+import { UploadsController } from "./controller/UploadsController";
 
 export const Routes = [
   {
@@ -77,6 +78,12 @@ export const Routes = [
     route: "/orders",
     controller: OrdersController,
     action: "recent",
+  },
+  {
+    method: "post",
+    route: "/upload",
+    controller: UploadsController,
+    action: "create",
   },
   {
     method: "get",
