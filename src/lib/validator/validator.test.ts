@@ -1,4 +1,5 @@
 import { validateReport } from ".";
+import { ADDRESS_ERROR, URL_ERROR, CONTACT_ERROR } from "./constants";
 
 jest.mock("./normalizeAddress");
 
@@ -10,9 +11,9 @@ test("validateReport returns an error for not valid requests", async () => {
   });
 
   expect(errors).toEqual({
-    url: "Invalid URL - please supply a valid URL",
-    contact: "Invalid contact - please supply an email address or phone number",
-    address: "Invalid address - please supply a valid address",
+    url: URL_ERROR,
+    contact: CONTACT_ERROR,
+    address: ADDRESS_ERROR,
   });
 });
 
@@ -20,9 +21,9 @@ test("validateReport returns an error for empty request", async () => {
   const { errors } = await validateReport({});
 
   expect(errors).toEqual({
-    url: "Invalid URL - please supply a valid URL",
-    contact: "Invalid contact - please supply an email address or phone number",
-    address: "Invalid address - please supply a valid address",
+    url: URL_ERROR,
+    contact: CONTACT_ERROR,
+    address: ADDRESS_ERROR,
   });
 });
 

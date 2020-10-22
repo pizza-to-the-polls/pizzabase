@@ -1,4 +1,5 @@
 import { normalizeAddress, NormalAddress } from "./normalizeAddress";
+import { ADDRESS_ERROR } from "./constants";
 
 interface ValidationError {
   address?: string;
@@ -21,7 +22,7 @@ export const validateTruck = async ({
     address
   );
   if (!normalizedAddress) {
-    errors.address = "Invalid address - please supply a valid address";
+    errors.address = ADDRESS_ERROR;
   }
 
   return { errors, normalizedAddress, identifier };

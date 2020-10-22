@@ -3,6 +3,11 @@ import * as http_mocks from "node-mocks-http";
 import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
+import {
+  ADDRESS_ERROR,
+  URL_ERROR,
+  CONTACT_ERROR,
+} from "../lib/validator/constants";
 
 jest.mock("../lib/validator/normalizeAddress");
 jest.mock("node-fetch");
@@ -23,10 +28,9 @@ describe("#create", () => {
 
     expect(body).toEqual({
       errors: {
-        url: "Invalid URL - please supply a valid URL",
-        contact:
-          "Invalid contact - please supply an email address or phone number",
-        address: "Invalid address - please supply a valid address",
+        url: URL_ERROR,
+        contact: CONTACT_ERROR,
+        address: ADDRESS_ERROR,
       },
     });
 
@@ -49,10 +53,9 @@ describe("#create", () => {
 
     expect(body).toEqual({
       errors: {
-        url: "Invalid URL - please supply a valid URL",
-        contact:
-          "Invalid contact - please supply an email address or phone number",
-        address: "Invalid address - please supply a valid address",
+        url: URL_ERROR,
+        contact: CONTACT_ERROR,
+        address: ADDRESS_ERROR,
       },
     });
 

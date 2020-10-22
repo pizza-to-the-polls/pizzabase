@@ -4,6 +4,7 @@ import { OrdersController } from "./OrdersController";
 import { buildTestData } from "../tests/factories";
 import { Order } from "../entity/Order";
 import { Location } from "../entity/Location";
+import { ADDRESS_ERROR, COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/normalizeAddress");
 
@@ -70,8 +71,8 @@ describe("#create", () => {
     );
     expect(body).toEqual({
       errors: {
-        cost: "Invalid Cost - please supply a cost of the order",
-        address: "Invalid address - please supply a valid address",
+        cost: COST_ERROR,
+        address: ADDRESS_ERROR,
       },
     });
     expect(response.statusCode).toEqual(422);

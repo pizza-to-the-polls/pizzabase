@@ -1,4 +1,5 @@
 import { normalizeAddress, NormalAddress } from "./normalizeAddress";
+import { ADDRESS_ERROR, COST_ERROR } from "./constants";
 
 const COST_PER_PIZZA = 16;
 
@@ -35,13 +36,13 @@ export const validateOrder = async ({
         100
       : null;
   if (!cost) {
-    errors.cost = "Invalid Cost - please supply a cost of the order";
+    errors.cost = COST_ERROR;
   }
   let normalizedAddress: null | NormalAddress;
   if (!!address) {
     normalizedAddress = await normalizeAddress(address);
     if (!normalizedAddress) {
-      errors.address = "Invalid address - please supply a valid address";
+      errors.address = ADDRESS_ERROR;
     }
   }
 
