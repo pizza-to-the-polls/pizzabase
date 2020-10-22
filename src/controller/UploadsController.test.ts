@@ -66,7 +66,7 @@ describe("#create", () => {
     });
     await Promise.all(
       Array(6)
-        .fill()
+        .fill(null)
         .map(async (_, i) => {
           const upload = new Upload();
           upload.ipAddress = ip;
@@ -87,7 +87,7 @@ describe("#create", () => {
     expect(body).toEqual({
       errors: {
         fileName:
-          "Whoops! You've had too many uploads recnetly - slow your roll",
+          "Whoops! You've had too many uploads recently - slow your roll",
       },
     });
     expect(response.statusCode).toEqual(429);
@@ -117,7 +117,7 @@ describe("#create", () => {
     );
     const upload = await Upload.findOne({ order: { id: "DESC" } });
 
-    expect(body.id).toEqual(upload.id);
+    expect((body as any).id).toEqual(upload.id);
     expect(upload.filePath).toContain(".png");
     expect(upload.location.id).toEqual(location.id);
   });

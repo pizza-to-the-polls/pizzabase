@@ -23,7 +23,7 @@ export class UploadsController {
       return {
         errors: {
           fileName:
-            "Whoops! You've had too many uploads recnetly - slow your roll",
+            "Whoops! You've had too many uploads recently - slow your roll",
         },
       };
     }

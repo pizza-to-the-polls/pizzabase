@@ -79,7 +79,7 @@ export class Location extends BaseEntity {
   @OneToMany((_type) => Upload, (upload) => upload.location, {
     onDelete: "RESTRICT",
   })
-  trucks: Promise<Upload[]>;
+  uploads: Promise<Upload[]>;
 
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({
