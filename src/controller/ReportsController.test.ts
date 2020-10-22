@@ -3,6 +3,11 @@ import * as http_mocks from "node-mocks-http";
 import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
+import {
+  ADDRESS_ERROR,
+  URL_ERROR,
+  CONTACT_ERROR,
+} from "../lib/validator/constants";
 
 jest.mock("../lib/validator/normalizeAddress");
 jest.mock("node-fetch");
@@ -23,10 +28,9 @@ describe("#create", () => {
 
     expect(body).toEqual({
       errors: {
-        url: "Invalid URL - please supply a valid URL",
-        contact:
-          "Invalid contact - please supply an email address or phone number",
-        address: "Invalid address - please supply a valid address",
+        url: URL_ERROR,
+        contact: CONTACT_ERROR,
+        address: ADDRESS_ERROR,
       },
     });
 
@@ -49,10 +53,9 @@ describe("#create", () => {
 
     expect(body).toEqual({
       errors: {
-        url: "Invalid URL - please supply a valid URL",
-        contact:
-          "Invalid contact - please supply an email address or phone number",
-        address: "Invalid address - please supply a valid address",
+        url: URL_ERROR,
+        contact: CONTACT_ERROR,
+        address: ADDRESS_ERROR,
       },
     });
 
@@ -63,16 +66,23 @@ describe("#create", () => {
     const url = "http://twitter.com/something/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
+    const waitTime = "5";
+    const canDistribute = true;
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address },
+      body: { url, contact, address, waitTime, canDistribute },
     });
 
     const response = http_mocks.createResponse();
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: true,
+      willReceive: true,
+    });
     expect(response.statusCode).toEqual(200);
 
     const location = await Location.findOne({
@@ -100,6 +110,8 @@ describe("#create", () => {
     const url = "http://twitter.com/different/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
+    const waitTime = "5";
+    const canDistribute = true;
 
     const location = await Location.createFromAddress({
       latitude: 41.79907,
@@ -117,14 +129,19 @@ describe("#create", () => {
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address },
+      body: { url, contact, address, waitTime, canDistribute },
     });
 
     const response = http_mocks.createResponse();
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: true,
+      willReceive: true,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { reportURL: url } });
@@ -145,29 +162,41 @@ describe("#create", () => {
     const url = "http://twitter.com/different/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
+    const waitTime = "5";
+    const canDistribute = true;
 
-    const [existingReport] = await Report.createNewReport(contact, url, {
-      latitude: 41.79907,
-      longitude: -87.58413,
+    const [existingReport] = await Report.createNewReport(
+      contact,
+      url,
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
 
-      fullAddress: address,
+        fullAddress: address,
 
-      address: "5335 S Kimbark Ave",
-      city: "Chicago",
-      state: "IL",
-      zip: "60615",
-    });
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      },
+      { canDistribute: true }
+    );
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address },
+      body: { url, contact, address, waitTime, canDistribute },
     });
 
     const response = http_mocks.createResponse();
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: true });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: false,
+      willReceive: false,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { reportURL: url } });
@@ -203,7 +232,12 @@ describe("#create", () => {
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: false, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      isUnique: true,
+      willReceive: false,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { contactInfo: contact } });
@@ -248,7 +282,12 @@ describe("#create", () => {
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ address, has_truck: true, duplicate_url: false });
+    expect(body).toEqual({
+      address,
+      hasTruck: true,
+      isUnique: true,
+      willReceive: false,
+    });
     expect(response.statusCode).toBe(200);
 
     const report = await Report.findOne({ where: { reportURL: url } });

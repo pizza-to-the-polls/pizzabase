@@ -5,6 +5,7 @@ import { Location } from "../entity/Location";
 import { Action } from "../entity/Action";
 import { Order } from "../entity/Order";
 import { Report } from "../entity/Report";
+import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("node-fetch");
 jest.mock("../lib/validator/normalizeAddress");
@@ -335,7 +336,7 @@ describe("#skip", () => {
   });
 });
 
-describe("#skip", () => {
+describe("#truck", () => {
   it("assign a truck, associates all locations, logs the username", async () => {
     const { fullAddress, id, validatedAt } = location ? location : null;
     expect(validatedAt).toBeNull();
@@ -416,7 +417,7 @@ describe("#order", () => {
     );
     expect(body).toEqual({
       errors: {
-        cost: "Invalid Cost - please supply a cost of the order",
+        cost: COST_ERROR,
       },
     });
     expect(response.statusCode).toEqual(422);

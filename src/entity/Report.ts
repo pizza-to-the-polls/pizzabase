@@ -16,6 +16,13 @@ import { Truck } from "./Truck";
 import { NormalAddress } from "../lib/validator";
 import { REPORT_DECAY } from "../lib/constants";
 
+const OPEN_QUERY = {
+  order: null,
+  truck: null,
+  skippedAt: null,
+  createdAt: MoreThan(new Date(Number(new Date()) - REPORT_DECAY)),
+};
+
 @Entity({ name: "reports" })
 export class Report extends BaseEntity {
   @PrimaryGeneratedColumn()
@@ -23,6 +30,12 @@ export class Report extends BaseEntity {
 
   @Column({ name: "contact_info" })
   contactInfo: string;
+
+  @Column({ name: "wait_time", nullable: true })
+  waitTime: string;
+
+  @Column({ name: "can_distribute", default: false })
+  canDistribute: boolean;
 
   @Column({ name: "url" })
   @Index()
@@ -64,24 +77,30 @@ export class Report extends BaseEntity {
   updatedAt;
 
   asJSON() {
-    const { createdAt, id, reportURL } = this;
+    const { createdAt, id, reportURL, waitTime } = this;
 
-    return { createdAt, id, reportURL };
+    return { createdAt, id, reportURL, waitTime };
   }
 
   asJSONPrivate() {
-    const { contactInfo, skippedAt } = this;
+    const { contactInfo, skippedAt, canDistribute } = this;
 
-    return { ...this.asJSON(), contactInfo, skippedAt };
+    return { ...this.asJSON(), contactInfo, skippedAt, canDistribute };
   }
 
+  static async openReports(location: Location): Promise<Report[]> {
+    return await this.find({
+      where: {
+        location,
+        ...OPEN_QUERY,
+      },
+      order: { canDistribute: "ASC", id: "ASC" },
+    });
+  }
   static async updateOpen(location: Location, set): Promise<void> {
     const query = {
       location,
-      order: null,
-      truck: null,
-      skippedAt: null,
-      createdAt: MoreThan(new Date(Number(new Date()) - REPORT_DECAY)),
+      ...OPEN_QUERY,
     };
 
     if ((await this.count(query)) > 0) {
@@ -92,11 +111,20 @@ export class Report extends BaseEntity {
   static async createNewReport(
     contactInfo: string,
     reportURL: string,
-    address: NormalAddress
+    address: NormalAddress,
+    {
+      waitTime,
+      canDistribute,
+    }: { waitTime?: string; canDistribute?: boolean } = {}
   ): Promise<
     [
       Report,
-      { isUniqueReport: boolean; isNewLocation: boolean; hasTruck: boolean }
+      {
+        willReceive: boolean;
+        isUnique: boolean;
+        isNewLocation: boolean;
+        hasTruck: boolean;
+      }
     ]
   > {
     const report = new this();
@@ -111,6 +139,10 @@ export class Report extends BaseEntity {
     const truck = await location.activeTruck();
     if (!!truck) report.truck = truck;
 
+    const willReceive = !(await location.hasDistributor()) && !!canDistribute;
+    report.canDistribute = canDistribute;
+    report.waitTime = waitTime;
+
     const reportExists = await this.findOne({
       where: { reportURL, location: report.location },
     });
@@ -120,7 +152,12 @@ export class Report extends BaseEntity {
 
     return [
       report,
-      { isUniqueReport: !reportExists, hasTruck: !!truck, isNewLocation },
+      {
+        isUnique: !reportExists,
+        hasTruck: !!truck,
+        willReceive,
+        isNewLocation,
+      },
     ];
   }
 }

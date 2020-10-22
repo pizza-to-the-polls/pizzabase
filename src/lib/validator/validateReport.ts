@@ -1,6 +1,7 @@
 import { normalizeAddress, NormalAddress } from "./normalizeAddress";
 import { normalizeURL } from "./normalizeURL";
 import { normalizeContact } from "./normalizeContact";
+import { CONTACT_ERROR, ADDRESS_ERROR, URL_ERROR } from "./constants";
 
 interface ValidationError {
   contact?: string;
@@ -12,35 +13,47 @@ export const validateReport = async ({
   address,
   contact,
   url,
+  waitTime,
+  canDistribute,
 }: {
   address?: string;
   contact?: string;
   url?: string;
+  waitTime?: string;
+  canDistribute?: boolean;
 }): Promise<{
   normalizedAddress: NormalAddress;
   contactInfo: string;
   reportURL: string;
   errors: ValidationError;
+  waitTime?: string;
+  canDistribute?: boolean;
 }> => {
   const errors: ValidationError = {};
 
   const reportURL = normalizeURL(url);
   if (!reportURL) {
-    errors.url = "Invalid URL - please supply a valid URL";
+    errors.url = URL_ERROR;
   }
 
   const contactInfo = normalizeContact(contact);
   if (!contactInfo) {
-    errors.contact =
-      "Invalid contact - please supply an email address or phone number";
+    errors.contact = CONTACT_ERROR;
   }
 
   const normalizedAddress: null | NormalAddress = await normalizeAddress(
     address
   );
   if (!normalizedAddress) {
-    errors.address = "Invalid address - please supply a valid address";
+    errors.address = ADDRESS_ERROR;
   }
 
-  return { errors, normalizedAddress, contactInfo, reportURL };
+  return {
+    errors,
+    normalizedAddress,
+    contactInfo,
+    reportURL,
+    waitTime,
+    canDistribute,
+  };
 };

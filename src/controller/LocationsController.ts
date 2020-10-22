@@ -58,14 +58,14 @@ export class LocationsController {
     if (!location) return;
 
     const openReports = await location.validate(request.body?.user);
+    const submittedReports: Set<string> = new Set();
 
-    openReports.reduce((reported: Set<string>, report) => {
-      if (!reported.has(report.reportURL)) {
-        zapNewReport(report);
-        reported.add(report.reportURL);
+    for (const report of openReports) {
+      if (!submittedReports.has(report.reportURL)) {
+        await zapNewReport(report);
+        submittedReports.add(report.reportURL);
       }
-      return reported;
-    }, new Set());
+    }
 
     return { success: true };
   }

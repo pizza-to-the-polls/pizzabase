@@ -10,6 +10,7 @@ export class ReportsController {
       normalizedAddress,
       reportURL,
       contactInfo,
+      ...extra
     } = await validateReport(request.body || {});
 
     if (Object.keys(errors).length > 0) {
@@ -17,13 +18,17 @@ export class ReportsController {
       return { errors };
     }
 
-    const [report, { isUniqueReport, hasTruck }] = await Report.createNewReport(
+    const [
+      report,
+      { isUnique, hasTruck, willReceive },
+    ] = await Report.createNewReport(
       contactInfo,
       reportURL,
-      normalizedAddress
+      normalizedAddress,
+      extra
     );
 
-    if (isUniqueReport && !hasTruck) {
+    if ((isUnique || willReceive) && !hasTruck) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
@@ -33,8 +38,9 @@ export class ReportsController {
 
     return {
       address: report.location.fullAddress,
-      duplicate_url: !isUniqueReport,
-      has_truck: hasTruck,
+      isUnique,
+      hasTruck,
+      willReceive,
     };
   }
 }

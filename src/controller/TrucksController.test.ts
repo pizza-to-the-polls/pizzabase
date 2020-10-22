@@ -3,7 +3,7 @@ import * as http_mocks from "node-mocks-http";
 import { TrucksController } from "./TrucksController";
 import { Truck } from "../entity/Truck";
 import { Location } from "../entity/Location";
-
+import { ADDRESS_ERROR } from "../lib/validator/constants";
 jest.mock("../lib/validator/normalizeAddress");
 
 const controller = new TrucksController();
@@ -22,7 +22,7 @@ describe("#create", () => {
     );
     expect(body).toEqual({
       errors: {
-        address: "Invalid address - please supply a valid address",
+        address: ADDRESS_ERROR,
       },
     });
     expect(response.statusCode).toEqual(422);

@@ -86,6 +86,12 @@ export class Location extends BaseEntity {
   async hasTruck(): Promise<boolean> {
     return !!(await this.activeTruck());
   }
+  async distributor(): Promise<Report> {
+    return (await Report.openReports(this))[0];
+  }
+  async hasDistributor(): Promise<boolean> {
+    return !!(await this.distributor());
+  }
 
   asJSON() {
     const {
@@ -116,6 +122,7 @@ export class Location extends BaseEntity {
   async asJSONPrivate() {
     return {
       ...this.asJSON(),
+      distributor: await this.distributor(),
       hasTruck: await this.hasTruck(),
     };
   }
@@ -126,7 +133,7 @@ export class Location extends BaseEntity {
     await this.save();
     await Action.log(this, "validated", validatedBy);
 
-    return await Report.find({ where: { location: this, order: null } });
+    return await Report.openReports(this);
   }
 
   async skip(skippedBy?: string): Promise<void> {
