@@ -10,7 +10,6 @@ provider:
   name: aws
   runtime: nodejs12.x
   timeout: 30
-  stage: prod
   region: us-west-2
   environment:
     SS_AUTH_ID: ${env:SS_AUTH_ID}
@@ -47,6 +46,11 @@ provider:
         - "rds-data:RollbackTransaction"
       Resource:
         - "*"
+    - Effect: "Allow"
+      Action:
+        - "s3:ListBucket"
+      Resource:
+        - "arn:aws:s3:::reports.polls.pizza"
     - Effect: "Allow"
       Action:
         - "s3:*Object"
