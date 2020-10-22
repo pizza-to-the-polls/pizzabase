@@ -85,4 +85,4 @@ jobs:
           SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           ALLOWED_ORIGINS: 'polls.pizza,localhost'
-          STATIC_SITE: https://next.polls.pizza/
+          STATIC_SITE: https://next.polls.pizza
