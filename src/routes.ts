@@ -68,7 +68,7 @@ export const Routes = [
     action: "create",
   },
   {
-    method: "post",
+    method: "get",
     route: "/trucks",
     controller: TrucksController,
     action: "all",
