@@ -17,7 +17,6 @@ app.use(
         (origin || "").match(new RegExp(ALLOWED_ORIGINS.join("|")))
       )
         return callback(null, origin);
-      console.error(ALLOWED_ORIGINS, origin);
       callback(null, process.env.STATIC_SITE || "http://polls.pizza");
     },
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",

@@ -140,7 +140,6 @@ export class Report extends BaseEntity {
     if (!!truck) report.truck = truck;
 
     const willReceive = !(await location.hasDistributor()) && !!canDistribute;
-    report.canDistribute = canDistribute;
     report.waitTime = waitTime;
 
     const reportExists = await this.findOne({
@@ -149,6 +148,19 @@ export class Report extends BaseEntity {
     if (reportExists) report.order = reportExists.order;
 
     await report.save();
+    /*
+      NOTE: This is to prevent an issue where true is being cast as 1
+      on insert, which is causes the following exception:
+
+        > type boolean but expression is of type bigint
+
+      It's shitty to add another query but ¯\_(ツ)_/¯
+    */
+    await this.query(
+      `UPDATE reports SET can_distribute = ${
+        canDistribute ? "true" : "false"
+      } WHERE id = ${report.id}`
+    );
 
     return [
       report,
