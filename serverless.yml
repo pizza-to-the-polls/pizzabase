@@ -10,7 +10,6 @@ provider:
   name: aws
   runtime: nodejs12.x
   timeout: 30
-  stage: prod
   region: us-west-2
   environment:
     SS_AUTH_ID: ${env:SS_AUTH_ID}
@@ -19,9 +18,9 @@ provider:
     ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
     GOOGLE_MAPS_KEY: ${env:GOOGLE_MAPS_KEY}
-
     ALLOWED_ORIGINS: ${env:ALLOWED_ORIGINS}
     STATIC_SITE: ${env:STATIC_SITE}
+    UPLOAD_S3_BUCKET: reports.polls.pizza
 
   iamRoleStatements:
     - Effect: "Allow"
@@ -47,6 +46,16 @@ provider:
         - "rds-data:RollbackTransaction"
       Resource:
         - "*"
+    - Effect: "Allow"
+      Action:
+        - "s3:ListBucket"
+      Resource:
+        - "arn:aws:s3:::reports.polls.pizza"
+    - Effect: "Allow"
+      Action:
+        - "s3:*Object"
+      Resource:
+        - "arn:aws:s3:::reports.polls.pizza/*"
 
 package:
   include:
@@ -63,5 +72,5 @@ custom:
   customDomain:
     domainName: base.polls.pizza
     basePath: ""
-    stage: ${self:provider.stage}
+    stage: prod
     createRoute53Record: true

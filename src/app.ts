@@ -26,6 +26,8 @@ app.use(
 );
 app.use(bodyParser.json());
 
+app.set("trust proxy", true);
+
 Routes.forEach(({ method, route, controller, action }) => {
   (app as any)[method](
     route,

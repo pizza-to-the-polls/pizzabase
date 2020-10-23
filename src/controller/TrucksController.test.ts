@@ -4,6 +4,7 @@ import { TrucksController } from "./TrucksController";
 import { Truck } from "../entity/Truck";
 import { Location } from "../entity/Location";
 import { ADDRESS_ERROR } from "../lib/validator/constants";
+import { buildTestData } from "../tests/factories";
 jest.mock("../lib/validator/normalizeAddress");
 
 const controller = new TrucksController();
@@ -75,5 +76,36 @@ describe("#create", () => {
       "550 Different Address City OR 12345"
     );
     expect(truck.location.validatedAt).toBeTruthy();
+  });
+});
+
+describe("#all", () => {
+  beforeEach(async () => await buildTestData());
+
+  it("returns the active trucks", async () => {
+    const locations = await Location.find();
+    const trucked = [];
+
+    for (const location of locations) {
+      if (Math.random() > 0.5) {
+        await location.assignTruck("jim", "hobbiton-shire");
+        trucked.push(location.asJSON());
+      }
+    }
+
+    const body = await controller.all(
+      http_mocks.createRequest({
+        method: "GET",
+        query: { limit: 3 },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    expect(body.count).toEqual(trucked.length);
+    expect(body.results.length).toEqual(3);
+    expect(body.results[0].region).toEqual("hobbiton-shire");
+    expect(body.results.map(({ location }) => location)).toEqual(
+      trucked.slice(0, 3)
+    );
   });
 });

@@ -4,6 +4,25 @@ import { isAuthorized } from "./helper";
 import { validateTruck } from "../lib/validator";
 
 export class TrucksController {
+  async all(request: Request, _response: Response, _next: NextFunction) {
+    const limit = Number(request.query.limit || 100);
+    const take = limit < 100 ? limit : 100;
+    const skip = Number(request.query.page || 0) * limit;
+
+    const [trucks, count] = await Truck.findAndCountActiveTrucks({
+      take,
+      skip,
+    });
+
+    return {
+      results: trucks.map(({ identifier, createdAt, location }) => ({
+        createdAt,
+        region: identifier,
+        location: location.asJSON(),
+      })),
+      count,
+    };
+  }
   async create(request: Request, response: Response, next: NextFunction) {
     if (!(await isAuthorized(request, response, next))) return null;
     const { errors, normalizedAddress, identifier } = await validateTruck(

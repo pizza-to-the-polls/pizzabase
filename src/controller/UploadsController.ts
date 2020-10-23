@@ -1,0 +1,31 @@
+import { NextFunction, Request, Response } from "express";
+import { Upload } from "../entity/Upload";
+import { validateUpload } from "../lib/validator";
+import { presignUpload } from "../lib/aws";
+
+export class UploadsController {
+  async create(request: Request, response: Response, _next: NextFunction) {
+    const { errors, ...uploadParams } = await validateUpload(
+      request.body || {}
+    );
+
+    if (Object.keys(errors).length > 0) {
+      response.status(422);
+      return { errors };
+    }
+
+    try {
+      return await presignUpload(
+        await Upload.createOrRateLimit(request.ip, uploadParams)
+      );
+    } catch (e) {
+      response.status(429);
+      return {
+        errors: {
+          fileName:
+            "Whoops! You've had too many uploads recently - slow your roll",
+        },
+      };
+    }
+  }
+}

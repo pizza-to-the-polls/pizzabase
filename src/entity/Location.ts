@@ -12,10 +12,11 @@ import {
 import { Truck } from "./Truck";
 import { Report } from "./Report";
 import { Order } from "./Order";
+import { Upload } from "./Upload";
 import { Action } from "./Action";
+import { TRUCK_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
 import { toStateName } from "../lib/states";
-import { TRUCK_DECAY } from "../lib/constants";
 
 @Entity({ name: "locations" })
 export class Location extends BaseEntity {
@@ -74,6 +75,11 @@ export class Location extends BaseEntity {
     onDelete: "RESTRICT",
   })
   trucks: Promise<Truck[]>;
+
+  @OneToMany((_type) => Upload, (upload) => upload.location, {
+    onDelete: "RESTRICT",
+  })
+  uploads: Promise<Upload[]>;
 
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({

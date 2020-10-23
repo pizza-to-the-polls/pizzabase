@@ -9,10 +9,12 @@ import {
   Column,
   CreateDateColumn,
   UpdateDateColumn,
+  MoreThan,
 } from "typeorm";
 import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
+import { TRUCK_DECAY } from "./constants";
 
 @Entity({ name: "trucks" })
 export class Truck extends BaseEntity {
@@ -38,6 +40,22 @@ export class Truck extends BaseEntity {
 
   @Column({ nullable: true })
   identifier: string | null;
+
+  static async findAndCountActiveTrucks({
+    take,
+    skip,
+  }: {
+    take: number;
+    skip: number;
+  }): Promise<[Truck[], number]> {
+    return this.findAndCount({
+      where: {
+        createdAt: MoreThan(new Date(Number(new Date()) - TRUCK_DECAY)),
+      },
+      take,
+      skip,
+    });
+  }
 
   static async createForAddress(
     address: NormalAddress,
