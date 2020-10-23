@@ -34,8 +34,17 @@ export class Report extends BaseEntity {
   @Column({ name: "wait_time", nullable: true })
   waitTime: string;
 
-  @Column({ name: "can_distribute", default: false })
-  canDistribute: boolean;
+  /*
+    NOTE: This is to prevent an issue where true is being cast as 1 on save
+    and - which works with psql adapter but fails with prod's aurora
+    serverless adapter - failing with the following exception:
+
+      > type boolean but expression is of type bigint
+
+    It's stupid to store as an int but here we are
+  */
+  @Column({ name: "can_distribute", default: 0 })
+  canDistribute: number;
 
   @Column({ name: "url" })
   @Index()
@@ -85,7 +94,12 @@ export class Report extends BaseEntity {
   asJSONPrivate() {
     const { contactInfo, skippedAt, canDistribute } = this;
 
-    return { ...this.asJSON(), contactInfo, skippedAt, canDistribute };
+    return {
+      ...this.asJSON(),
+      contactInfo,
+      skippedAt,
+      canDistribute: canDistribute > 0,
+    };
   }
 
   static async openReports(location: Location): Promise<Report[]> {
@@ -94,7 +108,7 @@ export class Report extends BaseEntity {
         location,
         ...OPEN_QUERY,
       },
-      order: { canDistribute: "ASC", id: "ASC" },
+      order: { canDistribute: "DESC", id: "ASC" },
     });
   }
   static async updateOpen(location: Location, set): Promise<void> {
@@ -140,6 +154,7 @@ export class Report extends BaseEntity {
     if (!!truck) report.truck = truck;
 
     const willReceive = !(await location.hasDistributor()) && !!canDistribute;
+    report.canDistribute = canDistribute ? 1 : 0;
     report.waitTime = waitTime;
 
     const reportExists = await this.findOne({
@@ -148,19 +163,6 @@ export class Report extends BaseEntity {
     if (reportExists) report.order = reportExists.order;
 
     await report.save();
-    /*
-      NOTE: This is to prevent an issue where true is being cast as 1
-      on insert, which is causes the following exception:
-
-        > type boolean but expression is of type bigint
-
-      It's shitty to add another query but ¯\_(ツ)_/¯
-    */
-    await this.query(
-      `UPDATE reports SET can_distribute = ${
-        canDistribute ? "true" : "false"
-      } WHERE id = ${report.id}`
-    );
 
     return [
       report,
