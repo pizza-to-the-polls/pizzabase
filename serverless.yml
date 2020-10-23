@@ -48,14 +48,9 @@ provider:
         - "*"
     - Effect: "Allow"
       Action:
-        - "s3:ListBucket"
+        - "s3:*"
       Resource:
-        - "arn:aws:s3:::reports.polls.pizza"
-    - Effect: "Allow"
-      Action:
-        - "s3:*Object"
-      Resource:
-        - "arn:aws:s3:::reports.polls.pizza/*"
+        - "arn:aws:s3:::*"
 
 package:
   include:
