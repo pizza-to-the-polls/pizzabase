@@ -3,6 +3,7 @@ import * as http_mocks from "node-mocks-http";
 import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
+import { Order } from "../entity/Order";
 import {
   ADDRESS_ERROR,
   URL_ERROR,
@@ -80,8 +81,8 @@ describe("#create", () => {
     expect(body).toEqual({
       address,
       hasTruck: false,
-      isUnique: true,
       willReceive: true,
+      alreadyOrdered: false,
     });
     expect(response.statusCode).toEqual(200);
 
@@ -139,8 +140,8 @@ describe("#create", () => {
     expect(body).toEqual({
       address,
       hasTruck: false,
-      isUnique: true,
       willReceive: true,
+      alreadyOrdered: false,
     });
     expect(response.statusCode).toBe(200);
 
@@ -194,8 +195,8 @@ describe("#create", () => {
     expect(body).toEqual({
       address,
       hasTruck: false,
-      isUnique: false,
       willReceive: false,
+      alreadyOrdered: false,
     });
     expect(response.statusCode).toBe(200);
 
@@ -235,8 +236,8 @@ describe("#create", () => {
     expect(body).toEqual({
       address,
       hasTruck: false,
-      isUnique: true,
       willReceive: false,
+      alreadyOrdered: false,
     });
     expect(response.statusCode).toBe(200);
 
@@ -253,7 +254,7 @@ describe("#create", () => {
     );
   });
 
-  test("Re-used loc / new url returns success, sets existing location, creates new report, no zap", async () => {
+  test("Re-used loc with truck / new url returns success, sets existing location, creates new report, no zap", async () => {
     const url = "http://twitter.com/different/";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
@@ -285,8 +286,8 @@ describe("#create", () => {
     expect(body).toEqual({
       address,
       hasTruck: true,
-      isUnique: true,
       willReceive: false,
+      alreadyOrdered: false,
     });
     expect(response.statusCode).toBe(200);
 
@@ -294,6 +295,55 @@ describe("#create", () => {
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
     expect(await report.truck.id).toBe(truck.id);
+
+    expect(fetch.mock.calls.length).toEqual(0);
+  });
+
+  test("Re-used loc with order / new url returns success, sets existing location, creates new report, no zap", async () => {
+    const url = "http://twitter.com/different/";
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const contact = "555-234-2345";
+
+    const [report] = await Report.createNewReport("333-234-2345", url, {
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+
+    const order = await Order.placeOrder(
+      { cost: 50, pizzas: 5 },
+      report.location
+    );
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { url, contact, address },
+    });
+
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: true,
+    });
+    expect(response.statusCode).toBe(200);
+
+    await report.reload();
+    const newReport = await Report.findOne({ where: { reportURL: url } });
+    expect(newReport).toBeTruthy();
+    expect(newReport.location.id).toBe(report.location.id);
+    expect(newReport.order.id).toBe(order.id);
+    expect(report.order.id).toBe(order.id);
 
     expect(fetch.mock.calls.length).toEqual(0);
   });

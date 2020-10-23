@@ -138,6 +138,7 @@ export class Report extends BaseEntity {
         isUnique: boolean;
         isNewLocation: boolean;
         hasTruck: boolean;
+        alreadyOrdered: boolean;
       }
     ]
   > {
@@ -171,6 +172,7 @@ export class Report extends BaseEntity {
         hasTruck: !!truck,
         willReceive,
         isNewLocation,
+        alreadyOrdered: !!report.order,
       },
     ];
   }
