@@ -28,7 +28,7 @@ export class ReportsController {
       extra
     );
 
-    if ((isUnique || willReceive) && !hasTruck) {
+    if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
