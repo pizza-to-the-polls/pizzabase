@@ -1,4 +1,4 @@
-import { Location } from "../entity/location";
+import { Location } from "../entity/Location";
 
 const TRUCK_RANGE = 50; // in miles
 
