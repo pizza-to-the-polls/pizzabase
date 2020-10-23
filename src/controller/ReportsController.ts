@@ -20,7 +20,7 @@ export class ReportsController {
 
     const [
       report,
-      { isUnique, hasTruck, willReceive },
+      { alreadyOrdered, isUnique, hasTruck, willReceive },
     ] = await Report.createNewReport(
       contactInfo,
       reportURL,
@@ -28,7 +28,7 @@ export class ReportsController {
       extra
     );
 
-    if ((isUnique || willReceive) && !hasTruck) {
+    if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
@@ -38,9 +38,9 @@ export class ReportsController {
 
     return {
       address: report.location.fullAddress,
-      isUnique,
       hasTruck,
       willReceive,
+      alreadyOrdered,
     };
   }
 }
