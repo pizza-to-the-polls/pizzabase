@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
-import { FindOr404, isAuthorized } from "./helper";
+import { FindOr404, isAuthorized, checkAuthorization } from "./helper";
 import { zapNewReport } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 
@@ -28,7 +28,9 @@ export class LocationsController {
     const [locations, count] = await Location.findAndCount({ take, skip });
 
     return {
-      results: locations.map((loc) => loc.asJSON()),
+      results: await Promise.all(
+        locations.map(async (loc) => await loc.asJSON())
+      ),
       count,
     };
   }
@@ -41,11 +43,15 @@ export class LocationsController {
     );
     if (!location) return;
 
+    const authorized = await checkAuthorization(request);
+    const locJSON = await location.asJSON(authorized);
     return {
-      ...location.asJSON(),
-      hasTruck: await location.hasTruck(),
-      reports: (await location.reports).map((report) => report.asJSON()),
-      orders: (await location.orders).map((order) => order.asJSON()),
+      ...locJSON,
+      hasTruck: authorized ? locJSON.hasTruck : await location.hasTruck(),
+      reports: (await location.reports).map((report) =>
+        report.asJSON(authorized)
+      ),
+      orders: (await location.orders).map((order) => order.asJSON(authorized)),
     };
   }
 

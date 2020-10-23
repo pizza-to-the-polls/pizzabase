@@ -67,7 +67,7 @@ export class Upload extends BaseEntity {
     upload.ipAddress = ipAddress;
     upload.filePath = `uploads/${city}-${state}-${
       uuidv4().split("-")[0]
-    }.${fileExt}`;
+    }.${fileExt}`.toLowerCase();
 
     await upload.save();
 

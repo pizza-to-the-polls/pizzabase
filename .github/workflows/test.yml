@@ -82,8 +82,8 @@ jobs:
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           ALLOWED_ORIGINS: 'polls.pizza,localhost'
           STATIC_SITE: https://next.polls.pizza
-          ZAP_NEW_REPORT: null
-          ZAP_NEW_LOCATION: null
+          ZAP_NEW_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_NEW_LOCATION: ${{ secrets.STAGING_ZAP_ALL }}
 
       - name: sync schema
         run: npm run schema:sync
