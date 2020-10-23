@@ -44,13 +44,23 @@ export class Order extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
-  asJSON() {
+  asJSON(showPrivate: boolean = false) {
+    if (showPrivate) return this.asJSONPrivate();
+
     const { id, pizzas, restaurant, createdAt } = this;
     return {
       id,
       pizzas,
       restaurant,
       createdAt,
+    };
+  }
+
+  asJSONPrivate() {
+    const { cost } = this;
+    return {
+      ...this.asJSON(),
+      cost,
     };
   }
 

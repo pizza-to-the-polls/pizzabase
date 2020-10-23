@@ -14,21 +14,25 @@ export const FindOr404 = (
   next();
 };
 
+export const checkAuthorization = async (
+  request: Request
+): Promise<boolean> => {
+  const { authorization } = request.headers;
+  const key = (authorization || "").replace("Basic ", "");
+
+  return (await APIKey.count({ where: { key } })) > 0;
+};
+
 export const isAuthorized = async (
   request: Request,
   response: Response,
   next: NextFunction
 ): Promise<boolean> => {
-  const { authorization } = request.headers;
-  const key = (authorization || "").replace("Basic ", "");
-
-  const apiKey = await APIKey.findOne({ where: { key } });
-
-  if (!apiKey) {
-    response.status(401).send({ errors: ["Not authorized"] });
-    next();
-    return false;
+  if (await checkAuthorization(request)) {
+    return true;
   }
 
-  return true;
+  response.status(401).send({ errors: ["Not authorized"] });
+  next();
+  return false;
 };

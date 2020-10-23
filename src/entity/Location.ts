@@ -17,6 +17,7 @@ import { Action } from "./Action";
 import { TRUCK_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
 import { toStateName } from "../lib/states";
+import { truckEligibility } from "../lib/trucks";
 
 @Entity({ name: "locations" })
 export class Location extends BaseEntity {
@@ -92,14 +93,17 @@ export class Location extends BaseEntity {
   async hasTruck(): Promise<boolean> {
     return !!(await this.activeTruck());
   }
-  async distributor(): Promise<Report> {
-    return (await Report.openReports(this))[0];
+  async distributor(): Promise<Report | null> {
+    const [openReport] = await Report.openReports(this);
+    return (openReport?.canDistribute || 0) > 0 ? openReport : null;
   }
   async hasDistributor(): Promise<boolean> {
     return !!(await this.distributor());
   }
 
-  asJSON() {
+  async asJSON(showPrivate: boolean = false) {
+    if (showPrivate) return await this.asJSONPrivate();
+
     const {
       city,
       state,
@@ -127,9 +131,10 @@ export class Location extends BaseEntity {
   }
   async asJSONPrivate() {
     return {
-      ...this.asJSON(),
-      distributor: await this.distributor(),
+      ...(await this.asJSON()),
+      truckEligible: truckEligibility(this, new Date()),
       hasTruck: await this.hasTruck(),
+      pizzaDistributor: (await this.distributor())?.asJSONPrivate() || null,
     };
   }
 

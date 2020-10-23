@@ -85,7 +85,9 @@ export class Report extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
-  asJSON() {
+  asJSON(showPrivate: boolean = false) {
+    if (showPrivate) return this.asJSONPrivate();
+
     const { createdAt, id, reportURL, waitTime } = this;
 
     return { createdAt, id, reportURL, waitTime };

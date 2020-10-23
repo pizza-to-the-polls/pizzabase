@@ -38,7 +38,9 @@ describe("#all", () => {
     );
 
     expect(body).toEqual({
-      results: (await Location.find()).map((loc) => loc.asJSON()),
+      results: await Promise.all(
+        (await Location.find()).map(async (loc) => await loc.asJSON())
+      ),
       count: 1,
     });
   });
@@ -88,7 +90,8 @@ describe("#one", () => {
     await order.reload();
 
     expect(body).toEqual({
-      ...(await location.asJSONPrivate()),
+      ...(await location.asJSON()),
+      hasTruck: false,
       orders: [order.asJSON()],
       reports: [report.asJSON()],
     });
@@ -106,7 +109,8 @@ describe("#one", () => {
     );
 
     expect(body).toEqual({
-      ...(await location.asJSONPrivate()),
+      ...(await location.asJSON()),
+      hasTruck: false,
       reports: [],
       orders: [],
     });
@@ -118,6 +122,25 @@ describe("#one", () => {
     const body = await controller.one(
       http_mocks.createRequest({
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      ...(await location.asJSON()),
+      hasTruck: false,
+      reports: [],
+      orders: [],
+    });
+  });
+  test("Gets a location with a space encoded address with auth headers", async () => {
+    const { fullAddress } = location ? location : null;
+
+    const body = await controller.one(
+      http_mocks.createRequest({
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
       () => undefined
