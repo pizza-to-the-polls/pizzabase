@@ -3,7 +3,6 @@ import fetch from "node-fetch";
 import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
 import { Upload } from "../entity/Upload";
-import { Truck } from "../entity/Truck";
 
 enum ZapHooks {
   ZAP_NEW_REPORT = "ZAP_NEW_REPORT",

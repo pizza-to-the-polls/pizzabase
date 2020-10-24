@@ -100,11 +100,18 @@ export class Report extends BaseEntity {
   }
 
   asJSONPrivate() {
-    const { contactInfo, canDistribute } = this;
+    const {
+      contactInfo,
+      contactFirstName,
+      contactLastName,
+      canDistribute,
+    } = this;
 
     return {
       ...this.asJSON(),
       contactInfo,
+      contactFirstName,
+      contactLastName,
       canDistribute: canDistribute > 0,
     };
   }
