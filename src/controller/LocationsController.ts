@@ -1,7 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
-import { FindOr404, isAuthorized, checkAuthorization } from "./helper";
+import { findOr404, isAuthorized, checkAuthorization } from "./helper";
 import {
   zapNewReport,
   zapSkipReport,
@@ -18,14 +18,14 @@ export class LocationsController {
   ): Promise<Location | null> {
     if (!(await isAuthorized(request, response, next))) return null;
 
-    return FindOr404(
+    return findOr404(
       await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
       response,
       next
     );
   }
 
-  async all(request: Request, _response: Response, _next: NextFunction) {
+  async index(request: Request, _response: Response, _next: NextFunction) {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;
     const skip = Number(request.query.page || 0) * limit;
@@ -40,8 +40,8 @@ export class LocationsController {
     };
   }
 
-  async one(request: Request, response: Response, next: NextFunction) {
-    const location: Location = await FindOr404(
+  async show(request: Request, response: Response, next: NextFunction) {
+    const location: Location = await findOr404(
       await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
       response,
       next

@@ -2,7 +2,7 @@ import { Request, Response, NextFunction } from "express";
 
 import { APIKey } from "../entity/APIKey";
 
-export const FindOr404 = (
+export const findOr404 = (
   object: any,
   response: Response,
   next: NextFunction

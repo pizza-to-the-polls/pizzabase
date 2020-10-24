@@ -29,9 +29,9 @@ beforeEach(async () => {
   });
 });
 
-describe("#all", () => {
+describe("#index", () => {
   test("Lists the locations", async () => {
-    const body = await controller.all(
+    const body = await controller.index(
       http_mocks.createRequest(),
       http_mocks.createResponse(),
       () => undefined
@@ -46,11 +46,11 @@ describe("#all", () => {
   });
 });
 
-describe("#one", () => {
+describe("#show", () => {
   test("Tries to get a null location", async () => {
     const response = http_mocks.createResponse();
 
-    const body = await controller.one(
+    const body = await controller.show(
       http_mocks.createRequest({ params: { idOrAddress: `not-real` } }),
       response,
       () => undefined
@@ -80,7 +80,7 @@ describe("#one", () => {
         zip: "60615",
       }
     );
-    const body = await controller.one(
+    const body = await controller.show(
       http_mocks.createRequest({ params: { idOrAddress: `${id}` } }),
       http_mocks.createResponse(),
       () => undefined
@@ -100,7 +100,7 @@ describe("#one", () => {
   test("Gets a location with a + encoded address", async () => {
     const { fullAddress } = location ? location : null;
 
-    const body = await controller.one(
+    const body = await controller.show(
       http_mocks.createRequest({
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
       }),
@@ -119,7 +119,7 @@ describe("#one", () => {
   test("Gets a location with a space encoded address", async () => {
     const { fullAddress } = location ? location : null;
 
-    const body = await controller.one(
+    const body = await controller.show(
       http_mocks.createRequest({
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
       }),
@@ -137,7 +137,7 @@ describe("#one", () => {
   test("Gets a location with a space encoded address with auth headers", async () => {
     const { fullAddress } = location ? location : null;
 
-    const body = await controller.one(
+    const body = await controller.show(
       http_mocks.createRequest({
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
