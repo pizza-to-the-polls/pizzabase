@@ -72,7 +72,7 @@ export class Order extends BaseEntity {
       user?: string;
     },
     address: NormalAddress
-  ): Promise<Order> {
+  ): Promise<[Order, Report[]]> {
     const [location] = await Location.getOrCreateFromAddress(address);
 
     return await this.placeOrder(orderParams, location);
@@ -91,7 +91,7 @@ export class Order extends BaseEntity {
       user?: string;
     },
     location: Location
-  ): Promise<Order> {
+  ): Promise<[Order, Report[]]> {
     const order = new this();
 
     order.pizzas = pizzas;
@@ -100,12 +100,12 @@ export class Order extends BaseEntity {
     order.location = location;
 
     await order.save();
-
+    const openReports = await location.openReports();
     await Report.updateOpen(location, { order });
     await location.validate(user);
 
     await Action.log(order, "ordered", user);
 
-    return order;
+    return [order, openReports];
   }
 }

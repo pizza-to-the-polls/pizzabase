@@ -2,7 +2,12 @@ import { NextFunction, Request, Response } from "express";
 import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
 import { FindOr404, isAuthorized, checkAuthorization } from "./helper";
-import { zapNewReport } from "../lib/zapier";
+import {
+  zapNewReport,
+  zapSkipReport,
+  zapTruckReport,
+  zapNewOrder,
+} from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 
 export class LocationsController {
@@ -87,7 +92,11 @@ export class LocationsController {
 
     if (!location) return;
 
+    const openReports = await location.openReports();
     await location.skip(request.body?.user);
+    for (const report of openReports) {
+      await zapSkipReport(report);
+    }
     return { success: true };
   }
 
@@ -100,7 +109,13 @@ export class LocationsController {
 
     if (!location) return;
 
-    await location.assignTruck(request.body?.user, request.body?.city_state);
+    const openReports = (
+      await location.assignTruck(request.body?.user, request.body?.city_state)
+    )[1];
+
+    for (const report of openReports) {
+      await zapTruckReport(report);
+    }
     return { success: true };
   }
 
@@ -119,7 +134,7 @@ export class LocationsController {
       return { errors };
     }
 
-    await Order.placeOrder(order, location);
+    await zapNewOrder(...(await Order.placeOrder(order, location)));
 
     return { success: true };
   }

@@ -84,6 +84,10 @@ jobs:
           STATIC_SITE: https://next.polls.pizza
           ZAP_NEW_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_LOCATION: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_NEW_ORDER: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_SKIP_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_TRUCK_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
 
       - name: sync schema
         run: npm run schema:sync

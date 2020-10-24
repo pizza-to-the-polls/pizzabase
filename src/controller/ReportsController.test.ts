@@ -101,6 +101,7 @@ describe("#create", () => {
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
+        hook: "ZAP_NEW_LOCATION",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       })
@@ -153,6 +154,7 @@ describe("#create", () => {
     expect(zapUrl).toEqual(process.env.ZAP_NEW_REPORT);
     expect(zapBody).toEqual(
       JSON.stringify({
+        hook: "ZAP_NEW_REPORT",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       })
@@ -248,6 +250,7 @@ describe("#create", () => {
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
+        hook: "ZAP_NEW_LOCATION",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       })
@@ -272,7 +275,7 @@ describe("#create", () => {
     });
     location.validatedAt = new Date();
     await location.save();
-    const truck = await location.assignTruck("scott", "detroit-mi");
+    const [truck] = await location.assignTruck("scott", "detroit-mi");
 
     const request = http_mocks.createRequest({
       method: "POST",
@@ -294,7 +297,7 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { reportURL: url } });
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
-    expect(await report.truck.id).toBe(truck.id);
+    expect(report.truck.id).toBe(truck.id);
 
     expect(fetch.mock.calls.length).toEqual(0);
   });
@@ -316,7 +319,7 @@ describe("#create", () => {
       zip: "60615",
     });
 
-    const order = await Order.placeOrder(
+    const [order] = await Order.placeOrder(
       { cost: 50, pizzas: 5 },
       report.location
     );

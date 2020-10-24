@@ -63,7 +63,7 @@ describe("#one", () => {
   test("Gets a location with an ID, returns orders and reports", async () => {
     const { id, fullAddress } = location ? location : null;
 
-    const order = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
+    const [order] = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
 
     const [report] = await Report.createNewReport(
       "333-234-2345",
@@ -287,6 +287,7 @@ describe("#validate", () => {
     expect(url).toEqual(process.env.ZAP_NEW_REPORT);
     expect(body).toEqual(
       JSON.stringify({
+        hook: "ZAP_NEW_REPORT",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       })

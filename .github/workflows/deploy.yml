@@ -81,6 +81,10 @@ jobs:
           SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
           ZAP_NEW_REPORT: ${{ secrets.ZAP_NEW_REPORT }}
           ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
+          ZAP_NEW_ORDER: ${{ secrets.ZAP_NEW_ORDER }}
+          ZAP_SKIP_REPORT: ${{ secrets.ZAP_SKIP_REPORT }}
+          ZAP_TRUCK_REPORT: ${{ secrets.ZAP_TRUCK_REPORT }}
+          ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           STATIC_SITE: 'https://polls.pizza'
 
