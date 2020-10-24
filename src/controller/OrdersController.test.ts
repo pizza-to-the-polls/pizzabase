@@ -10,11 +10,30 @@ jest.mock("../lib/validator/normalizeAddress");
 
 const controller = new OrdersController();
 
-describe("#recent", () => {
+describe("#show", () => {
   beforeEach(async () => await buildTestData());
 
   it("returns a limited number of orders", async () => {
-    const body = await controller.recent(
+    const order = await Order.findOne();
+    const body = await controller.show(
+      http_mocks.createRequest({ params: { id: `${order.id}` } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      ...order.asJSON(),
+      location: await order.location.asJSON(),
+      reports: (await order.reports).map((report) => report.asJSON()),
+    });
+  });
+});
+
+describe("#index", () => {
+  beforeEach(async () => await buildTestData());
+
+  it("returns a limited number of orders", async () => {
+    const body = await controller.index(
       http_mocks.createRequest({ query: { limit: 2 } }),
       http_mocks.createResponse(),
       () => undefined
@@ -33,7 +52,7 @@ describe("#recent", () => {
   });
 
   it("returns page 2 limited number of orders", async () => {
-    const body = await controller.recent(
+    const body = await controller.index(
       http_mocks.createRequest({ query: { limit: 4, page: 1 } }),
       http_mocks.createResponse(),
       () => undefined

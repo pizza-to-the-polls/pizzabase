@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { isAuthorized } from "./helper";
+import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
 import { zapNewOrder } from "../lib/zapier";
@@ -27,7 +27,22 @@ export class OrdersController {
     return { address: order.location.fullAddress };
   }
 
-  async recent(request: Request, _response: Response, _next: NextFunction) {
+  async show(request: Request, response: Response, next: NextFunction) {
+    const order: Order = await findOr404(
+      await Order.findOne({ where: { id: Number(request.params.id || "") } }),
+      response,
+      next
+    );
+    if (!order) return;
+
+    return {
+      ...order.asJSON(),
+      location: await order.location.asJSON(),
+      reports: (await order.reports).map((report) => report.asJSON()),
+    };
+  }
+
+  async index(request: Request, _response: Response, _next: NextFunction) {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;
 

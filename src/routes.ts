@@ -23,13 +23,13 @@ export const Routes = [
     method: "get",
     route: "/locations",
     controller: LocationsController,
-    action: "all",
+    action: "index",
   },
   {
     method: "get",
     route: "/locations/:idOrAddress",
     controller: LocationsController,
-    action: "one",
+    action: "show",
   },
   {
     method: "put",
@@ -83,7 +83,13 @@ export const Routes = [
     method: "get",
     route: "/orders",
     controller: OrdersController,
-    action: "recent",
+    action: "index",
+  },
+  {
+    method: "get",
+    route: "/orders/:id",
+    controller: OrdersController,
+    action: "show",
   },
   {
     method: "post",
