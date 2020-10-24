@@ -94,13 +94,15 @@ export class Report extends BaseEntity {
   }
 
   asJSONPrivate() {
-    const { contactInfo, skippedAt, canDistribute } = this;
+    const { contactInfo, skippedAt, canDistribute, order, truck } = this;
 
     return {
       ...this.asJSON(),
       contactInfo,
       skippedAt,
       canDistribute: canDistribute > 0,
+      orderedAt: order?.createdAt,
+      truckDispatchedAt: truck?.createdAt,
     };
   }
 
