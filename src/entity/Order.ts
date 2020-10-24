@@ -32,7 +32,7 @@ export class Order extends BaseEntity {
     eager: true,
     nullable: false,
   })
-  @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
+  @JoinColumn({ name: "location_id" })
   location!: Location;
 
   @OneToMany((_type) => Report, (report) => report.order)

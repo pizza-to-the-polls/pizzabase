@@ -138,13 +138,15 @@ export class Location extends BaseEntity {
     };
   }
 
-  async validate(validatedBy?: string): Promise<Report[]> {
+  async openReports(): Promise<Report[]> {
+    return await Report.openReports(this);
+  }
+
+  async validate(validatedBy?: string): Promise<void> {
     this.validatedAt = new Date();
 
     await this.save();
     await Action.log(this, "validated", validatedBy);
-
-    return await Report.openReports(this);
   }
 
   async skip(skippedBy?: string): Promise<void> {

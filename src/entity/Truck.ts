@@ -31,7 +31,7 @@ export class Truck extends BaseEntity {
     eager: true,
     nullable: false,
   })
-  @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
+  @JoinColumn({ name: "location_id" })
   @Index()
   location: Location;
 

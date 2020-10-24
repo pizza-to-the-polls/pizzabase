@@ -54,21 +54,21 @@ export class Report extends BaseEntity {
     eager: true,
     nullable: false,
   })
-  @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
+  @JoinColumn({ name: "location_id" })
   @Index()
   location: Location;
 
   @ManyToOne((_type) => Order, (order) => order.reports, {
     eager: true,
   })
-  @JoinColumn([{ name: "order_id", referencedColumnName: "id" }])
+  @JoinColumn({ name: "order_id" })
   @Index()
   order: Order;
 
   @ManyToOne((_type) => Truck, (truck) => truck.reports, {
     eager: true,
   })
-  @JoinColumn([{ name: "truck_id", referencedColumnName: "id" }])
+  @JoinColumn({ name: "truck_id" })
   @Index()
   truck: Truck;
 
@@ -94,15 +94,12 @@ export class Report extends BaseEntity {
   }
 
   asJSONPrivate() {
-    const { contactInfo, skippedAt, canDistribute, order, truck } = this;
+    const { contactInfo, canDistribute } = this;
 
     return {
       ...this.asJSON(),
       contactInfo,
-      skippedAt,
       canDistribute: canDistribute > 0,
-      orderedAt: order?.createdAt,
-      truckDispatchedAt: truck?.createdAt,
     };
   }
 
