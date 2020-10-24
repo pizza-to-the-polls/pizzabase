@@ -21,7 +21,7 @@ it("returns truck details if within range", async () => {
   });
 });
 
-it("returns null if not truck on date", async () => {
+it("returns false if not truck on date", async () => {
   expect(
     truckEligibility(
       await Location.createFromAddress({
@@ -35,10 +35,10 @@ it("returns null if not truck on date", async () => {
       }),
       new Date("10/24/2000")
     )
-  ).toEqual(null);
+  ).toEqual(false);
 });
 
-it("returns null if not in state", async () => {
+it("returns false if not in state", async () => {
   expect(
     truckEligibility(
       await Location.createFromAddress({
@@ -52,10 +52,10 @@ it("returns null if not in state", async () => {
       }),
       new Date("10/24/2020")
     )
-  ).toEqual(null);
+  ).toEqual(false);
 });
 
-it("returns null if not in range", async () => {
+it("returns false if not in range", async () => {
   expect(
     truckEligibility(
       await Location.createFromAddress({
@@ -69,5 +69,5 @@ it("returns null if not in range", async () => {
       }),
       new Date("10/24/2020")
     )
-  ).toEqual(null);
+  ).toEqual(false);
 });
