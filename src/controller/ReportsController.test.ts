@@ -68,11 +68,21 @@ describe("#create", () => {
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
     const waitTime = "5";
+    const contactFirstName = "Jim";
+    const contactLastName = "Jim";
     const canDistribute = true;
 
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { url, contact, address, waitTime, canDistribute },
+      body: {
+        url,
+        contact,
+        address,
+        waitTime,
+        contactFirstName,
+        contactLastName,
+        canDistribute,
+      },
     });
 
     const response = http_mocks.createResponse();
@@ -96,6 +106,9 @@ describe("#create", () => {
     expect(report).toBeTruthy();
     expect(report.location).toEqual(location);
     expect(report.order).toBeFalsy();
+    expect(report.waitTime).toEqual(waitTime);
+    expect(report.contactFirstName).toEqual(contactFirstName);
+    expect(report.contactLastName).toEqual(contactLastName);
 
     const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
