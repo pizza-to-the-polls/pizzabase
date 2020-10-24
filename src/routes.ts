@@ -6,6 +6,7 @@ import { TotalsController } from "./controller/TotalsController";
 import { OrdersController } from "./controller/OrdersController";
 import { UploadsController } from "./controller/UploadsController";
 
+import { DonationsController } from "./controller/DonationsController";
 export const Routes = [
   {
     method: "get",
@@ -102,5 +103,11 @@ export const Routes = [
     route: "/",
     controller: RootController,
     action: "root",
+  },
+  {
+    method: "post",
+    route: "/donations",
+    controller: DonationsController,
+    action: "create",
   },
 ];
