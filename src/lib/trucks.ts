@@ -327,7 +327,7 @@ const distance = (lat1, lng1, lat2, lng2) => {
 export const truckEligibility = (
   location: Location,
   now: Date
-): null | { citystate: string; date: string } => {
+): false | { citystate: string; date: string } => {
   const { state } = location;
   const repLat = Number(location.lat);
   const repLng = Number(location.lng);
@@ -335,15 +335,15 @@ export const truckEligibility = (
   const date = `${now.getFullYear()}-${now.getMonth() + 1}-${now.getDate()}`;
   const { dates } = TRUCK_CONFIG[state] || {};
 
-  if (!dates) return null;
+  if (!dates) return false;
   const citystates = dates[date];
 
-  if (!citystates) return null;
+  if (!citystates) return false;
 
   const { citystate } =
     citystates.find(
       ({ lat, lng }) => distance(repLat, repLng, lat, lng) <= TRUCK_RANGE
     ) || {};
 
-  return !!citystate ? { citystate, date } : null;
+  return !!citystate ? { citystate, date } : false;
 };

@@ -45,10 +45,11 @@ export class LocationsController {
 
     const authorized = await checkAuthorization(request);
     const locJSON = await location.asJSON(authorized);
+
     return {
       ...locJSON,
       hasTruck: authorized ? locJSON.hasTruck : await location.hasTruck(),
-      reports: (await location.reports).map((report) =>
+      reports: (await location.openReports()).map((report) =>
         report.asJSON(authorized)
       ),
       orders: (await location.orders).map((order) => order.asJSON(authorized)),
@@ -63,7 +64,8 @@ export class LocationsController {
     );
     if (!location) return;
 
-    const openReports = await location.validate(request.body?.user);
+    await location.validate(request.body?.user);
+    const openReports = await location.openReports();
     const submittedReports: Set<string> = new Set();
 
     for (const report of openReports) {

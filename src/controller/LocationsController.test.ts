@@ -63,6 +63,8 @@ describe("#one", () => {
   test("Gets a location with an ID, returns orders and reports", async () => {
     const { id, fullAddress } = location ? location : null;
 
+    const order = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
+
     const [report] = await Report.createNewReport(
       "333-234-2345",
       "http://twitter.com/what",
@@ -78,8 +80,6 @@ describe("#one", () => {
         zip: "60615",
       }
     );
-    const order = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
-
     const body = await controller.one(
       http_mocks.createRequest({ params: { idOrAddress: `${id}` } }),
       http_mocks.createResponse(),

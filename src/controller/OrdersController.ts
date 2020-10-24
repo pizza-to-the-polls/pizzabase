@@ -37,7 +37,7 @@ export class OrdersController {
     const results = await Promise.all(
       orders.map(async (order) => ({
         ...order.asJSON(),
-        location: order.location.asJSON(),
+        location: await order.location.asJSON(),
         reports: (await order.reports).map((report) => report.asJSON()),
       }))
     );
