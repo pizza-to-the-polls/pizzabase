@@ -31,6 +31,12 @@ export class Report extends BaseEntity {
   @Column({ name: "contact_info" })
   contactInfo: string;
 
+  @Column({ name: "contact_first_name", nullable: true })
+  contactFirstName: string;
+
+  @Column({ name: "contact_last_name", nullable: true })
+  contactLastName: string;
+
   @Column({ name: "wait_time", nullable: true })
   waitTime: string;
 
@@ -129,8 +135,15 @@ export class Report extends BaseEntity {
     address: NormalAddress,
     {
       waitTime,
+      contactFirstName,
+      contactLastName,
       canDistribute,
-    }: { waitTime?: string; canDistribute?: boolean } = {}
+    }: {
+      waitTime?: string;
+      canDistribute?: boolean;
+      contactFirstName?: string;
+      contactLastName?: string;
+    } = {}
   ): Promise<
     [
       Report,
@@ -158,6 +171,8 @@ export class Report extends BaseEntity {
     const willReceive = !(await location.hasDistributor()) && !!canDistribute;
     report.canDistribute = canDistribute ? 1 : 0;
     report.waitTime = waitTime;
+    report.contactFirstName = contactFirstName;
+    report.contactLastName = contactLastName;
 
     const reportExists = await this.findOne({
       where: { reportURL, location: report.location },

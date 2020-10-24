@@ -15,11 +15,15 @@ export const validateReport = async ({
   url,
   waitTime,
   canDistribute,
+  contactFirstName,
+  contactLastName,
 }: {
   address?: string;
   contact?: string;
   url?: string;
   waitTime?: string;
+  contactFirstName?: string;
+  contactLastName?: string;
   canDistribute?: boolean;
 }): Promise<{
   normalizedAddress: NormalAddress;
@@ -27,6 +31,8 @@ export const validateReport = async ({
   reportURL: string;
   errors: ValidationError;
   waitTime?: string;
+  contactFirstName?: string;
+  contactLastName?: string;
   canDistribute?: boolean;
 }> => {
   const errors: ValidationError = {};
@@ -54,6 +60,8 @@ export const validateReport = async ({
     contactInfo,
     reportURL,
     waitTime,
+    contactFirstName,
+    contactLastName,
     canDistribute,
   };
 };
