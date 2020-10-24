@@ -6,6 +6,8 @@ beforeAll(async () => {
 
   process.env.ZAP_NEW_REPORT = "https://hooks.example.com/new-report-hook/";
   process.env.ZAP_NEW_LOCATION = "https://hooks.example.com/new-location-hook/";
+  process.env.ZAP_SKIP_LOCATION =
+    "https://hooks.example.com/skip-location-hook/";
 
   process.env.GOOD_API_KEY = (await APIKey.generate()).key;
 });

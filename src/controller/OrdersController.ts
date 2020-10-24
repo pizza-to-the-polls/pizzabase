@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { isAuthorized } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
+import { zapNewOrder } from "../lib/zapier";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -16,7 +17,12 @@ export class OrdersController {
       response.status(422);
       return { errors };
     }
-    const order = await Order.placeOrderForAddress(rawOrder, normalizedAddress);
+    const [order, newReports] = await Order.placeOrderForAddress(
+      rawOrder,
+      normalizedAddress
+    );
+
+    await zapNewOrder(order, newReports);
 
     return { address: order.location.fullAddress };
   }
