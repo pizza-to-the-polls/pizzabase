@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
+import { zapNewUpload } from "../lib/zapier";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {
@@ -15,9 +16,9 @@ export class UploadsController {
     }
 
     try {
-      return await presignUpload(
-        await Upload.createOrRateLimit(request.ip, uploadParams)
-      );
+      const upload = await Upload.createOrRateLimit(request.ip, uploadParams);
+      await zapNewUpload(upload);
+      return await presignUpload(upload);
     } catch (e) {
       response.status(429);
       return {
