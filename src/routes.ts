@@ -83,7 +83,13 @@ export const Routes = [
     method: "get",
     route: "/orders",
     controller: OrdersController,
-    action: "recent",
+    action: "index",
+  },
+  {
+    method: "get",
+    route: "/orders/:id",
+    controller: OrdersController,
+    action: "show",
   },
   {
     method: "post",
