@@ -8,7 +8,10 @@ const isValidURL = (url?: string): boolean =>
 const removeSearchParams = (url: string) => url.split("?")[0];
 
 export const normalizeURL = (maybeUrl?: string): null | string => {
-  const url = (maybeUrl || "").replace(/<[^>]*>/g, "").trim().toLowerCase();
+  const url = (maybeUrl || "")
+    .replace(/<[^>]*>/g, "")
+    .trim()
+    .toLowerCase();
 
   if (!isValidURL(url)) return null;
 
