@@ -8,6 +8,8 @@ export const COST_ERROR =
   "Whoops! That's not a valid cost. Try sending us a real one like a number or something";
 export const UPLOAD_ERROR =
   "Whoops! That's not a valid file. Try sending us an image";
+export const ORDER_TYPE_ERROR =
+  "Whoops! That's not a valid order type. Try sending pizzas or donuts or something else";
 
 export const UPLOAD_CONTENT_TYPES = {
   gif: "image/gif",
