@@ -13,6 +13,7 @@ export class TotalsController {
   private QUERY = `SELECT
       SUM(orders.cost) as costs,
       SUM(orders.pizzas) as pizzas,
+      SUM(orders.meals) as meals,
       COUNT(DISTINCT orders.id) as orders,
       COUNT(DISTINCT locations.id) as locations,
       COUNT(DISTINCT locations.state) as states
