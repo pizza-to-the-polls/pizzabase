@@ -24,6 +24,7 @@ provider:
     ZAP_TRUCK_REPORT: ${env:ZAP_TRUCK_REPORT}
 
     GOOGLE_MAPS_KEY: ${env:GOOGLE_MAPS_KEY}
+    BUGSNAG_KEY: ${env:BUGSNAG_KEY}
     ALLOWED_ORIGINS: ${env:ALLOWED_ORIGINS}
     STATIC_SITE: ${env:STATIC_SITE}
     UPLOAD_S3_BUCKET: reports.polls.pizza
