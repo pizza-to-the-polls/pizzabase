@@ -127,7 +127,7 @@ export class Report extends BaseEntity {
         location,
         ...OPEN_QUERY,
       },
-      order: { canDistribute: "DESC", id: "ASC" },
+      order: { canDistribute: "DESC", createdAt: "ASC" },
     });
   }
   static async updateOpen(location: Location, set): Promise<void> {
