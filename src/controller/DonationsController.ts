@@ -24,16 +24,16 @@ export class DonationsController {
 
     switch (event.type) {
       case "charge.succeeded":
-        await Donateion.succeedCharge(event.data.object);
+        await Donation.succeedCharge(event.data.object);
         break;
       case "charge.failed":
-        await Donateion.failCharge("failed", event.data.object);
+        await Donation.failCharge("failed", event.data.object);
         break;
       case "charge.refunded":
-        await Donateion.failCharge("refunded", event.data.object);
+        await Donation.failCharge("refunded", event.data.object);
         break;
       case "charge.dispute.funds_withdrawn":
-        await Donateion.failCharge(
+        await Donation.failCharge(
           "dispute.funds_withdrawn",
           event.data.object
         );
