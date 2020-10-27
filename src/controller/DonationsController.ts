@@ -5,6 +5,7 @@ export class DonationsController {
   async create(request: Request, _response: Response, _next: NextFunction) {
     const {
       amountUsd,
+      referrer
     } = request.body;
 
     const numberOfPizzas = Math.ceil(amountUsd / 20);
@@ -25,8 +26,11 @@ export class DonationsController {
           quantity: 1,
         }],
         mode: 'payment',
-        success_url: `${process.env.CLIENT_APP_URL}/donations`,
-        cancel_url: `${process.env.CLIENT_APP_URL}/donations`,
+        metadata: {
+          referrer
+        },
+        success_url: `${process.env.CLIENT_APP_URL}/donate?success=true&amount_usd=${amountUsd}`,
+        cancel_url: `${process.env.CLIENT_APP_URL}/donate`,
       });        
         
       return { success: true, checkoutSessionId: session.id };
