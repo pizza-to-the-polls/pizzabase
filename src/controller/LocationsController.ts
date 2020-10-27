@@ -50,6 +50,10 @@ export class LocationsController {
 
     const authorized = await checkAuthorization(request);
     const locJSON = await location.asJSON(authorized);
+    const orders = await Order.find({
+      where: { location },
+      order: { createdAt: 'ASC' }
+    })
 
     return {
       ...locJSON,
@@ -57,7 +61,7 @@ export class LocationsController {
       reports: (await location.openReports()).map((report) =>
         report.asJSON(authorized)
       ),
-      orders: (await location.orders).map((order) => order.asJSON(authorized)),
+      orders: orders.map((order) => order.asJSON(authorized)),
     };
   }
 
