@@ -70,7 +70,7 @@ describe("#create", () => {
     const waitTime = "5";
     const contactFirstName = "Jim";
     const contactLastName = "Jim";
-    const concactRole = "Poll Worker";
+    const contactRole = "Poll Worker";
     const canDistribute = true;
 
     const request = http_mocks.createRequest({
@@ -82,7 +82,7 @@ describe("#create", () => {
         waitTime,
         contactFirstName,
         contactLastName,
-        concactRole,
+        contactRole,
         canDistribute,
       },
     });
@@ -111,7 +111,7 @@ describe("#create", () => {
     expect(report.waitTime).toEqual(waitTime);
     expect(report.contactFirstName).toEqual(contactFirstName);
     expect(report.contactLastName).toEqual(contactLastName);
-    expect(report.concactRole).toEqual(concactRole);
+    expect(report.contactRole).toEqual(contactRole);
 
     const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
