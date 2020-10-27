@@ -35,17 +35,14 @@ export class Order extends BaseEntity {
   @Column({ type: "double precision" })
   cost: number;
 
-  @Column({ type: "int", nullable: true })
-  pizzas: number;
-
-  @Column({ type: "int", nullable: true })
+  @Column({ type: "int" })
   meals: number;
 
   @Column({ name: "order_type", default: "pizzas" })
   @Index()
   orderType: OrderTypes;
 
-  @Column({ type: "int", nullable: true })
+  @Column({ type: "int" })
   quantity: number;
 
   @Column({ nullable: true })
@@ -72,10 +69,10 @@ export class Order extends BaseEntity {
   asJSON(showPrivate: boolean = false) {
     if (showPrivate) return this.asJSONPrivate();
 
-    const { id, pizzas, restaurant, createdAt } = this;
+    const { id, meals, restaurant, createdAt } = this;
     return {
       id,
-      pizzas,
+      pizzas: meals,
       restaurant,
       createdAt,
     };
@@ -91,7 +88,7 @@ export class Order extends BaseEntity {
 
   static async placeOrderForAddress(
     orderParams: {
-      pizzas: number;
+      quantity: number;
       cost: number;
       restaurant?: string;
       user?: string;
@@ -105,17 +102,15 @@ export class Order extends BaseEntity {
 
   static async placeOrder(
     {
-      pizzas,
       cost,
       orderType,
       quantity,
       restaurant,
       user,
     }: {
-      pizzas: number;
       cost: number;
+      quantity: number;
       restaurant?: string;
-      quantity?: number;
       orderType?: OrderTypes;
       user?: string;
     },
@@ -123,10 +118,9 @@ export class Order extends BaseEntity {
   ): Promise<[Order, Report[]]> {
     const order = new this();
 
-    order.pizzas = pizzas;
-    order.quantity = quantity || pizzas;
+    order.quantity = quantity;
     order.orderType = orderType || OrderTypes.pizzas;
-    order.meals = order.quantity * ORDER_TYPE_TO_MEALS[order.orderType];
+    order.meals = quantity * ORDER_TYPE_TO_MEALS[order.orderType];
     order.cost = cost;
     order.restaurant = restaurant;
     order.location = location;

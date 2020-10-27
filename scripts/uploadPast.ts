@@ -36,7 +36,7 @@ const backfillReport = async (data: { [key: string]: string }) => {
     normalizedAddress
   );
   const { location } = report;
-  const orderInput = validateOrder({ pizzas, cost, user: who });
+  const orderInput = validateOrder({ quantity: pizzas, cost, user: who });
 
   if (status === "Delivered" && orderInput.cost) {
     const order = await Order.placeOrder(orderInput, location);

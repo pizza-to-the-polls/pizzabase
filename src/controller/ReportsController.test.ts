@@ -333,7 +333,7 @@ describe("#create", () => {
     });
 
     const [order] = await Order.placeOrder(
-      { cost: 50, pizzas: 5 },
+      { cost: 50, quantity: 5 },
       report.location
     );
 

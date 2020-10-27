@@ -27,7 +27,6 @@ export const validateOrder = async ({
   user?: string;
   address?: string;
 }): Promise<{
-  pizzas: number;
   cost: number;
   orderType: OrderTypes;
   quantity: number;
@@ -68,7 +67,6 @@ export const validateOrder = async ({
   return {
     errors,
     cost,
-    pizzas,
     user,
     restaurant,
     normalizedAddress,
