@@ -37,6 +37,9 @@ export class Report extends BaseEntity {
   @Column({ name: "contact_last_name", nullable: true })
   contactLastName: string;
 
+  @Column({ name: "contact_role", nullable: true })
+  concactRole: string;
+
   @Column({ name: "wait_time", nullable: true })
   waitTime: string;
 
@@ -104,6 +107,7 @@ export class Report extends BaseEntity {
       contactInfo,
       contactFirstName,
       contactLastName,
+      concactRole,
       canDistribute,
     } = this;
 
@@ -112,6 +116,7 @@ export class Report extends BaseEntity {
       contactInfo,
       contactFirstName,
       contactLastName,
+      concactRole,
       canDistribute: canDistribute > 0,
     };
   }
@@ -144,12 +149,14 @@ export class Report extends BaseEntity {
       waitTime,
       contactFirstName,
       contactLastName,
+      concactRole,
       canDistribute,
     }: {
       waitTime?: string;
       canDistribute?: boolean;
       contactFirstName?: string;
       contactLastName?: string;
+      concactRole?: string;
     } = {}
   ): Promise<
     [
@@ -180,6 +187,7 @@ export class Report extends BaseEntity {
     report.waitTime = waitTime;
     report.contactFirstName = contactFirstName;
     report.contactLastName = contactLastName;
+    report.concactRole = concactRole;
 
     const reportExists = await this.findOne({
       where: { reportURL, location: report.location },

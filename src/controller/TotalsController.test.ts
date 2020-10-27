@@ -23,16 +23,14 @@ describe("#overall", () => {
 
     for (let i = 0; i < Math.ceil(Math.random() * 10); ++i) {
       const donation = new Donation();
-      donation.amountGross = Math.ceil(Math.random() * 40_00) / 100;
-      donation.amount =
-        Math.floor((donation.amountGross * (1 - 0.029) - 0.3) * 100) / 100;
+      donation.amountGross = Math.ceil(Math.random() * 40);
+      donation.amount = donation.amountGross - 3;
       donation.email = `donor-${i}@example.com`;
       donation.stripeId = `stripe_code-${i}`;
       donation.postalCode = "12345";
       await donation.save();
 
-      overall.raised =
-        Math.ceil((overall.raised + donation.amount) * 100) / 100;
+      overall.raised += donation.amount;
       overall.donors += 1;
     }
 
@@ -92,16 +90,14 @@ describe("#yearly", () => {
 
     for (let i = 0; i < Math.ceil(Math.random() * 10); ++i) {
       const donation = new Donation();
-      donation.amountGross = Math.ceil(Math.random() * 40_00) / 100;
-      donation.amount =
-        Math.floor((donation.amountGross * (1 - 0.029) - 0.3) * 100) / 100;
+      donation.amountGross = Math.ceil(Math.random() * 40);
+      donation.amount = donation.amountGross - 3;
       donation.email = `donor-${i}@example.com`;
       donation.stripeId = `stripe_code-${i}`;
       donation.postalCode = "12345";
       await donation.save();
 
-      overall.raised =
-        Math.ceil((overall.raised + donation.amount) * 100) / 100;
+      overall.raised += donation.amount;
       overall.donors += 1;
     }
 
