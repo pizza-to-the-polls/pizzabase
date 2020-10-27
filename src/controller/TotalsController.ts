@@ -10,7 +10,8 @@ export class TotalsController {
       return obj;
     }, {});
   }
-  private QUERY = `SELECT
+  private ORDER_QUERY = `
+    SELECT
       SUM(orders.cost) as costs,
       SUM(orders.quantity) as pizzas,
       SUM(orders.meals) as meals,
@@ -20,21 +21,35 @@ export class TotalsController {
     FROM orders
     LEFT JOIN locations ON orders.location_id = locations.id
   `;
+  private DONATION_QUERY = `
+    SELECT
+      SUM(donations.amount) as raised,
+      COUNT(DISTINCT donations.email) as donors
+    FROM donations
+  `;
   async overall(_request: Request, _response: Response, _next: NextFunction) {
     const { manager } = await getConnection();
 
-    return this.toNumber((await manager.query(this.QUERY))[0]);
+    return this.toNumber({
+      ...(await manager.query(this.DONATION_QUERY))[0],
+      ...(await manager.query(this.ORDER_QUERY))[0],
+    });
   }
   async yearly(request: Request, _response: Response, _next: NextFunction) {
     const { manager } = await getConnection();
     const year = (request.params.year || "").replace(/\D/g, "");
 
-    return this.toNumber(
-      (
+    return this.toNumber({
+      ...(
         await manager.query(
-          `${this.QUERY} WHERE date_part('year', orders.created_at) = ${year}`
+          `${this.DONATION_QUERY} WHERE date_part('year', donations.created_at) = ${year}`
         )
-      )[0]
-    );
+      )[0],
+      ...(
+        await manager.query(
+          `${this.ORDER_QUERY} WHERE date_part('year', orders.created_at) = ${year}`
+        )
+      )[0],
+    });
   }
 }

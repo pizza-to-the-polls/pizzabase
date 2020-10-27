@@ -40,17 +40,16 @@ export class Donation extends BaseEntity {
   @Index()
   stripeId: string;
 
-  @Column()
+  @Column({ nullable: true })
   referrer: string;
 
-  @Column({ name: "cancel_note" })
+  @Column({ name: "cancel_note", nullable: true })
   cancelNote: string;
 
-  @Column({ name: "postal_code" })
-  @Index()
+  @Column({ name: "postal_code", nullable: true })
   postalCode: string;
 
-  @Column()
+  @Column({ default: "https://polls.pizza" })
   url: string;
 
   static async succeedCharge({
@@ -66,7 +65,7 @@ export class Donation extends BaseEntity {
   }): Promise<Donation> {
     const donation = new Donation();
     donation.amountGross = amount / 100;
-    donation.amount = amount * (1 - 0.029) - 0.3;
+    donation.amount = Math.floor(amount * (1 - 0.029) - 0.3 * 100) / 100;
     donation.email = email;
     donation.stripeId = id;
     donation.postalCode = postal_code;
