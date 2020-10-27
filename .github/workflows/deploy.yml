@@ -88,6 +88,7 @@ jobs:
           ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           STATIC_SITE: 'https://polls.pizza'
+          BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
 
       - name: sync schema
         run: npm run schema:sync
