@@ -1,6 +1,6 @@
 import { Location } from "../entity/Location";
 
-const TRUCK_RANGE = 50; // in miles
+const TRUCK_RANGE = 30; // in miles
 
 const TRUCK_CONFIG: {
   [state: string]: {
@@ -97,6 +97,32 @@ const TRUCK_CONFIG: {
     citystate: "atlanta-ga",
     loc: { lat: 33.75413, lng: -84.49179 },
     dates: ["2020-10-24", "2020-10-29", "2020-10-30", "2020-11-03"],
+  },
+  {
+    state: "IL",
+    citystate: "chicago-il",
+    loc: { lat: 41.8339037, lng: -87.8720459 },
+    dates: [
+      "2020-10-29",
+      "2020-10-30",
+      "2020-10-31",
+      "2020-11-01",
+      "2020-11-02",
+      "2020-11-03",
+    ],
+  },
+  {
+    state: "IN",
+    citystate: "indianapolis-in",
+    loc: { lat: 39.7799642, lng: -86.2728321 },
+    dates: [
+      "2020-10-29",
+      "2020-10-30",
+      "2020-10-31",
+      "2020-11-01",
+      "2020-11-02",
+      "2020-11-03",
+    ],
   },
   {
     state: "KY",
@@ -202,6 +228,32 @@ const TRUCK_CONFIG: {
       "2020-10-30",
       "2020-10-31",
       "2020-11-01",
+      "2020-11-03",
+    ],
+  },
+  {
+    state: "OH",
+    citystate: "cleveland-oh",
+    loc: { lat: 41.497532, lng: -81.70586 },
+    dates: [
+      "2020-10-29",
+      "2020-10-30",
+      "2020-10-31",
+      "2020-11-01",
+      "2020-11-02",
+      "2020-11-03",
+    ],
+  },
+  {
+    state: "OH",
+    citystate: "columbus-noh",
+    loc: { lat: 39.9831302, lng: -83.1309111 },
+    dates: [
+      "2020-10-29",
+      "2020-10-30",
+      "2020-10-31",
+      "2020-11-01",
+      "2020-11-02",
       "2020-11-03",
     ],
   },
