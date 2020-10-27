@@ -52,8 +52,8 @@ export class LocationsController {
     const locJSON = await location.asJSON(authorized);
     const orders = await Order.find({
       where: { location },
-      order: { createdAt: 'ASC' }
-    })
+      order: { createdAt: "ASC" },
+    });
 
     return {
       ...locJSON,

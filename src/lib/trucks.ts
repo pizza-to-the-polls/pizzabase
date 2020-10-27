@@ -103,7 +103,6 @@ const TRUCK_CONFIG: {
     citystate: "chicago-il",
     loc: { lat: 41.8339037, lng: -87.8720459 },
     dates: [
-      "2020-10-29",
       "2020-10-30",
       "2020-10-31",
       "2020-11-01",
@@ -116,7 +115,6 @@ const TRUCK_CONFIG: {
     citystate: "indianapolis-in",
     loc: { lat: 39.7799642, lng: -86.2728321 },
     dates: [
-      "2020-10-29",
       "2020-10-30",
       "2020-10-31",
       "2020-11-01",
