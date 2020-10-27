@@ -8,11 +8,24 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from "typeorm";
 import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
 import { Action } from "./Action";
+
+export enum OrderTypes {
+  pizzas = "pizzas",
+  donuts = "donuts",
+}
+
+export const ORDER_TYPE_TO_MEALS: {
+  [key in OrderTypes]: number;
+} = {
+  [OrderTypes.pizzas]: 14,
+  [OrderTypes.donuts]: 12,
+};
 
 @Entity({ name: "orders" })
 export class Order extends BaseEntity {
@@ -22,10 +35,21 @@ export class Order extends BaseEntity {
   @Column({ type: "double precision" })
   cost: number;
 
-  @Column("int")
+  @Column({ type: "int", nullable: true })
   pizzas: number;
 
+  @Column({ type: "int", nullable: true })
+  meals: number;
+
+  @Column({ name: "order_type", default: "pizzas" })
+  @Index()
+  orderType: OrderTypes;
+
+  @Column({ type: "int", nullable: true })
+  quantity: number;
+
   @Column({ nullable: true })
+  @Index()
   restaurant: string | null;
 
   @ManyToOne((_type) => Location, (location) => location.orders, {
@@ -33,6 +57,7 @@ export class Order extends BaseEntity {
     nullable: false,
   })
   @JoinColumn({ name: "location_id" })
+  @Index()
   location!: Location;
 
   @OneToMany((_type) => Report, (report) => report.order)
@@ -82,12 +107,16 @@ export class Order extends BaseEntity {
     {
       pizzas,
       cost,
+      orderType,
+      quantity,
       restaurant,
       user,
     }: {
       pizzas: number;
       cost: number;
       restaurant?: string;
+      quantity?: number;
+      orderType?: OrderTypes;
       user?: string;
     },
     location: Location
@@ -95,6 +124,9 @@ export class Order extends BaseEntity {
     const order = new this();
 
     order.pizzas = pizzas;
+    order.quantity = quantity || pizzas;
+    order.orderType = orderType || OrderTypes.pizzas;
+    order.meals = order.quantity * ORDER_TYPE_TO_MEALS[order.orderType];
     order.cost = cost;
     order.restaurant = restaurant;
     order.location = location;
