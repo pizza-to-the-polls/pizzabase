@@ -63,7 +63,7 @@ describe("#show", () => {
   test("Gets a location with an ID, returns orders and reports", async () => {
     const { id, fullAddress } = location ? location : null;
 
-    const [order] = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
+    const [order] = await Order.placeOrder({ quantity: 1, cost: 5 }, location);
 
     const [report] = await Report.createNewReport(
       "333-234-2345",
@@ -239,7 +239,7 @@ describe("#validate", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [report] = await Report.createNewReport(
       "222-234-2345",
@@ -316,7 +316,7 @@ describe("#skip", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [pending] = await Report.createNewReport(
       "222-234-2345",
@@ -381,7 +381,7 @@ describe("#truck", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [pending] = await Report.createNewReport(
       "222-234-2345",
@@ -462,7 +462,7 @@ describe("#order", () => {
     const [order] = await location.orders;
 
     expect(order.cost).toEqual(500.23);
-    expect(order.pizzas).toEqual(32);
+    expect(order.quantity).toEqual(32);
   });
 
   it("validates the order too", async () => {
@@ -500,7 +500,7 @@ describe("#order", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [skipped] = await Report.createNewReport(
       "222-234-2345",
@@ -540,7 +540,7 @@ describe("#order", () => {
       http_mocks.createRequest({
         method: "PUT",
         body: {
-          pizzas: "5",
+          quantity: "5",
           cost: "$55.239",
           restaurant: "mario's house",
           user: "jim",
@@ -559,7 +559,7 @@ describe("#order", () => {
     expect(order).toBeTruthy();
 
     expect(order.cost).toEqual(55.24);
-    expect(order.pizzas).toEqual(5);
+    expect(order.quantity).toEqual(5);
     expect(order.restaurant).toEqual("mario's house");
 
     const { user, actionType } = await Action.findOne({

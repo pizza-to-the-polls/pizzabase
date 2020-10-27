@@ -33,7 +33,8 @@ export const buildTestData = async () => {
         if (orders > 0) {
           await Order.placeOrder(
             {
-              pizzas: Math.ceil(Math.random() * 12),
+              quantity: Math.ceil(Math.random() * 12),
+              orderType: "pizzas",
               cost: Math.ceil(Math.random() * 200 * 100) / 100,
             },
             location

@@ -122,7 +122,7 @@ describe("#create", () => {
     const [order] = await location.orders;
 
     expect(order.cost).toEqual(500.23);
-    expect(order.pizzas).toEqual(32);
+    expect(order.quantity).toEqual(32);
     expect(location.validatedAt).toBeTruthy();
   });
 
@@ -141,7 +141,7 @@ describe("#create", () => {
     );
     const order = await Order.findOne({ where: { cost: 500.23 } });
 
-    expect(order.pizzas).toEqual(32);
+    expect(order.quantity).toEqual(32);
     expect(order.location.fullAddress).toEqual(
       "550 Different Address City OR 12345"
     );

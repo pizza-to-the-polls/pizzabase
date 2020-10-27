@@ -36,13 +36,13 @@ describe("#overall", () => {
         overall.locations += 1;
 
         for (let j = 0; j < orders; ++j) {
-          const pizzas = Math.ceil(Math.random() * 12);
+          const quantity = Math.ceil(Math.random() * 12);
           const cost = Math.ceil(Math.random() * 200);
-          await Order.placeOrder({ pizzas, cost }, location);
+          await Order.placeOrder({ quantity, cost }, location);
 
           overall.orders += 1;
-          overall.pizzas += pizzas;
-          overall.meals += pizzas * 14;
+          overall.pizzas += quantity;
+          overall.meals += quantity * 14;
           overall.costs += cost;
         }
       }
@@ -88,13 +88,13 @@ describe("#yearly", () => {
         overall.locations += 1;
 
         for (let j = 0; j < orders; ++j) {
-          const pizzas = Math.ceil(Math.random() * 12);
+          const quantity = Math.ceil(Math.random() * 12);
           const cost = Math.ceil(Math.random() * 200);
-          await Order.placeOrder({ pizzas, cost }, location);
+          await Order.placeOrder({ quantity, cost }, location);
 
           overall.orders += 1;
-          overall.pizzas += pizzas;
-          overall.meals += pizzas * 14;
+          overall.pizzas += quantity;
+          overall.meals += quantity * 14;
           overall.costs += cost;
         }
       }
