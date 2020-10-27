@@ -177,7 +177,7 @@ describe("#validate", () => {
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
-    expect(action.user).toEqual(user);
+    expect(action.userId).toEqual(user);
   });
 
   it("validates a location even without a username", async () => {
@@ -199,7 +199,7 @@ describe("#validate", () => {
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
-    expect(action.user).toEqual("not specified");
+    expect(action.userId).toEqual("not specified");
   });
 
   it("return 401 status if bad api key", async () => {
@@ -346,11 +346,11 @@ describe("#skip", () => {
 
     await location.reload();
 
-    const { user, actionType } = await Action.findOne({
+    const { userId, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
       order: { id: "DESC" },
     });
-    expect(user).toEqual("jimmy");
+    expect(userId).toEqual("jimmy");
     expect(actionType).toEqual("skipped");
 
     await pending.reload();
@@ -411,11 +411,11 @@ describe("#truck", () => {
 
     await location.reload();
     expect(await location.hasTruck()).toBeTruthy();
-    const { user, actionType } = await Action.findOne({
+    const { userId, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
       order: { id: "DESC" },
     });
-    expect(user).toEqual("jimmy");
+    expect(userId).toEqual("jimmy");
     expect(actionType).toEqual("assigned truck");
 
     await pending.reload();
@@ -562,10 +562,10 @@ describe("#order", () => {
     expect(order.quantity).toEqual(5);
     expect(order.restaurant).toEqual("mario's house");
 
-    const { user, actionType } = await Action.findOne({
+    const { userId, actionType } = await Action.findOne({
       where: { entityId: order.id, entityType: order.constructor.name },
     });
-    expect(user).toEqual("jim");
+    expect(userId).toEqual("jim");
     expect(actionType).toEqual("ordered");
 
     await ordered.reload();

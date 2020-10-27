@@ -88,7 +88,7 @@ export class Order extends BaseEntity {
 
   static async placeOrderForAddress(
     orderParams: {
-      pizzas: number;
+      quantity: number;
       cost: number;
       restaurant?: string;
       user?: string;
