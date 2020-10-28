@@ -1,12 +1,11 @@
-import { createConnection, getConnection } from "typeorm";
-import * as csv from "csv-parser";
-import * as fs from "fs";
-
+import { uploadBulkCSV } from "../src/lib/bulk";
 import { validateReport, validateOrder } from "../src/lib/validator";
 import { Order } from "../src/entity/Order";
 import { Report } from "../src/entity/Report";
 
-const backfillReport = async (data: { [key: string]: string }) => {
+const SUCCESS = /Done|Delivered/i;
+
+const backfillReport = async (data: { [key: string]: string }, manager) => {
   const {
     who,
     status,
@@ -17,7 +16,6 @@ const backfillReport = async (data: { [key: string]: string }) => {
     url,
     contact,
   } = data;
-  const { manager } = await getConnection();
 
   const newNow = new Date(timestamp);
 
@@ -26,8 +24,12 @@ const backfillReport = async (data: { [key: string]: string }) => {
     contact: "fake@example.com",
     address: full_address,
   });
-  if (Object.keys(errors).length > 0) {
+
+  if (!normalizedAddress || Object.keys(errors).length > 0) {
     throw new Error(`Bad address ${full_address}`);
+  }
+  if (newNow < new Date("10/24/2016")) {
+    throw new Error(`Bad date ${newNow}`);
   }
 
   const [report] = await Report.createNewReport(
@@ -36,10 +38,10 @@ const backfillReport = async (data: { [key: string]: string }) => {
     normalizedAddress
   );
   const { location } = report;
-  const orderInput = validateOrder({ quantity: pizzas, cost, user: who });
+  const orderInput = await validateOrder({ quantity: pizzas, cost, user: who });
 
-  if (status === "Delivered" && orderInput.cost) {
-    const order = await Order.placeOrder(orderInput, location);
+  if (status.match(SUCCESS) && orderInput.cost) {
+    const [order] = await Order.placeOrder(orderInput, location);
     await location.validate(who);
     await manager.query(`
         UPDATE orders SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${
@@ -69,30 +71,9 @@ const backfillReport = async (data: { [key: string]: string }) => {
     }
       `);
   }
+  return true;
 };
 
 (async () => {
-  await createConnection();
-
-  const data: { [key: string]: string }[] = await new Promise((resolve) => {
-    const rows = [];
-    fs.createReadStream(process.argv[2])
-      .pipe(csv())
-      .on("data", (row) => {
-        rows.push(row);
-      })
-      .on("end", () => {
-        resolve(rows);
-      });
-  });
-
-  for (let num = 9; num < data.length; ++num) {
-    try {
-      await backfillReport(data[num]);
-    } catch (e) {
-      console.error(e);
-    }
-    console.log(`${num + 1} / ${data.length} done`);
-    await new Promise((accept) => setTimeout(accept, 250));
-  }
+  uploadBulkCSV(backfillReport, process.argv[2], process.argv[3]);
 })();
