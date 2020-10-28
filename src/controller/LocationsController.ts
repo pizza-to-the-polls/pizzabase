@@ -62,9 +62,7 @@ export class LocationsController {
 
     return {
       ...locJSON,
-      hasTruck: authorized
-        ? locJSON.hasTruckJSON
-        : await location.hasTruckJSON(),
+      hasTruck: authorized ? locJSON.hasTruck : await location.hasTruckJSON(),
       reports: (await location.openReports()).map((report) =>
         report.asJSON(authorized)
       ),

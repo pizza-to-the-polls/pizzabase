@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
+import { Action } from "../entity/Action";
 import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
@@ -51,16 +52,14 @@ export class ReportsController {
   }
 
   async create(request: Request, response: Response, _next: NextFunction) {
+    const authed = await checkAuthorization(request);
     const {
       errors,
       normalizedAddress,
       reportURL,
       contactInfo,
       ...extra
-    } = await validateReport(
-      request.body || {},
-      await checkAuthorization(request)
-    );
+    } = await validateReport(request.body || {}, authed);
 
     if (Object.keys(errors).length > 0) {
       response.status(422);
@@ -76,6 +75,10 @@ export class ReportsController {
       normalizedAddress,
       extra
     );
+
+    if (authed) {
+      Action.log(report.location, "trusted report", request.body?.user);
+    }
 
     if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
       if (report.location.validatedAt) {

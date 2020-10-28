@@ -3,6 +3,7 @@ import { NormalAddress, OverrideAddress } from "./types";
 import { normalizeURL } from "./normalizeURL";
 import { normalizeContact } from "./normalizeContact";
 import { CONTACT_ERROR, ADDRESS_ERROR, URL_ERROR } from "./constants";
+import { v4 as uuidv4 } from "uuid";
 
 interface ValidationError {
   contact?: string;
@@ -47,7 +48,7 @@ export const validateReport = async (
   const errors: ValidationError = {};
 
   const reportURL = normalizeURL(
-    url ? url : isAuthorized ? "http://trusted.url" : ""
+    url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : ""
   );
   if (!reportURL) {
     errors.url = URL_ERROR;

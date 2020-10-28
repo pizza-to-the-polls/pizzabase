@@ -39,7 +39,7 @@ test("can override invalid", async () => {
     true
   );
   expect(errors).toEqual({});
-  expect(reportURL).toEqual("http://trusted.url");
+  expect(reportURL).toContain("http://trusted.url");
   expect(contactInfo).toEqual("trusted@example.com");
   expect(normalizedAddress).toEqual({
     latitude: 420,
