@@ -33,10 +33,7 @@ export class DonationsController {
         await Donation.failCharge("refunded", event.data.object);
         break;
       case "charge.dispute.funds_withdrawn":
-        await Donation.failCharge(
-          "dispute.funds_withdrawn",
-          event.data.object
-        );
+        await Donation.failCharge("dispute.funds_withdrawn", event.data.object);
         break;
       default:
         console.log(`Unhandled event type ${event.type}`);
