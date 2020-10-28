@@ -1,4 +1,5 @@
-import { normalizeAddress, NormalAddress } from "./normalizeAddress";
+import { normalizeAddress } from "./normalizeAddress";
+import { NormalAddress } from "./types";
 import { UPLOAD_ERROR, ADDRESS_ERROR } from "./constants";
 import { UPLOAD_CONTENT_TYPES } from "./constants";
 

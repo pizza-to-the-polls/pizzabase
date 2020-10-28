@@ -6,7 +6,7 @@ import { Location } from "../entity/Location";
 import { UPLOAD_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/aws");
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 
 const controller = new UploadsController();
 

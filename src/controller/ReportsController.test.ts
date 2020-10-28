@@ -4,13 +4,16 @@ import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
+import { Action } from "../entity/Action";
 import {
   ADDRESS_ERROR,
   URL_ERROR,
   CONTACT_ERROR,
 } from "../lib/validator/constants";
 
-jest.mock("../lib/validator/normalizeAddress");
+import { buildTestData } from "../tests/factories";
+
+jest.mock("../lib/validator/geocode");
 jest.mock("node-fetch");
 
 import fetch from "node-fetch";
@@ -61,6 +64,56 @@ describe("#create", () => {
     });
 
     expect(response.statusCode).toEqual(422);
+  });
+
+  test("Trusted reporters can override valdiation", async () => {
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        address: "not-valid",
+        user: "jimmy",
+        waitTime: "5000",
+        addressOverride: {
+          address: "123 Sesame",
+          city: "city",
+          state: "WA",
+          zip: "12345",
+          latitude: "420",
+          longitude: "-420",
+        },
+      },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({
+      address: "123 Sesame city WA 12345",
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toEqual(200);
+
+    const location = await Location.findOne({
+      where: { fullAddress: "123 Sesame city WA 12345" },
+    });
+    expect(location).toBeTruthy();
+    expect(location.validatedAt).toBeTruthy();
+
+    const report = await Report.findOne({ where: { location } });
+    expect(report).toBeTruthy();
+    expect(report.location).toEqual(location);
+    expect(report.order).toBeFalsy();
+    expect(report.waitTime).toEqual("5000");
+    expect(report.contactRole).toEqual("Trusted");
+
+    const action = await Action.findOne({
+      where: { entityId: report.id, entityType: report.constructor.name },
+    });
+    expect(action.userId).toEqual("jimmy");
   });
 
   test("New request/loc returns success, creates location, report, zaps new location", async () => {
@@ -365,5 +418,107 @@ describe("#create", () => {
     expect(report.order.id).toBe(order.id);
 
     expect(fetch.mock.calls.length).toEqual(0);
+  });
+});
+
+describe("#index", () => {
+  beforeEach(async () => await buildTestData());
+
+  test("Lists the reports", async () => {
+    const body = await controller.index(
+      http_mocks.createRequest(),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (await Report.find({ order: { createdAt: "DESC" } })).map(
+          async (report) => await report.asJSON()
+        )
+      ),
+      count: await Report.count(),
+    });
+  });
+
+  test("Lists the reports for a truck", async () => {
+    const location = await Location.findOne();
+    const [truck] = await location.assignTruck();
+
+    const body = await controller.index(
+      http_mocks.createRequest({ query: { truck: truck.id } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (
+          await Report.find({ order: { createdAt: "DESC" }, where: { truck } })
+        ).map(async (report) => await report.asJSON())
+      ),
+      count: await Report.count({ where: { truck } }),
+    });
+  });
+
+  test("Lists the reports for a location", async () => {
+    const location = await Location.findOne();
+
+    const body = await controller.index(
+      http_mocks.createRequest({ query: { location: location.id } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (
+          await Report.find({
+            order: { createdAt: "DESC" },
+            where: { location },
+          })
+        ).map(async (report) => await report.asJSON())
+      ),
+      count: await Report.count({ where: { location } }),
+    });
+  });
+
+  test("Lists the reports for an order", async () => {
+    const order = await Order.findOne();
+
+    const body = await controller.index(
+      http_mocks.createRequest({ query: { order: order.id } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (
+          await Report.find({ order: { createdAt: "DESC" }, where: { order } })
+        ).map(async (report) => await report.asJSON())
+      ),
+      count: await Report.count({ where: { order } }),
+    });
+  });
+});
+
+describe("#show", () => {
+  beforeEach(async () => await buildTestData());
+
+  it("returns a report", async () => {
+    const report = await Report.findOne();
+    const body = await controller.show(
+      http_mocks.createRequest({ params: { id: `${report.id}` } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      ...report.asJSON(),
+      location: await report.location.asJSON(),
+      order: report.order.asJSON(),
+      truck: report.truck?.asJSON(),
+    });
   });
 });

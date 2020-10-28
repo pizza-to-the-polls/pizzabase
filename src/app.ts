@@ -4,13 +4,18 @@ import * as cors from "cors";
 
 import { Request, Response, NextFunction } from "express";
 import { Routes } from "./routes";
-import { middleware } from "./lib/bugsnag";
+import { initBugSnagMiddleware } from "./lib/middleware/bugsnag";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",");
 
+const {
+  addBugSnagRequestHandler,
+  addBugSnagErrorHandler,
+} = initBugSnagMiddleware();
+
 const app = express();
 
-app.use(middleware.requestHandler);
+addBugSnagRequestHandler(app);
 
 app.use(
   cors({
@@ -49,6 +54,6 @@ Routes.forEach(({ method, route, controller, action }) => {
   );
 });
 
-app.use(middleware.errorHandler);
+addBugSnagErrorHandler(app);
 
 export default app;
