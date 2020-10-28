@@ -1,5 +1,5 @@
 import { Location } from "../entity/Location";
-import { Order } from "../entity/Order";
+import { Order, OrderTypes } from "../entity/Order";
 import { Report } from "../entity/Report";
 
 export const buildTestData = async () => {
@@ -33,7 +33,8 @@ export const buildTestData = async () => {
         if (orders > 0) {
           await Order.placeOrder(
             {
-              pizzas: Math.ceil(Math.random() * 12),
+              quantity: Math.ceil(Math.random() * 12),
+              orderType: OrderTypes.pizzas,
               cost: Math.ceil(Math.random() * 200 * 100) / 100,
             },
             location

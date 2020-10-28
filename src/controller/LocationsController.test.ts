@@ -63,7 +63,7 @@ describe("#show", () => {
   test("Gets a location with an ID, returns orders and reports", async () => {
     const { id, fullAddress } = location ? location : null;
 
-    const [order] = await Order.placeOrder({ pizzas: 1, cost: 5 }, location);
+    const [order] = await Order.placeOrder({ quantity: 1, cost: 5 }, location);
 
     const [report] = await Report.createNewReport(
       "333-234-2345",
@@ -177,7 +177,7 @@ describe("#validate", () => {
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
-    expect(action.user).toEqual(user);
+    expect(action.userId).toEqual(user);
   });
 
   it("validates a location even without a username", async () => {
@@ -199,7 +199,7 @@ describe("#validate", () => {
     const action = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
     });
-    expect(action.user).toEqual("not specified");
+    expect(action.userId).toEqual("not specified");
   });
 
   it("return 401 status if bad api key", async () => {
@@ -239,7 +239,7 @@ describe("#validate", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [report] = await Report.createNewReport(
       "222-234-2345",
@@ -316,7 +316,7 @@ describe("#skip", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [pending] = await Report.createNewReport(
       "222-234-2345",
@@ -346,11 +346,11 @@ describe("#skip", () => {
 
     await location.reload();
 
-    const { user, actionType } = await Action.findOne({
+    const { userId, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
       order: { id: "DESC" },
     });
-    expect(user).toEqual("jimmy");
+    expect(userId).toEqual("jimmy");
     expect(actionType).toEqual("skipped");
 
     await pending.reload();
@@ -381,7 +381,7 @@ describe("#truck", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [pending] = await Report.createNewReport(
       "222-234-2345",
@@ -411,11 +411,11 @@ describe("#truck", () => {
 
     await location.reload();
     expect(await location.hasTruck()).toBeTruthy();
-    const { user, actionType } = await Action.findOne({
+    const { userId, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
       order: { id: "DESC" },
     });
-    expect(user).toEqual("jimmy");
+    expect(userId).toEqual("jimmy");
     expect(actionType).toEqual("assigned truck");
 
     await pending.reload();
@@ -462,7 +462,26 @@ describe("#order", () => {
     const [order] = await location.orders;
 
     expect(order.cost).toEqual(500.23);
-    expect(order.pizzas).toEqual(32);
+    expect(order.quantity).toEqual(32);
+  });
+
+  it("creates a donut order", async () => {
+    const { fullAddress } = location ? location : null;
+    await controller.order(
+      http_mocks.createRequest({
+        method: "PUT",
+        body: { cost: "$500.23423", orderType: "donuts", quantity: "5" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const [order] = await location.orders;
+
+    expect(order.cost).toEqual(500.23);
+    expect(order.orderType).toEqual("dozen donuts");
+    expect(order.quantity).toEqual(5);
   });
 
   it("validates the order too", async () => {
@@ -500,7 +519,7 @@ describe("#order", () => {
       }
     );
 
-    await Order.placeOrder({ pizzas: 1, cost: 5 }, ordered.location);
+    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
 
     const [skipped] = await Report.createNewReport(
       "222-234-2345",
@@ -540,7 +559,7 @@ describe("#order", () => {
       http_mocks.createRequest({
         method: "PUT",
         body: {
-          pizzas: "5",
+          quantity: "5",
           cost: "$55.239",
           restaurant: "mario's house",
           user: "jim",
@@ -559,13 +578,13 @@ describe("#order", () => {
     expect(order).toBeTruthy();
 
     expect(order.cost).toEqual(55.24);
-    expect(order.pizzas).toEqual(5);
+    expect(order.quantity).toEqual(5);
     expect(order.restaurant).toEqual("mario's house");
 
-    const { user, actionType } = await Action.findOne({
+    const { userId, actionType } = await Action.findOne({
       where: { entityId: order.id, entityType: order.constructor.name },
     });
-    expect(user).toEqual("jim");
+    expect(userId).toEqual("jim");
     expect(actionType).toEqual("ordered");
 
     await ordered.reload();

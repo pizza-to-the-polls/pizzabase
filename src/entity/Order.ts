@@ -8,11 +8,24 @@ import {
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
+  Index,
 } from "typeorm";
 import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
 import { Action } from "./Action";
+
+export enum OrderTypes {
+  pizzas = "pizzas",
+  donuts = "dozen donuts",
+}
+
+export const ORDER_TYPE_TO_MEALS: {
+  [key in OrderTypes]: number;
+} = {
+  [OrderTypes.pizzas]: 14,
+  [OrderTypes.donuts]: 12,
+};
 
 @Entity({ name: "orders" })
 export class Order extends BaseEntity {
@@ -22,10 +35,18 @@ export class Order extends BaseEntity {
   @Column({ type: "double precision" })
   cost: number;
 
-  @Column("int")
-  pizzas: number;
+  @Column({ type: "int" })
+  meals: number;
+
+  @Column({ name: "order_type", default: "pizzas" })
+  @Index()
+  orderType: OrderTypes;
+
+  @Column({ type: "int" })
+  quantity: number;
 
   @Column({ nullable: true })
+  @Index()
   restaurant: string | null;
 
   @ManyToOne((_type) => Location, (location) => location.orders, {
@@ -33,6 +54,7 @@ export class Order extends BaseEntity {
     nullable: false,
   })
   @JoinColumn({ name: "location_id" })
+  @Index()
   location!: Location;
 
   @OneToMany((_type) => Report, (report) => report.order)
@@ -47,10 +69,13 @@ export class Order extends BaseEntity {
   asJSON(showPrivate: boolean = false) {
     if (showPrivate) return this.asJSONPrivate();
 
-    const { id, pizzas, restaurant, createdAt } = this;
+    const { id, meals, quantity, orderType, restaurant, createdAt } = this;
     return {
       id,
-      pizzas,
+      meals,
+      quantity,
+      orderType,
+      pizzas: quantity,
       restaurant,
       createdAt,
     };
@@ -66,7 +91,7 @@ export class Order extends BaseEntity {
 
   static async placeOrderForAddress(
     orderParams: {
-      pizzas: number;
+      quantity: number;
       cost: number;
       restaurant?: string;
       user?: string;
@@ -80,21 +105,25 @@ export class Order extends BaseEntity {
 
   static async placeOrder(
     {
-      pizzas,
       cost,
+      orderType,
+      quantity,
       restaurant,
       user,
     }: {
-      pizzas: number;
       cost: number;
+      quantity: number;
       restaurant?: string;
+      orderType?: OrderTypes;
       user?: string;
     },
     location: Location
   ): Promise<[Order, Report[]]> {
     const order = new this();
 
-    order.pizzas = pizzas;
+    order.quantity = quantity;
+    order.orderType = orderType || OrderTypes.pizzas;
+    order.meals = quantity * ORDER_TYPE_TO_MEALS[order.orderType];
     order.cost = cost;
     order.restaurant = restaurant;
     order.location = location;

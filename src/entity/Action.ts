@@ -15,26 +15,26 @@ export class Action extends BaseEntity {
   @CreateDateColumn({ name: "created_at" })
   createdAt;
 
-  @Column()
+  @Column({ name: "user_id" })
   @Index()
-  user: string;
+  userId: string;
 
-  @Column()
+  @Column({ name: "action_type" })
   @Index()
-  actionType: string;
+  entityType: string;
 
-  @Column()
+  @Column({ name: "entity_id" })
   @Index()
   entityId: number;
 
-  @Column()
+  @Column({ name: "entity_type" })
   @Index()
-  entityType: string;
+  actionType: string;
 
   static async log(entity, actionType, user?: string): Promise<Action> {
     const action = new this();
 
-    action.user = user || "not specified";
+    action.userId = user || "not specified";
     action.actionType = actionType;
 
     action.entityType = entity.constructor.name;

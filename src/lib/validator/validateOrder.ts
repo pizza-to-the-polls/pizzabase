@@ -1,16 +1,20 @@
 import { normalizeAddress, NormalAddress } from "./normalizeAddress";
-import { ADDRESS_ERROR, COST_ERROR } from "./constants";
+import { ADDRESS_ERROR, COST_ERROR, ORDER_TYPE_ERROR } from "./constants";
+import { OrderTypes } from "../../entity/Order";
 
 const COST_PER_PIZZA = 16;
 
 interface ValidationError {
   cost?: string;
   address?: string;
+  orderType?: string;
 }
 
 export const validateOrder = async ({
   pizzas: sentPizza,
   cost: sentCost,
+  quantity: sentQuantity,
+  orderType: sentOrderType,
   restaurant,
   user,
   address,
@@ -18,11 +22,14 @@ export const validateOrder = async ({
   pizzas?: string;
   cost?: string;
   restaurant?: string;
+  orderType?: string;
+  quantity?: string;
   user?: string;
   address?: string;
 }): Promise<{
-  pizzas: number;
   cost: number;
+  orderType: OrderTypes;
+  quantity: number;
   restaurant?: string;
   user?: string;
   normalizedAddress?: NormalAddress;
@@ -50,5 +57,20 @@ export const validateOrder = async ({
     ? Math.ceil(cost / COST_PER_PIZZA)
     : Number(sentPizza);
 
-  return { errors, cost, pizzas, user, restaurant, normalizedAddress };
+  const quantity = isNaN(Number(sentQuantity)) ? pizzas : Number(sentQuantity);
+  const orderType = OrderTypes[sentOrderType || "pizzas"];
+
+  if (!orderType) {
+    errors.orderType = ORDER_TYPE_ERROR;
+  }
+
+  return {
+    errors,
+    cost,
+    user,
+    restaurant,
+    normalizedAddress,
+    orderType,
+    quantity,
+  };
 };
