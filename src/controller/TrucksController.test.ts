@@ -5,7 +5,7 @@ import { Truck } from "../entity/Truck";
 import { Location } from "../entity/Location";
 import { ADDRESS_ERROR } from "../lib/validator/constants";
 import { buildTestData } from "../tests/factories";
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 
 const controller = new TrucksController();
 
@@ -87,10 +87,8 @@ describe("#all", () => {
     const trucked = [];
 
     for (const location of locations) {
-      if (Math.random() > 0.5) {
-        await location.assignTruck("jim", "hobbiton-shire");
-        trucked.push(location.asJSON());
-      }
+      await location.assignTruck("jim", "hobbiton-shire");
+      trucked.push(await location.asJSON());
     }
 
     const body = await controller.all(

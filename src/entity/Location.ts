@@ -90,8 +90,11 @@ export class Location extends BaseEntity {
       },
     });
   }
-  async hasTruck(): Promise<boolean> {
-    return !!(await this.activeTruck());
+  async hasTruckJSON(): Promise<
+    { createdAt: Date; identifier: string } | false
+  > {
+    const truck = await this.activeTruck();
+    return truck ? truck.asJSON() : false;
   }
   async distributor(): Promise<Report | null> {
     const [openReport] = await Report.openReports(this);
@@ -133,7 +136,7 @@ export class Location extends BaseEntity {
     return {
       ...(await this.asJSON()),
       truckEligible: truckEligibility(this, new Date()),
-      hasTruck: await this.hasTruck(),
+      hasTruck: await this.hasTruckJSON(),
       pizzaDistributor: (await this.distributor())?.asJSONPrivate() || null,
     };
   }

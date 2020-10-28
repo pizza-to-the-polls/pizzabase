@@ -6,14 +6,14 @@ import { Order } from "../entity/Order";
 import { Location } from "../entity/Location";
 import { ADDRESS_ERROR, COST_ERROR } from "../lib/validator/constants";
 
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 
 const controller = new OrdersController();
 
 describe("#show", () => {
   beforeEach(async () => await buildTestData());
 
-  it("returns a limited number of orders", async () => {
+  it("returns an order", async () => {
     const order = await Order.findOne();
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${order.id}` } }),

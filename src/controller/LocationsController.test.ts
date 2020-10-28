@@ -8,7 +8,7 @@ import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("node-fetch");
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 
 import fetch from "node-fetch";
 
@@ -94,6 +94,7 @@ describe("#show", () => {
       hasTruck: false,
       orders: [order.asJSON()],
       reports: [report.asJSON()],
+      trucks: [],
     });
   });
 
@@ -113,6 +114,7 @@ describe("#show", () => {
       hasTruck: false,
       reports: [],
       orders: [],
+      trucks: [],
     });
   });
 
@@ -132,6 +134,7 @@ describe("#show", () => {
       hasTruck: false,
       reports: [],
       orders: [],
+      trucks: [],
     });
   });
   test("Gets a location with a space encoded address with auth headers", async () => {
@@ -148,8 +151,10 @@ describe("#show", () => {
 
     expect(body).toEqual({
       ...(await location.asJSONPrivate()),
+      hasTruck: false,
       reports: [],
       orders: [],
+      trucks: [],
     });
   });
 });
@@ -410,7 +415,7 @@ describe("#truck", () => {
     );
 
     await location.reload();
-    expect(await location.hasTruck()).toBeTruthy();
+    expect(await location.hasTruckJSON()).toBeTruthy();
     const { userId, actionType } = await Action.findOne({
       where: { entityId: id, entityType: location.constructor.name },
       order: { id: "DESC" },

@@ -16,11 +16,13 @@ export class TrucksController {
     });
 
     return {
-      results: trucks.map(({ identifier, createdAt, location }) => ({
-        createdAt,
-        region: identifier,
-        location: location.asJSON(),
-      })),
+      results: await Promise.all(
+        trucks.map(async ({ identifier, createdAt, location }) => ({
+          createdAt,
+          region: identifier,
+          location: await location.asJSON(),
+        }))
+      ),
       count,
     };
   }

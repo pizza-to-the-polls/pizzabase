@@ -1,4 +1,5 @@
-import { normalizeAddress, NormalAddress } from "./normalizeAddress";
+import { normalizeAddress } from "./normalizeAddress";
+import { NormalAddress } from "./types";
 import { ADDRESS_ERROR } from "./constants";
 
 interface ValidationError {

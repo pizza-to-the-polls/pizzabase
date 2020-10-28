@@ -1,4 +1,5 @@
-import { normalizeAddress, NormalAddress } from "./normalizeAddress";
+import { normalizeAddress } from "./normalizeAddress";
+import { NormalAddress } from "./types";
 import { ADDRESS_ERROR, COST_ERROR, ORDER_TYPE_ERROR } from "./constants";
 import { OrderTypes } from "../../entity/Order";
 
