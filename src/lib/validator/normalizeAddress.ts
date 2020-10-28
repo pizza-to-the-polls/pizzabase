@@ -13,6 +13,7 @@ const client = SmartyStreetsCore.buildClient.usExtract(credentials);
 const gmapsKey = process.env.GOOGLE_MAPS_KEY;
 const gmapsURL = "https://maps.googleapis.com/maps/api/geocode/json";
 const componentMapping = {
+  sublocality: "city",
   locality: "city",
   postal_code: "zip",
   route: "street",
@@ -50,14 +51,15 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
 
     const { city, state, zip, num, street } = address_components.reduce(
       (obj, { short_name, types }) => {
-        if (componentMapping[types[0]]) {
-          obj[componentMapping[types[0]]] = short_name;
+        for (const type of types) {
+          if (componentMapping[type]) {
+            obj[componentMapping[type]] = short_name;
+          }
         }
         return obj;
       },
       {}
     );
-
     if (!num || !street || !city || !state || !zip) {
       return null;
     }

@@ -465,6 +465,25 @@ describe("#order", () => {
     expect(order.quantity).toEqual(32);
   });
 
+  it("creates a donut order", async () => {
+    const { fullAddress } = location ? location : null;
+    await controller.order(
+      http_mocks.createRequest({
+        method: "PUT",
+        body: { cost: "$500.23423", orderType: "donuts", quantity: "5" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const [order] = await location.orders;
+
+    expect(order.cost).toEqual(500.23);
+    expect(order.orderType).toEqual("dozen donuts");
+    expect(order.quantity).toEqual(5);
+  });
+
   it("validates the order too", async () => {
     const { fullAddress } = location ? location : null;
     await controller.order(

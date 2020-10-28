@@ -17,7 +17,7 @@ import { Action } from "./Action";
 
 export enum OrderTypes {
   pizzas = "pizzas",
-  donuts = "donuts",
+  donuts = "dozen donuts",
 }
 
 export const ORDER_TYPE_TO_MEALS: {
@@ -69,10 +69,13 @@ export class Order extends BaseEntity {
   asJSON(showPrivate: boolean = false) {
     if (showPrivate) return this.asJSONPrivate();
 
-    const { id, meals, restaurant, createdAt } = this;
+    const { id, meals, quantity, orderType, restaurant, createdAt } = this;
     return {
       id,
-      pizzas: meals,
+      meals,
+      quantity,
+      orderType,
+      pizzas: quantity,
       restaurant,
       createdAt,
     };

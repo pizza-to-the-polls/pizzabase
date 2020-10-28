@@ -38,7 +38,7 @@ export class Report extends BaseEntity {
   contactLastName: string;
 
   @Column({ name: "contact_role", nullable: true })
-  concactRole: string;
+  contactRole: string;
 
   @Column({ name: "wait_time", nullable: true })
   waitTime: string;
@@ -107,7 +107,7 @@ export class Report extends BaseEntity {
       contactInfo,
       contactFirstName,
       contactLastName,
-      concactRole,
+      contactRole,
       canDistribute,
     } = this;
 
@@ -116,7 +116,7 @@ export class Report extends BaseEntity {
       contactInfo,
       contactFirstName,
       contactLastName,
-      concactRole,
+      contactRole,
       canDistribute: canDistribute > 0,
     };
   }
@@ -127,7 +127,7 @@ export class Report extends BaseEntity {
         location,
         ...OPEN_QUERY,
       },
-      order: { canDistribute: "DESC", id: "ASC" },
+      order: { canDistribute: "DESC", createdAt: "ASC" },
     });
   }
   static async updateOpen(location: Location, set): Promise<void> {
@@ -149,14 +149,14 @@ export class Report extends BaseEntity {
       waitTime,
       contactFirstName,
       contactLastName,
-      concactRole,
+      contactRole,
       canDistribute,
     }: {
       waitTime?: string;
       canDistribute?: boolean;
       contactFirstName?: string;
       contactLastName?: string;
-      concactRole?: string;
+      contactRole?: string;
     } = {}
   ): Promise<
     [
@@ -187,7 +187,7 @@ export class Report extends BaseEntity {
     report.waitTime = waitTime;
     report.contactFirstName = contactFirstName;
     report.contactLastName = contactLastName;
-    report.concactRole = concactRole;
+    report.contactRole = contactRole;
 
     const reportExists = await this.findOne({
       where: { reportURL, location: report.location },
