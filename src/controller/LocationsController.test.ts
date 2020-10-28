@@ -94,6 +94,7 @@ describe("#show", () => {
       hasTruck: false,
       orders: [order.asJSON()],
       reports: [report.asJSON()],
+      trucks: [],
     });
   });
 
@@ -113,6 +114,7 @@ describe("#show", () => {
       hasTruck: false,
       reports: [],
       orders: [],
+      trucks: [],
     });
   });
 
@@ -132,6 +134,7 @@ describe("#show", () => {
       hasTruck: false,
       reports: [],
       orders: [],
+      trucks: [],
     });
   });
   test("Gets a location with a space encoded address with auth headers", async () => {
@@ -150,6 +153,7 @@ describe("#show", () => {
       ...(await location.asJSONPrivate()),
       reports: [],
       orders: [],
+      trucks: [],
     });
   });
 });

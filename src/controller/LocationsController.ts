@@ -1,6 +1,7 @@
 import { NextFunction, Request, Response } from "express";
 import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
+import { Truck } from "../entity/Truck";
 import { findOr404, isAuthorized, checkAuthorization } from "./helper";
 import {
   zapNewReport,
@@ -54,6 +55,10 @@ export class LocationsController {
       where: { location },
       order: { createdAt: "ASC" },
     });
+    const trucks = await Truck.find({
+      where: { location },
+      order: { createdAt: "ASC" },
+    });
 
     return {
       ...locJSON,
@@ -62,6 +67,7 @@ export class LocationsController {
         report.asJSON(authorized)
       ),
       orders: orders.map((order) => order.asJSON(authorized)),
+      trucks: trucks.map((truck) => truck.asJSON()),
     };
   }
 

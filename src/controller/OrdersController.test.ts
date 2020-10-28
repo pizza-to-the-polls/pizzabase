@@ -13,7 +13,7 @@ const controller = new OrdersController();
 describe("#show", () => {
   beforeEach(async () => await buildTestData());
 
-  it("returns a limited number of orders", async () => {
+  it("returns an order", async () => {
     const order = await Order.findOne();
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${order.id}` } }),

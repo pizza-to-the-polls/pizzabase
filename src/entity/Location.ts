@@ -90,8 +90,9 @@ export class Location extends BaseEntity {
       },
     });
   }
-  async hasTruck(): Promise<boolean> {
-    return !!(await this.activeTruck());
+  async hasTruck(): Promise<Truck | false> {
+    const truck = await this.activeTruck();
+    return truck ? truck.asJSON() : false;
   }
   async distributor(): Promise<Report | null> {
     const [openReport] = await Report.openReports(this);

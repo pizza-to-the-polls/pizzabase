@@ -41,6 +41,11 @@ export class Truck extends BaseEntity {
   @Column({ nullable: true })
   identifier: string | null;
 
+  asJSON() {
+    const { createdAt, identifier } = this;
+    return { createdAt, identifier };
+  }
+
   static async findAndCountActiveTrucks({
     take,
     skip,
