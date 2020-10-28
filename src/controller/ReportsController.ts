@@ -1,8 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
-import { Truck } from "../entity/Report";
-import { Order } from "../entity/Report";
-import { Location } from "../entity/Report";
+import { checkAuthorization } from "./helper";
 import { validateReport } from "../lib/validator";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 
@@ -20,12 +18,12 @@ export class ReportsController {
 
     const where =
       truck || location || order ? { ...truck, ...order, ...location } : null;
-    console.log(where);
+
     const [reports, count] = await Report.findAndCount({
       take,
       skip,
       where,
-      order: { createdAt: "asc" },
+      order: { createdAt: "DESC" },
     });
 
     return {
@@ -43,7 +41,10 @@ export class ReportsController {
       reportURL,
       contactInfo,
       ...extra
-    } = await validateReport(request.body || {});
+    } = await validateReport(
+      request.body || {},
+      await checkAuthorization(request)
+    );
 
     if (Object.keys(errors).length > 0) {
       response.status(422);

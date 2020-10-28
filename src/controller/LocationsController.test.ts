@@ -8,7 +8,7 @@ import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("node-fetch");
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 
 import fetch from "node-fetch";
 

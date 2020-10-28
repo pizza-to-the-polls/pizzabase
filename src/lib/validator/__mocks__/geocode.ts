@@ -1,6 +1,6 @@
 import { NormalAddress } from "../";
 
-export const normalizeAddress = async (
+export const geocode = async (
   fullAddress?: string
 ): Promise<NormalAddress | null> => {
   if (!fullAddress) {

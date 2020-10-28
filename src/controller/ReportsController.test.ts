@@ -12,7 +12,7 @@ import {
 
 import { buildTestData } from "../tests/factories";
 
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 jest.mock("node-fetch");
 
 import fetch from "node-fetch";
@@ -382,7 +382,7 @@ describe("#index", () => {
 
     expect(body).toEqual({
       results: await Promise.all(
-        (await Report.find({ order: { createdAt: "desc" } })).map(
+        (await Report.find({ order: { createdAt: "DESC" } })).map(
           async (report) => await report.asJSON()
         )
       ),
@@ -403,7 +403,7 @@ describe("#index", () => {
     expect(body).toEqual({
       results: await Promise.all(
         (
-          await Report.find({ order: { createdAt: "desc" }, where: { truck } })
+          await Report.find({ order: { createdAt: "DESC" }, where: { truck } })
         ).map(async (report) => await report.asJSON())
       ),
       count: await Report.count({ where: { truck } }),
@@ -423,7 +423,7 @@ describe("#index", () => {
       results: await Promise.all(
         (
           await Report.find({
-            order: { createdAt: "desc" },
+            order: { createdAt: "DESC" },
             where: { location },
           })
         ).map(async (report) => await report.asJSON())
@@ -444,7 +444,7 @@ describe("#index", () => {
     expect(body).toEqual({
       results: await Promise.all(
         (
-          await Report.find({ order: { createdAt: "desc" }, where: { order } })
+          await Report.find({ order: { createdAt: "DESC" }, where: { order } })
         ).map(async (report) => await report.asJSON())
       ),
       count: await Report.count({ where: { order } }),

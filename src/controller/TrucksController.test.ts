@@ -5,7 +5,7 @@ import { Truck } from "../entity/Truck";
 import { Location } from "../entity/Location";
 import { ADDRESS_ERROR } from "../lib/validator/constants";
 import { buildTestData } from "../tests/factories";
-jest.mock("../lib/validator/normalizeAddress");
+jest.mock("../lib/validator/geocode");
 
 const controller = new TrucksController();
 
