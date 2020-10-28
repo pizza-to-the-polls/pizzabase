@@ -10,6 +10,8 @@ import {
   CONTACT_ERROR,
 } from "../lib/validator/constants";
 
+import { buildTestData } from "../tests/factories";
+
 jest.mock("../lib/validator/normalizeAddress");
 jest.mock("node-fetch");
 
@@ -365,5 +367,87 @@ describe("#create", () => {
     expect(report.order.id).toBe(order.id);
 
     expect(fetch.mock.calls.length).toEqual(0);
+  });
+});
+
+describe("#index", () => {
+  beforeEach(async () => await buildTestData());
+
+  test("Lists the reports", async () => {
+    const body = await controller.index(
+      http_mocks.createRequest(),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (await Report.find({ order: { createdAt: "desc" } })).map(
+          async (report) => await report.asJSON()
+        )
+      ),
+      count: await Report.count(),
+    });
+  });
+
+  test("Lists the reports for a truck", async () => {
+    const location = await Location.findOne();
+    const [truck] = await location.assignTruck();
+
+    const body = await controller.index(
+      http_mocks.createRequest({ query: { truck: truck.id } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (
+          await Report.find({ order: { createdAt: "desc" }, where: { truck } })
+        ).map(async (report) => await report.asJSON())
+      ),
+      count: await Report.count({ where: { truck } }),
+    });
+  });
+
+  test("Lists the reports for a location", async () => {
+    const location = await Location.findOne();
+
+    const body = await controller.index(
+      http_mocks.createRequest({ query: { location: location.id } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (
+          await Report.find({
+            order: { createdAt: "desc" },
+            where: { location },
+          })
+        ).map(async (report) => await report.asJSON())
+      ),
+      count: await Report.count({ where: { location } }),
+    });
+  });
+
+  test("Lists the reports for an order", async () => {
+    const order = await Order.findOne();
+
+    const body = await controller.index(
+      http_mocks.createRequest({ query: { order: order.id } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      results: await Promise.all(
+        (
+          await Report.find({ order: { createdAt: "desc" }, where: { order } })
+        ).map(async (report) => await report.asJSON())
+      ),
+      count: await Report.count({ where: { order } }),
+    });
   });
 });
