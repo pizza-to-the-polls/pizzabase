@@ -4,6 +4,7 @@ import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
+import { Action } from "../entity/Action";
 import {
   ADDRESS_ERROR,
   URL_ERROR,
@@ -63,6 +64,56 @@ describe("#create", () => {
     });
 
     expect(response.statusCode).toEqual(422);
+  });
+
+  test("Trusted reporters can override valdiation", async () => {
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        address: "not-valid",
+        user: "jimmy",
+        waitTime: "5000",
+        addressOverride: {
+          address: "123 Sesame",
+          city: "city",
+          state: "WA",
+          zip: "12345",
+          latitude: "420",
+          longitude: "-420",
+        },
+      },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({
+      address: "123 Sesame city WA 12345",
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toEqual(200);
+
+    const location = await Location.findOne({
+      where: { fullAddress: "123 Sesame city WA 12345" },
+    });
+    expect(location).toBeTruthy();
+    expect(location.validatedAt).toBeTruthy();
+
+    const report = await Report.findOne({ where: { location } });
+    expect(report).toBeTruthy();
+    expect(report.location).toEqual(location);
+    expect(report.order).toBeFalsy();
+    expect(report.waitTime).toEqual("5000");
+    expect(report.contactRole).toEqual("Trusted");
+
+    const action = await Action.findOne({
+      where: { entityId: report.id, entityType: report.constructor.name },
+    });
+    expect(action.userId).toEqual("jimmy");
   });
 
   test("New request/loc returns success, creates location, report, zaps new location", async () => {

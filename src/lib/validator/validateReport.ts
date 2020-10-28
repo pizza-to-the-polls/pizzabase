@@ -46,7 +46,6 @@ export const validateReport = async (
   canDistribute?: boolean;
 }> => {
   const errors: ValidationError = {};
-
   const reportURL = normalizeURL(
     url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : ""
   );

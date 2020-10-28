@@ -53,6 +53,7 @@ export class ReportsController {
 
   async create(request: Request, response: Response, _next: NextFunction) {
     const authed = await checkAuthorization(request);
+
     const {
       errors,
       normalizedAddress,
@@ -77,7 +78,8 @@ export class ReportsController {
     );
 
     if (authed) {
-      Action.log(report.location, "trusted report", request.body?.user);
+      await Action.log(report, "trusted report", request.body?.user);
+      await report.location.validate(request.body?.user);
     }
 
     if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
