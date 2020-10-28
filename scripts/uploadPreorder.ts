@@ -58,5 +58,5 @@ const preOrderReport = async (data: { [key: string]: string }, manager) => {
 };
 
 (async () => {
-  uploadBulkCSV(preOrderReport, process.argv[2], process.argv[3]);
+  await uploadBulkCSV(preOrderReport, process.argv[2], process.argv[3]);
 })();

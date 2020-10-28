@@ -75,5 +75,5 @@ const backfillReport = async (data: { [key: string]: string }, manager) => {
 };
 
 (async () => {
-  uploadBulkCSV(backfillReport, process.argv[2], process.argv[3]);
+  await uploadBulkCSV(backfillReport, process.argv[2], process.argv[3]);
 })();
