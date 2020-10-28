@@ -1,10 +1,26 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
-import { checkAuthorization } from "./helper";
+import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 
 export class ReportsController {
+  async show(request: Request, response: Response, next: NextFunction) {
+    const report: Report = await findOr404(
+      await Report.findOne({ where: { id: Number(request.params.id || "") } }),
+      response,
+      next
+    );
+    if (!report) return;
+
+    return {
+      ...report.asJSON(),
+      location: await report.location.asJSON(),
+      order: report.order?.asJSON(),
+      truck: report.truck?.asJSON(),
+    };
+  }
+
   async index(request: Request, _response: Response, _next: NextFunction) {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;

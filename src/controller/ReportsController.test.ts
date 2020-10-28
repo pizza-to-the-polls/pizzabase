@@ -451,3 +451,23 @@ describe("#index", () => {
     });
   });
 });
+
+describe("#show", () => {
+  beforeEach(async () => await buildTestData());
+
+  it("returns a report", async () => {
+    const report = await Report.findOne();
+    const body = await controller.show(
+      http_mocks.createRequest({ params: { id: `${report.id}` } }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(body).toEqual({
+      ...report.asJSON(),
+      location: await report.location.asJSON(),
+      order: report.order.asJSON(),
+      truck: report.truck?.asJSON(),
+    });
+  });
+});

@@ -68,6 +68,12 @@ export const Routes = [
     action: "index",
   },
   {
+    method: "get",
+    route: "/reports/:id",
+    controller: ReportsController,
+    action: "show",
+  },
+  {
     method: "post",
     route: "/truck",
     controller: TrucksController,
