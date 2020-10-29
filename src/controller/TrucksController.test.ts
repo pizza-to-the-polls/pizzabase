@@ -87,10 +87,8 @@ describe("#all", () => {
     const trucked = [];
 
     for (const location of locations) {
-      if (Math.random() > 0.5) {
-        await location.assignTruck("jim", "hobbiton-shire");
-        trucked.push(location.asJSON());
-      }
+      await location.assignTruck("jim", "hobbiton-shire");
+      trucked.push(await location.asJSON());
     }
 
     const body = await controller.all(
