@@ -8,6 +8,7 @@ import {
   zapSkipReport,
   zapTruckReport,
   zapNewOrder,
+  zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 
@@ -119,10 +120,12 @@ export class LocationsController {
 
     if (!location) return;
 
-    const openReports = (
-      await location.assignTruck(request.body?.user, request.body?.city_state)
-    )[1];
+    const [truck, openReports] = await location.assignTruck(
+      request.body?.user,
+      request.body?.city_state
+    );
 
+    await zapNewTruck(truck);
     for (const report of openReports) {
       await zapTruckReport(report);
     }

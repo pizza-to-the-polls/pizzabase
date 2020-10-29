@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Truck } from "../entity/Truck";
 import { isAuthorized } from "./helper";
 import { validateTruck } from "../lib/validator";
-import { zapTruckReport } from "../lib/zapier";
+import { zapTruckReport, zapNewTruck } from "../lib/zapier";
 
 export class TrucksController {
   async all(request: Request, _response: Response, _next: NextFunction) {
@@ -42,6 +42,7 @@ export class TrucksController {
       identifier,
       request.body?.user
     );
+    await zapNewTruck(truck);
     for (const report of openReports) {
       await zapTruckReport(report);
     }

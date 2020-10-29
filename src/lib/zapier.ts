@@ -3,11 +3,13 @@ import fetch from "node-fetch";
 import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
 import { Upload } from "../entity/Upload";
+import { Truck } from "../entity/Truck";
 
 enum ZapHooks {
   ZAP_NEW_REPORT = "ZAP_NEW_REPORT",
   ZAP_NEW_LOCATION = "ZAP_NEW_LOCATION",
   ZAP_NEW_ORDER = "ZAP_NEW_ORDER",
+  ZAP_NEW_TRUCK = "ZAP_NEW_TRUCK",
   ZAP_NEW_UPLOAD = "ZAP_NEW_UPLOAD",
   ZAP_ORDER_REPORT = "ZAP_ORDER_REPORT",
   ZAP_SKIP_REPORT = "ZAP_SKIP_REPORT",
@@ -46,6 +48,15 @@ const zapUpload = async (upload: Upload, hook: ZapHooks): Promise<void> =>
     hook
   );
 
+const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
+  zapAny(
+    {
+      ...truck.asJSON(),
+      location: await truck.location.asJSONPrivate(),
+    },
+    hook
+  );
+
 const zapAny = async (objs: any, hook: ZapHooks): Promise<void> =>
   process.env[hook as string] &&
   (await fetch(process.env[hook as string], {
@@ -66,6 +77,8 @@ export const zapNewOrder = async (order: Order, reports: Report[]) => {
 };
 export const zapNewUpload = async (upload: Upload) =>
   zapUpload(upload, ZapHooks.ZAP_NEW_UPLOAD);
+export const zapNewTruck = async (truck: Truck) =>
+  zapTruck(truck, ZapHooks.ZAP_NEW_TRUCK);
 const zapOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_ORDER_REPORT);
 export const zapSkipReport = async (report: Report) =>
