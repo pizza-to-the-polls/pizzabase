@@ -158,18 +158,14 @@ export class Location extends BaseEntity {
     await Action.log(this, "skipped", skippedBy);
   }
 
-  async assignTruck(
-    assignedBy?: string,
-    identifier?: string
-  ): Promise<[Truck, Report[]]> {
+  async assignTruck(assignedBy?: string, identifier?: string): Promise<Truck> {
     const truck = await Truck.createForLocation(this, identifier);
-    const openReports = await this.openReports();
     await Report.updateOpen(this, { truck });
 
     await this.validate(assignedBy);
     await Action.log(this, "assigned truck", assignedBy);
 
-    return [truck, openReports];
+    return truck;
   }
 
   static async fidByIdOrFullAddress(

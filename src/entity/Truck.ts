@@ -66,7 +66,7 @@ export class Truck extends BaseEntity {
     address: NormalAddress,
     identifier?: string,
     assignedBy?: string
-  ): Promise<[Truck, Report[]]> {
+  ): Promise<Truck> {
     const [location] = await Location.getOrCreateFromAddress(address);
     return await location.assignTruck(assignedBy, identifier);
   }

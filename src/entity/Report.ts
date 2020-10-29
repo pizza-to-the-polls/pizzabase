@@ -121,13 +121,16 @@ export class Report extends BaseEntity {
     };
   }
 
-  static async openReports(location: Location): Promise<Report[]> {
+  static async allReports(where): Promise<Report[]> {
     return await this.find({
-      where: {
-        location,
-        ...OPEN_QUERY,
-      },
+      where,
       order: { canDistribute: "DESC", createdAt: "ASC" },
+    });
+  }
+  static async openReports(location: Location): Promise<Report[]> {
+    return await this.allReports({
+      location,
+      ...OPEN_QUERY,
     });
   }
   static async updateOpen(location: Location, set): Promise<void> {

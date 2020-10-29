@@ -120,15 +120,13 @@ export class LocationsController {
 
     if (!location) return;
 
-    const [truck, openReports] = await location.assignTruck(
+    const truck = await location.assignTruck(
       request.body?.user,
       request.body?.city_state
     );
 
     await zapNewTruck(truck);
-    for (const report of openReports) {
-      await zapTruckReport(report);
-    }
+
     return { success: true };
   }
 
@@ -147,7 +145,7 @@ export class LocationsController {
       return { errors };
     }
 
-    await zapNewOrder(...(await Order.placeOrder(order, location)));
+    await zapNewOrder(await Order.placeOrder(order, location));
 
     return { success: true };
   }

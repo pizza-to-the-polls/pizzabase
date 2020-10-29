@@ -63,7 +63,7 @@ describe("#show", () => {
   test("Gets a location with an ID, returns orders and reports", async () => {
     const { id, fullAddress } = location ? location : null;
 
-    const [order] = await Order.placeOrder({ quantity: 1, cost: 5 }, location);
+    const order = await Order.placeOrder({ quantity: 1, cost: 5 }, location);
 
     const [report] = await Report.createNewReport(
       "333-234-2345",
@@ -424,7 +424,7 @@ describe("#truck", () => {
     expect(actionType).toEqual("assigned truck");
 
     await pending.reload();
-    expect(pending.truck).toBeTruthy();
+    expect(await pending.truck).toBeTruthy();
     await ordered.reload();
     expect(ordered.truck).toBeFalsy();
   });

@@ -344,7 +344,7 @@ describe("#create", () => {
     });
     location.validatedAt = new Date();
     await location.save();
-    const [truck] = await location.assignTruck("scott", "detroit-mi");
+    const truck = await location.assignTruck("scott", "detroit-mi");
 
     const request = http_mocks.createRequest({
       method: "POST",
@@ -388,7 +388,7 @@ describe("#create", () => {
       zip: "60615",
     });
 
-    const [order] = await Order.placeOrder(
+    const order = await Order.placeOrder(
       { cost: 50, quantity: 5 },
       report.location
     );
@@ -443,7 +443,7 @@ describe("#index", () => {
 
   test("Lists the reports for a truck", async () => {
     const location = await Location.findOne();
-    const [truck] = await location.assignTruck();
+    const truck = await location.assignTruck();
 
     const body = await controller.index(
       http_mocks.createRequest({ query: { truck: truck.id } }),

@@ -21,7 +21,13 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
     {
       report: report.asJSONPrivate(),
       location: await report.location.asJSONPrivate(),
-      order: report.order?.asJSONPrivate(),
+      order: report.order
+        ? {
+            ...report.order.asJSONPrivate(),
+            distributor: await report.order.distributor(),
+          }
+        : undefined,
+      truck: report.truck ? report.truck.asJSON() : undefined,
     },
     hook
   );
@@ -31,7 +37,10 @@ const zapOrder = async (order: Order, hook: ZapHooks): Promise<void> =>
     {
       reports: (await order.reports).map((report) => report.asJSONPrivate()),
       location: await order.location.asJSONPrivate(),
-      order: order.asJSONPrivate(),
+      order: {
+        ...order.asJSONPrivate(),
+        distributor: await order.distributor(),
+      },
     },
     hook
   );
@@ -69,16 +78,30 @@ export const zapNewReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_NEW_REPORT);
 export const zapNewLocation = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_NEW_LOCATION);
-export const zapNewOrder = async (order: Order, reports: Report[]) => {
+export const zapNewOrder = async (order: Order) => {
   await zapOrder(order, ZapHooks.ZAP_NEW_ORDER);
+  const reports = await Report.find({
+    where: { order },
+    relations: ["location"],
+  });
+
+  for (const report of reports) {
+    await zapOrderReport(report);
+  }
+};
+export const zapNewTruck = async (truck: Truck) => {
+  await zapTruck(truck, ZapHooks.ZAP_NEW_TRUCK);
+  const reports = await Report.find({
+    where: { truck },
+    relations: ["location"],
+  });
+
   for (const report of reports) {
     await zapOrderReport(report);
   }
 };
 export const zapNewUpload = async (upload: Upload) =>
   zapUpload(upload, ZapHooks.ZAP_NEW_UPLOAD);
-export const zapNewTruck = async (truck: Truck) =>
-  zapTruck(truck, ZapHooks.ZAP_NEW_TRUCK);
 const zapOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_ORDER_REPORT);
 export const zapSkipReport = async (report: Report) =>
