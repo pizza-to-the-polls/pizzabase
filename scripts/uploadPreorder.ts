@@ -3,7 +3,10 @@ import { validateReport, validateOrder } from "../src/lib/validator";
 import { Order } from "../src/entity/Order";
 import { Location } from "../src/entity/Location";
 
-const preOrderReport = async (data: { [key: string]: string }, manager) => {
+const preOrderReport = async (
+  data: { [key: string]: string },
+  manager
+): Promise<boolean> => {
   const {
     Address,
     Timezone,
@@ -55,6 +58,7 @@ const preOrderReport = async (data: { [key: string]: string }, manager) => {
     location.id
   }
     `);
+  return true;
 };
 
 (async () => {
