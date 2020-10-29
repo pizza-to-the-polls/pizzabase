@@ -89,6 +89,7 @@ jobs:
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           STATIC_SITE: 'https://polls.pizza'
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
+          ALLOWED_ORIGINS: polls.pizza
 
       - name: sync schema
         run: npm run schema:sync
