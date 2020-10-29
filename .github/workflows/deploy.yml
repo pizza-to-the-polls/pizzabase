@@ -91,6 +91,8 @@ jobs:
           STATIC_SITE: 'https://polls.pizza'
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
           ALLOWED_ORIGINS: polls.pizza
+          STRIPE_SECRET_KEY: ${{ secrets.STRIPE_KEY }}
+          STRIPE_PRODUCT_ID: ${{ secrets.STRIPE_PRODUCT_ID }}
 
       - name: sync schema
         run: npm run schema:sync

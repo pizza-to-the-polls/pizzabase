@@ -61,7 +61,7 @@ export class DonationsController {
               numberOfPizzas === 1 ? "pizza" : "pizzas"
             }`,
             price_data: {
-              product: process.env.DONATION_PRODUCT_ID,
+              product: process.env.STRIPE_PRODUCT_ID,
               unit_amount: amountUsd * 100,
               currency: "usd",
             },
@@ -72,8 +72,8 @@ export class DonationsController {
         metadata: {
           referrer,
         },
-        success_url: `${process.env.CLIENT_APP_URL}/donate?success=true&amount_usd=${amountUsd}`,
-        cancel_url: `${process.env.CLIENT_APP_URL}/donate`,
+        success_url: `${process.env.STATIC_SITE}/donate?success=true&amount_usd=${amountUsd}`,
+        cancel_url: `${process.env.STATIC_SITE}/donate`,
       });
 
       return { success: true, checkoutSessionId: session.id };

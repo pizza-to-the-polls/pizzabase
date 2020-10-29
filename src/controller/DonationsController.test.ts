@@ -20,8 +20,8 @@ describe("#create", () => {
     (Stripe as any).mockImplementation(() => mockStripeClient);
 
     process.env.STRIPE_SECRET_KEY = "STRIPE SECRET KEY";
-    process.env.DONATION_PRODUCT_ID = "stripe_product_12345";
-    process.env.CLIENT_APP_URL = "http://polls.pizza";
+    process.env.STRIPE_PRODUCT_ID = "stripe_product_12345";
+    process.env.STATIC_SITE = "http://polls.pizza";
   });
 
   it("constructs a Stripe client using our secret key", async () => {
