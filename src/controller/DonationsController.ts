@@ -22,8 +22,6 @@ export class DonationsController {
       return `Webhook Error: ${err.message}`;
     }
 
-    // const { type, data } = request.body;
-
     switch (event.type) {
       case "charge.succeeded":
         await Donation.succeedCharge(event.data.object);
