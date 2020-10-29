@@ -62,6 +62,7 @@ const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
     {
       ...truck.asJSON(),
       location: await truck.location.asJSONPrivate(),
+      reports: (await truck.reports).map((report) => report.asJSONPrivate()),
     },
     hook
   );
