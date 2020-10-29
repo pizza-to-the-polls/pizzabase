@@ -97,7 +97,7 @@ export const zapNewTruck = async (truck: Truck) => {
   });
 
   for (const report of reports) {
-    await zapOrderReport(report);
+    await zapTruckReport(report);
   }
 };
 export const zapNewUpload = async (upload: Upload) =>
@@ -106,5 +106,5 @@ const zapOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_ORDER_REPORT);
 export const zapSkipReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_SKIP_REPORT);
-export const zapTruckReport = async (report: Report) =>
+const zapTruckReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_TRUCK_REPORT);

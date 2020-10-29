@@ -6,7 +6,6 @@ import { findOr404, isAuthorized, checkAuthorization } from "./helper";
 import {
   zapNewReport,
   zapSkipReport,
-  zapTruckReport,
   zapNewOrder,
   zapNewTruck,
 } from "../lib/zapier";
