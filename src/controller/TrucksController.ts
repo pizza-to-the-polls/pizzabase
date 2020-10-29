@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Truck } from "../entity/Truck";
 import { isAuthorized } from "./helper";
 import { validateTruck } from "../lib/validator";
-import { zapTruckReport } from "../lib/zapier";
+import { zapNewTruck } from "../lib/zapier";
 
 export class TrucksController {
   async all(request: Request, _response: Response, _next: NextFunction) {
@@ -37,14 +37,12 @@ export class TrucksController {
       return { errors };
     }
 
-    const [truck, openReports] = await Truck.createForAddress(
+    const truck = await Truck.createForAddress(
       normalizedAddress,
       identifier,
       request.body?.user
     );
-    for (const report of openReports) {
-      await zapTruckReport(report);
-    }
+    await zapNewTruck(truck);
 
     return {
       address: truck.location.fullAddress,

@@ -17,12 +17,9 @@ export class OrdersController {
       response.status(422);
       return { errors };
     }
-    const [order, newReports] = await Order.placeOrderForAddress(
-      rawOrder,
-      normalizedAddress
-    );
+    const order = await Order.placeOrderForAddress(rawOrder, normalizedAddress);
 
-    await zapNewOrder(order, newReports);
+    await zapNewOrder(order);
 
     return { address: order.location.fullAddress };
   }

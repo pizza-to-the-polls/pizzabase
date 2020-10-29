@@ -6,8 +6,8 @@ import { findOr404, isAuthorized, checkAuthorization } from "./helper";
 import {
   zapNewReport,
   zapSkipReport,
-  zapTruckReport,
   zapNewOrder,
+  zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 
@@ -119,13 +119,13 @@ export class LocationsController {
 
     if (!location) return;
 
-    const openReports = (
-      await location.assignTruck(request.body?.user, request.body?.city_state)
-    )[1];
+    const truck = await location.assignTruck(
+      request.body?.user,
+      request.body?.city_state
+    );
 
-    for (const report of openReports) {
-      await zapTruckReport(report);
-    }
+    await zapNewTruck(truck);
+
     return { success: true };
   }
 
@@ -144,7 +144,7 @@ export class LocationsController {
       return { errors };
     }
 
-    await zapNewOrder(...(await Order.placeOrder(order, location)));
+    await zapNewOrder(await Order.placeOrder(order, location));
 
     return { success: true };
   }

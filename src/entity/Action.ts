@@ -19,7 +19,7 @@ export class Action extends BaseEntity {
   @Index()
   userId: string;
 
-  @Column({ name: "action_type" })
+  @Column({ name: "entity_type" })
   @Index()
   entityType: string;
 
@@ -27,7 +27,7 @@ export class Action extends BaseEntity {
   @Index()
   entityId: number;
 
-  @Column({ name: "entity_type" })
+  @Column({ name: "action_type" })
   @Index()
   actionType: string;
 

@@ -66,6 +66,11 @@ export class Order extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
+  async distributor(): Promise<Report | null> {
+    const [reports] = await Report.allReports({ order: this });
+    return (reports?.canDistribute || 0) > 0 ? reports : null;
+  }
+
   asJSON(showPrivate: boolean = false) {
     if (showPrivate) return this.asJSONPrivate();
 
@@ -97,7 +102,7 @@ export class Order extends BaseEntity {
       user?: string;
     },
     address: NormalAddress
-  ): Promise<[Order, Report[]]> {
+  ): Promise<Order> {
     const [location] = await Location.getOrCreateFromAddress(address);
 
     return await this.placeOrder(orderParams, location);
@@ -118,7 +123,7 @@ export class Order extends BaseEntity {
       user?: string;
     },
     location: Location
-  ): Promise<[Order, Report[]]> {
+  ): Promise<Order> {
     const order = new this();
 
     order.quantity = quantity;
@@ -129,12 +134,11 @@ export class Order extends BaseEntity {
     order.location = location;
 
     await order.save();
-    const openReports = await location.openReports();
     await Report.updateOpen(location, { order });
     await location.validate(user);
 
     await Action.log(order, "ordered", user);
 
-    return [order, openReports];
+    return order;
   }
 }

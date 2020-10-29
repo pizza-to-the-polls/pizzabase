@@ -83,6 +83,7 @@ jobs:
           ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
           ZAP_NEW_ORDER: ${{ secrets.ZAP_NEW_ORDER }}
           ZAP_NEW_UPLOAD: ${{ secrets.ZAP_NEW_UPLOAD }}
+          ZAP_NEW_TRUCK: ${{ secrets.ZAP_NEW_TRUCK }}
           ZAP_SKIP_REPORT: ${{ secrets.ZAP_SKIP_REPORT }}
           ZAP_TRUCK_REPORT: ${{ secrets.ZAP_TRUCK_REPORT }}
           ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}

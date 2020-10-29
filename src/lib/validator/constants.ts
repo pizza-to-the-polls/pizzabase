@@ -10,6 +10,9 @@ export const UPLOAD_ERROR =
   "Whoops! That's not a valid file. Try sending us an image";
 export const ORDER_TYPE_ERROR =
   "Whoops! That's not a valid order type. Try sending pizzas or donuts or something else";
+export const AMOUNT_ERROR =
+  "Whoops! That's not a valid donation amount - send a number";
+export const EMAIL_ERROR = "Whoops! That's not a valid email";
 
 export const UPLOAD_CONTENT_TYPES = {
   gif: "image/gif",
