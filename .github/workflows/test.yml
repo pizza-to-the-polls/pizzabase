@@ -92,6 +92,8 @@ jobs:
           ZAP_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
           BUGSNAG_ENV: 'dev'
+          STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}
+          STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID  }}
 
       - name: sync schema
         run: npm run schema:sync

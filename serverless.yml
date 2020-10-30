@@ -30,6 +30,9 @@ provider:
     STATIC_SITE: ${env:STATIC_SITE}
     UPLOAD_S3_BUCKET: reports.polls.pizza
 
+    STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
+    STRIPE_PRODUCT_ID: ${env:STRIPE_PRODUCT_ID}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:
