@@ -2,7 +2,7 @@ import { Donation } from "../src/entity/Donation";
 
 // See Stripe documentation here: https://stripe.com/docs/api/charges/list?lang=node
 
-const stripe = require("stripe")("sk_test_23aRsCkc4f9KwNcYm5fKUtQY");
+const stripe = require("stripe")(process.env.STRIPE_KEY);
 const maxChargesPerPage = 100; // 1 to 100
 
 (async () => {
