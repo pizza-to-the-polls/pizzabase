@@ -17,9 +17,12 @@ const maxChargesPerPage = 100; // 1 to 100
     for (let index in charges.data) {
       let charge = charges.data[index];
       console.log(charge.id);
-      // save the charge
-      if (charge.amount_captured > 0) {
-        Donation.succeedCharge(charge);
+      // save the charge if not refunded 
+      if (charge.amount > 0 && charge.amount_refunded == 0) {
+        let donation = await Donation.succeedCharge(charge);
+        donation.createdAt = charge.created;
+        donation.updatedAt = charge.created;
+        donation.save();
       }
     }
     // Get the next page. 
