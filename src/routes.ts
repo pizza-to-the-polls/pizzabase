@@ -122,4 +122,10 @@ export const Routes = [
     controller: DonationsController,
     action: "create",
   },
+  {
+    method: "post",
+    route: "/webhook",
+    controller: DonationsController,
+    action: "webhook",
+  },
 ];
