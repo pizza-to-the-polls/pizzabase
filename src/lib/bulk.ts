@@ -29,14 +29,18 @@ export const uploadBulkCSV = async (
   for (let num = Number(start || 0); num < data.length; ++num) {
     const row = data[num];
     let success;
+    let msg;
     try {
       success = await callback(row, manager);
     } catch (e) {
       success = false;
+      msg = e;
     }
     if (!success) failures.push(row);
 
-    console.log(`${num + 1} / ${data.length} ${success ? "success" : "fail"}`);
+    console.log(
+      `${num + 1} / ${data.length} ${success ? "success" : `fail with ${msg}`}`
+    );
     await new Promise((accept) => setTimeout(accept, 150));
   }
 

@@ -29,7 +29,7 @@ const preOrderReport = async (
     .reverse()
     .map((el) => el.trim());
 
-  if (restaurant) {
+  if (restaurant.length < 4) {
     throw new Error("No restaurant");
   }
   const { errors, normalizedAddress } = await validateReport({

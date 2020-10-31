@@ -12,7 +12,7 @@ export class TotalsController {
   }
   private toTotals(totals) {
     const { fees, ...rest } = this.toNumber(totals);
-    rest.costs = totals.costs + fees;
+    rest.costs = Math.floor((totals.costs + fees) * 100) / 100;
     return rest;
   }
   private ORDER_QUERY = `
