@@ -1,6 +1,8 @@
 import * as http_mocks from "node-mocks-http";
-import { DonationsController } from "./DonationsController";
 import Stripe from "stripe";
+
+import { DonationsController } from "./DonationsController";
+import { Donation } from "../entity/Donation";
 
 jest.mock("stripe");
 
@@ -96,5 +98,185 @@ describe("#create", () => {
         referrer: "http://google.com",
       },
     });
+  });
+});
+
+describe("#webhook", () => {
+  let mockStripeClient;
+
+  beforeEach(() => {
+    mockStripeClient = {
+      webhooks: {
+        constructEvent: jest.fn((blob) => JSON.parse(blob)),
+      },
+    };
+    (Stripe as any).mockImplementation(() => mockStripeClient);
+  });
+
+  it("constructs a Stripe client using our secret key and valdiates the webhook", async () => {
+    process.env.STRIPE_SECRET_KEY = "STRIPE SECRET KEY";
+    process.env.STRIPE_SECRET_WH = "STRIPE WEBHOOK SECRET";
+
+    const STRIPE_SIG = "this-is-real-webhook";
+    const id = "stripe_tokengoeshere";
+    const amount = 500_00;
+    const email = "sds@example.net";
+    const postalCode = "12345";
+    const referrer = "good-friends";
+    const body = {
+      type: "charge.succeeded",
+      data: {
+        object: {
+          id,
+          amount,
+          billing_details: { email, postal_code: postalCode },
+          metadata: { referrer },
+        },
+      },
+    };
+
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": STRIPE_SIG },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    expect(Stripe).toHaveBeenCalledWith("STRIPE SECRET KEY", {
+      apiVersion: "2020-08-27",
+    });
+    expect(mockStripeClient.webhooks.constructEvent).toHaveBeenCalledWith(
+      JSON.stringify(body),
+      STRIPE_SIG,
+      process.env.STRIPE_SECRET_WH
+    );
+  });
+
+  it("counts a successful charge", async () => {
+    const id = "stripe_tokengoeshere";
+    const amount = 500_00;
+    const email = "sds@example.net";
+    const postalCode = "12345";
+    const referrer = "good-friends";
+    const body = {
+      type: "charge.succeeded",
+      data: {
+        object: {
+          id,
+          amount,
+          billing_details: { email, postal_code: postalCode },
+          metadata: { referrer },
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const donation = await Donation.findOne({ where: { email } });
+    expect(donation.stripeId).toEqual(id);
+    expect(donation.amountGross).toEqual(amount / 100);
+    expect(donation.amount).toEqual(485.20);
+    expect(donation.email).toEqual(email);
+    expect(donation.postalCode).toEqual(postalCode);
+    expect(donation.referrer).toEqual(referrer);
+  });
+
+  it("deducts a failed charge", async () => {
+    const id = "stripe_tokengoeshere";
+
+    const donation = new Donation();
+    donation.stripeId = id;
+    donation.email = "brap@example.com";
+    donation.amount = 500;
+    donation.amountGross = 500;
+    await donation.save();
+
+    const body = {
+      type: "charge.failed",
+      data: {
+        object: {
+          id,
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    await donation.reload();
+    expect(donation.cancelNote).toEqual("failed");
+    expect(donation.cancelledAt).toBeTruthy();
+  });
+
+  it("deducts a refunded", async () => {
+    const id = "stripe_tokengoeshere";
+
+    const donation = new Donation();
+    donation.stripeId = id;
+    donation.email = "brap@example.com";
+    donation.amount = 500;
+    donation.amountGross = 500;
+    await donation.save();
+
+    const body = {
+      type: "charge.refunded",
+      data: {
+        object: {
+          id,
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    await donation.reload();
+    expect(donation.cancelNote).toEqual("refunded");
+    expect(donation.cancelledAt).toBeTruthy();
+  });
+
+  it("deducts a dispute.funds_withdrawn", async () => {
+    const id = "stripe_tokengoeshere";
+
+    const donation = new Donation();
+    donation.stripeId = id;
+    donation.email = "brap@example.com";
+    donation.amount = 500;
+    donation.amountGross = 500;
+    await donation.save();
+
+    const body = {
+      type: "charge.dispute.funds_withdrawn",
+      data: {
+        object: {
+          id,
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    await donation.reload();
+    expect(donation.cancelNote).toEqual("dispute.funds_withdrawn");
+    expect(donation.cancelledAt).toBeTruthy();
   });
 });

@@ -11,15 +11,14 @@ export class DonationsController {
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
         apiVersion: "2020-08-27",
       });
-
       event = stripe.webhooks.constructEvent(
         JSON.stringify(request.body),
         request.headers["stripe-signature"],
-        process.env.STRIPE_WH_SECRET
+        process.env.STRIPE_SECRET_WH
       );
     } catch (err) {
       response.status(400);
-      return `Webhook Error: ${err.message}`;
+      return { errors: [`Webhook Error: ${err.message}`] };
     }
 
     switch (event.type) {

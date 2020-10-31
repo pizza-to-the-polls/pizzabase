@@ -93,7 +93,8 @@ jobs:
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
           BUGSNAG_ENV: 'dev'
           STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}
-          STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID  }}
+          STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID }}
+          STRIPE_SECRET_WH: ${{ secrets.STAGING_STAGING_STRIPE_WH }}
 
       - name: sync schema
         run: npm run schema:sync

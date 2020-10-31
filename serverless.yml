@@ -31,6 +31,7 @@ provider:
     UPLOAD_S3_BUCKET: reports.polls.pizza
 
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
+    STRIPE_SECRET_WH: ${env:STRIPE_SECRET_WH}
     STRIPE_PRODUCT_ID: ${env:STRIPE_PRODUCT_ID}
 
   iamRoleStatements:

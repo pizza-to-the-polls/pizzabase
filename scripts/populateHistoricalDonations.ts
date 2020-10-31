@@ -1,5 +1,5 @@
 import { Donation } from "../src/entity/Donation";
-import * as Stripe from "stripe"
+import * as Stripe from "stripe";
 // See Stripe documentation here: https://stripe.com/docs/api/charges/list?lang=node
 
 const stripe = Stripe(process.env.STRIPE_KEY);
