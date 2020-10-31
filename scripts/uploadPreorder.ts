@@ -29,6 +29,9 @@ const preOrderReport = async (
     .reverse()
     .map((el) => el.trim());
 
+  if ( restaurant ) {
+    throw "No restaurant"
+  }
   const { errors, normalizedAddress } = await validateReport({
     url: "http://example.com",
     contact: "fake@example.com",
@@ -46,7 +49,7 @@ const preOrderReport = async (
     user: who,
   });
 
-  const [order] = await Order.placeOrder(orderInput, location);
+  const order = await Order.placeOrder(orderInput, location);
   await location.validate(who);
   await manager.query(`
       UPDATE orders SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${

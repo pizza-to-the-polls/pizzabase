@@ -41,7 +41,7 @@ const backfillReport = async (data: { [key: string]: string }, manager) => {
   const orderInput = await validateOrder({ quantity: pizzas, cost, user: who });
 
   if (status.match(SUCCESS) && orderInput.cost) {
-    const [order] = await Order.placeOrder(orderInput, location);
+    const order = await Order.placeOrder(orderInput, location);
     await location.validate(who);
     await manager.query(`
         UPDATE orders SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${
@@ -49,7 +49,17 @@ const backfillReport = async (data: { [key: string]: string }, manager) => {
     }
       `);
     await manager.query(`
+        UPDATE actions SET created_at = '${newNow.toISOString()}' WHERE entity_type = 'Order' AND entity_id = ${
+      order.id
+    }
+      `);
+    await manager.query(`
         UPDATE locations SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}', validated_at = '${newNow.toISOString()}' WHERE id = ${
+      location.id
+    }
+      `);
+    await manager.query(`
+        UPDATE actions SET created_at = '${newNow.toISOString()}' WHERE entity_type = 'Location' AND entity_id = ${
       location.id
     }
       `);
@@ -71,6 +81,7 @@ const backfillReport = async (data: { [key: string]: string }, manager) => {
     }
       `);
   }
+
   return true;
 };
 
