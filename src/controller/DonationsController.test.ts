@@ -60,8 +60,8 @@ describe("#create", () => {
         },
       ],
       mode: "payment",
-      success_url: "http://polls.pizza/donate?success=true&amount_usd=10",
-      cancel_url: "http://polls.pizza/donate",
+      success_url: "http://polls.pizza/donate/?success=true&amount_usd=10",
+      cancel_url: "http://polls.pizza/donate/",
       metadata: {
         referrer: "http://google.com",
       },
@@ -92,8 +92,8 @@ describe("#create", () => {
         },
       ],
       mode: "payment",
-      success_url: "http://polls.pizza/donate?success=true&amount_usd=100",
-      cancel_url: "http://polls.pizza/donate",
+      success_url: "http://polls.pizza/donate/?success=true&amount_usd=100",
+      cancel_url: "http://polls.pizza/donate/",
       metadata: {
         referrer: "http://google.com",
       },
