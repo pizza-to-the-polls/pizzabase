@@ -107,7 +107,7 @@ describe("#webhook", () => {
   beforeEach(() => {
     mockStripeClient = {
       webhooks: {
-        constructEvent: jest.fn((blob) => JSON.parse(blob)),
+        constructEvent: jest.fn((body) => body),
       },
     };
     (Stripe as any).mockImplementation(() => mockStripeClient);
@@ -137,7 +137,7 @@ describe("#webhook", () => {
 
     await controller.webhook(
       http_mocks.createRequest({
-        rawBody: JSON.stringify(body),
+        body,
         headers: { "stripe-signature": STRIPE_SIG },
       }),
       http_mocks.createResponse(),
@@ -147,7 +147,7 @@ describe("#webhook", () => {
       apiVersion: "2020-08-27",
     });
     expect(mockStripeClient.webhooks.constructEvent).toHaveBeenCalledWith(
-      JSON.stringify(body),
+      body,
       STRIPE_SIG,
       process.env.STRIPE_SECRET_WH
     );
@@ -172,7 +172,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        rawBody: JSON.stringify(body),
+        body,
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
@@ -207,7 +207,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        rawBody: JSON.stringify(body),
+        body,
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
@@ -238,7 +238,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        rawBody: JSON.stringify(body),
+        body,
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
@@ -269,7 +269,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        rawBody: JSON.stringify(body),
+        body,
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
