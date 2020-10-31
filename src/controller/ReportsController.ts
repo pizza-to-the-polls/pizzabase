@@ -17,8 +17,8 @@ export class ReportsController {
     return {
       ...report.asJSON(),
       location: await report.location.asJSON(),
-      order: report.order?.asJSON(),
-      truck: report.truck?.asJSON(),
+      order: (await report.order)?.asJSON(),
+      truck: (await report.truck)?.asJSON(),
     };
   }
 

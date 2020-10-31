@@ -90,9 +90,7 @@ export class Location extends BaseEntity {
       },
     });
   }
-  async hasTruckJSON(): Promise<
-    { createdAt: Date; identifier: string } | false
-  > {
+  async hasTruckJSON(): Promise<{ [key: string]: string | boolean } | false> {
     const truck = await this.activeTruck();
     return truck ? truck.asJSON() : false;
   }
