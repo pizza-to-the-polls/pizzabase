@@ -32,6 +32,7 @@ app.use(
     optionsSuccessStatus: 200,
   })
 );
+app.use("/webhook", bodyParser.raw({ type: "*/*" }));
 app.use(bodyParser.json());
 
 app.set("trust proxy", true);

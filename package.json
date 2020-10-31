@@ -34,7 +34,7 @@
     "serverless": "^2.1.1",
     "serverless-http": "^2.6.0",
     "smartystreets-javascript-sdk": "^1.5.0",
-    "stripe": "^8.115.0",
+    "stripe": "^8.119.0",
     "typeorm": "0.2.26",
     "typeorm-aurora-data-api-driver": "^1.4.0",
     "uuid": "^8.3.1"

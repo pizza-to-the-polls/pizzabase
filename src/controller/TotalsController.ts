@@ -26,6 +26,7 @@ export class TotalsController {
       SUM(donations.amount) as raised,
       COUNT(DISTINCT donations.email) as donors
     FROM donations
+    WHERE cancelled_at is NULL
   `;
   async overall(_request: Request, _response: Response, _next: NextFunction) {
     const { manager } = await getConnection();
@@ -42,7 +43,7 @@ export class TotalsController {
     return this.toNumber({
       ...(
         await manager.query(
-          `${this.DONATION_QUERY} WHERE date_part('year', donations.created_at) = ${year}`
+          `${this.DONATION_QUERY} AND date_part('year', donations.created_at) = ${year}`
         )
       )[0],
       ...(
