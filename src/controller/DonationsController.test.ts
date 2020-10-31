@@ -129,7 +129,7 @@ describe("#webhook", () => {
         object: {
           id,
           amount,
-          billing_details: { email, postal_code: postalCode },
+          billing_details: { email, address: { postal_code: postalCode } },
           metadata: { referrer },
         },
       },
@@ -165,7 +165,7 @@ describe("#webhook", () => {
         object: {
           id,
           amount,
-          billing_details: { email, postal_code: postalCode },
+          billing_details: { email, address: { postal_code: postalCode } },
           metadata: { referrer },
         },
       },

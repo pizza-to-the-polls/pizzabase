@@ -55,13 +55,16 @@ export class Donation extends BaseEntity {
   static async succeedCharge({
     id,
     amount,
-    billing_details: { email, postal_code },
+    billing_details: {
+      email,
+      address: { postal_code },
+    },
     metadata: { referrer },
   }: {
     id: string;
     amount: number;
     metadata: { referrer?: string };
-    billing_details: { email: string; postal_code: string };
+    billing_details: { email: string; address: { postal_code: string } };
   }): Promise<Donation> {
     const donation = new Donation();
     donation.amountGross = amount / 100;
