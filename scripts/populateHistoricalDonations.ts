@@ -1,8 +1,8 @@
 import { Donation } from "../src/entity/Donation";
-
+import * as Stripe from "stripe"
 // See Stripe documentation here: https://stripe.com/docs/api/charges/list?lang=node
 
-const stripe = require("stripe")(process.env.STRIPE_KEY);
+const stripe = Stripe(process.env.STRIPE_KEY);
 const maxChargesPerPage = 100; // 1 to 100
 
 (async () => {
@@ -14,12 +14,12 @@ const maxChargesPerPage = 100; // 1 to 100
 
   // Paginate until we run out of transactions.
   while (charges.data.length > 0) {
-    for (const index in charges.data) {
+    for (const index of charges.data) {
       const charge = charges.data[index];
       console.log(charge.id);
       // save the charge if not refunded
-      if (charge.amount > 0 && charge.amount_refunded == 0) {
-        let donation = await Donation.succeedCharge(charge);
+      if (charge.amount > 0 && charge.amount_refunded === 0) {
+        const donation = await Donation.succeedCharge(charge);
         donation.createdAt = charge.created;
         donation.updatedAt = charge.created;
         donation.save();
