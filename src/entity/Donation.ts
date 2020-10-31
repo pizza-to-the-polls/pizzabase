@@ -55,6 +55,7 @@ export class Donation extends BaseEntity {
   static async succeedCharge({
     id,
     amount,
+    receipt_email,
     billing_details: {
       email,
       address: { postal_code },
@@ -63,13 +64,14 @@ export class Donation extends BaseEntity {
   }: {
     id: string;
     amount: number;
+    receipt_email: string;
     metadata: { referrer?: string };
     billing_details: { email: string; address: { postal_code: string } };
   }): Promise<Donation> {
     const donation = new Donation();
     donation.amountGross = amount / 100;
     donation.amount = Math.floor(amount * (1 - 0.029) - 0.3 * 100) / 100;
-    donation.email = email;
+    donation.email = email || receipt_email;
     donation.stripeId = id;
     donation.postalCode = postal_code;
     donation.referrer = referrer;
