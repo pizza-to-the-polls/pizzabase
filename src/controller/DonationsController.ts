@@ -69,8 +69,8 @@ export class DonationsController {
         metadata: {
           referrer,
         },
-        success_url: `${process.env.STATIC_SITE}/donate?success=true&amount_usd=${amountUsd}`,
-        cancel_url: `${process.env.STATIC_SITE}/donate`,
+        success_url: `${process.env.STATIC_SITE}/donate/?success=true&amount_usd=${amountUsd}`,
+        cancel_url: `${process.env.STATIC_SITE}/donate/`,
       });
 
       return { success: true, checkoutSessionId: session.id };
