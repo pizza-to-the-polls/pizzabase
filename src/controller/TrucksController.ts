@@ -9,18 +9,29 @@ export class TrucksController {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;
     const skip = Number(request.query.page || 0) * limit;
+    const past = !!request.query.past;
+    const location = request.query.location
+      ? { location: { id: request.query.location } }
+      : {};
 
-    const [trucks, count] = await Truck.findAndCountActiveTrucks({
-      take,
-      skip,
-    });
+    const [trucks, count] = past
+      ? await Truck.findAndCount({
+          where: { ...location },
+          order: { createdAt: "DESC" },
+          take,
+          skip,
+        })
+      : await Truck.findAndCountActiveTrucks({
+          take,
+          skip,
+          location,
+        });
 
     return {
       results: await Promise.all(
-        trucks.map(async ({ identifier, createdAt, location }) => ({
-          createdAt,
-          region: identifier,
-          location: await location.asJSON(),
+        trucks.map(async (truck) => ({
+          ...truck.asJSON(),
+          location: await truck.location.asJSON(),
         }))
       ),
       count,

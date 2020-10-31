@@ -43,20 +43,30 @@ export class Truck extends BaseEntity {
 
   asJSON() {
     const { createdAt, identifier } = this;
-    return { createdAt, identifier };
+    return {
+      isActive: new Date(Number(new Date()) - TRUCK_DECAY) > createdAt,
+      createdAt,
+      region: identifier,
+    };
   }
 
-  static async findAndCountActiveTrucks({
-    take,
-    skip,
-  }: {
-    take: number;
-    skip: number;
-  }): Promise<[Truck[], number]> {
+  static async findAndCountActiveTrucks(
+    {
+      take,
+      skip,
+      location,
+    }: {
+      take: number;
+      skip: number;
+      location?: { location?: { id: number } };
+    } = { take: 0, skip: 0 }
+  ): Promise<[Truck[], number]> {
     return this.findAndCount({
       where: {
         createdAt: MoreThan(new Date(Number(new Date()) - TRUCK_DECAY)),
+        ...(location || {}),
       },
+      order: { createdAt: "DESC" },
       take,
       skip,
     });

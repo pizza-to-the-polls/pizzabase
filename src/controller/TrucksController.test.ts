@@ -80,17 +80,26 @@ describe("#create", () => {
 });
 
 describe("#all", () => {
-  beforeEach(async () => await buildTestData());
-
-  it("returns the active trucks", async () => {
+  beforeEach(async () => {
+    await buildTestData();
     const locations = await Location.find();
-    const trucked = [];
+    let trucks = 0;
 
     for (const location of locations) {
-      await location.assignTruck("jim", "hobbiton-shire");
-      trucked.push(await location.asJSON());
+      const truck = await location.assignTruck("jim", "hobbiton-shire");
+      const old = new Date(new Date(Number(new Date()) - 1000 * 60 * 60 * 5));
+      trucks += 1;
+      if (trucks > 3) {
+        await Location.query(`
+          UPDATE trucks SET created_at = '${old.toISOString()}' WHERE trucks.id = ${
+          truck.id
+        }
+        `);
+      }
     }
+  });
 
+  it("returns the active trucks", async () => {
     const body = await controller.all(
       http_mocks.createRequest({
         method: "GET",
@@ -99,11 +108,68 @@ describe("#all", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    expect(body.count).toEqual(trucked.length);
+    const [trucks, active] = await Truck.findAndCountActiveTrucks();
+    expect(body.count).toEqual(active);
     expect(body.results.length).toEqual(3);
-    expect(body.results[0].region).toEqual("hobbiton-shire");
-    expect(body.results.map(({ location }) => location)).toEqual(
-      trucked.slice(0, 3)
+    expect(body.results).toEqual(
+      await Promise.all(
+        trucks.slice(0, 3).map(async (truck) => ({
+          ...truck.asJSON(),
+          location: await truck.location.asJSON(),
+        }))
+      )
     );
+  });
+
+  it("returns all trucks", async () => {
+    const body = await controller.all(
+      http_mocks.createRequest({
+        method: "GET",
+        query: { past: true },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    expect(body.count).toEqual((await Location.find()).length);
+  });
+
+  it("returns trucks for a location", async () => {
+    const location = (await Truck.findOne({ order: { createdAt: "ASC" } }))
+      .location;
+    const body = await controller.all(
+      http_mocks.createRequest({
+        method: "GET",
+        query: { past: true, location: location.id },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    expect(body.count).toEqual(1);
+    expect(body.results).toEqual([
+      {
+        ...(await location.trucks)[0].asJSON(),
+        location: await location.asJSON(),
+      },
+    ]);
+  });
+
+  it("returns trucks for a location", async () => {
+    const location = (await Truck.findOne({ order: { createdAt: "DESC" } }))
+      .location;
+    const body = await controller.all(
+      http_mocks.createRequest({
+        method: "GET",
+        query: { location: location.id },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    expect(body.count).toEqual(1);
+    expect(body.results).toEqual([
+      {
+        ...(await location.trucks)[0].asJSON(),
+        location: await location.asJSON(),
+      },
+    ]);
   });
 });
