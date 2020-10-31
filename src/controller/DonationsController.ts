@@ -12,7 +12,7 @@ export class DonationsController {
         apiVersion: "2020-08-27",
       });
       event = stripe.webhooks.constructEvent(
-        JSON.stringify(request.body),
+        request.rawBody,
         request.headers["stripe-signature"],
         process.env.STRIPE_SECRET_WH
       );

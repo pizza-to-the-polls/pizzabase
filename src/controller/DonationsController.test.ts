@@ -137,7 +137,7 @@ describe("#webhook", () => {
 
     await controller.webhook(
       http_mocks.createRequest({
-        body,
+        rawBody: JSON.stringify(body),
         headers: { "stripe-signature": STRIPE_SIG },
       }),
       http_mocks.createResponse(),
@@ -172,7 +172,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        body,
+        rawBody: JSON.stringify(body),
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
@@ -207,7 +207,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        body,
+        rawBody: JSON.stringify(body),
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
@@ -238,7 +238,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        body,
+        rawBody: JSON.stringify(body),
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
@@ -269,7 +269,7 @@ describe("#webhook", () => {
     };
     await controller.webhook(
       http_mocks.createRequest({
-        body,
+        rawBody: JSON.stringify(body),
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
