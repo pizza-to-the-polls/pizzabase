@@ -16,6 +16,7 @@ const maxChargesPerPage = 100; // 1 to 100
   // Get the most recent transactions.
   let charges = await stripe.charges.list({
     limit: maxChargesPerPage,
+    starting_after: process.argv[2],
   });
   const errors = [];
 
@@ -27,6 +28,9 @@ const maxChargesPerPage = 100; // 1 to 100
         console.log(charge.id);
         if ((await Donation.count({ where: { stripeId: charge.id } })) === 0) {
           try {
+            charge.receipt_email =
+              charge.receipt_email ||
+              charge.description.replace("Charge for", "");
             const donation = await Donation.succeedCharge(charge);
             const donated = new Date(charge.created * 1000);
             await manager.query(`

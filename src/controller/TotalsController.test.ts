@@ -21,17 +21,22 @@ describe("#overall", () => {
       orders: 0,
     };
 
-    for (let i = 0; i < Math.ceil(Math.random() * 10); ++i) {
+    for (let i = 0; i < Math.ceil(Math.random() * 30); ++i) {
       const donation = new Donation();
       donation.amountGross = Math.ceil(Math.random() * 40);
       donation.amount = donation.amountGross - 3;
       donation.email = `donor-${i}@example.com`;
       donation.stripeId = `stripe_code-${i}`;
       donation.postalCode = "12345";
+      const cancelled = Math.random() > 0.9;
+      if (cancelled) {
+        donation.cancelledAt = new Date();
+      }
       await donation.save();
 
-      overall.raised += donation.amount;
-      overall.donors += 1;
+      overall.raised += cancelled ? 0 : donation.amountGross;
+      overall.donors += cancelled ? 0 : 1;
+      overall.costs += cancelled ? 0 : 3;
     }
 
     for (const state of states) {
@@ -88,17 +93,22 @@ describe("#yearly", () => {
       orders: 0,
     };
 
-    for (let i = 0; i < Math.ceil(Math.random() * 10); ++i) {
+    for (let i = 0; i < Math.ceil(Math.random() * 30); ++i) {
       const donation = new Donation();
       donation.amountGross = Math.ceil(Math.random() * 40);
       donation.amount = donation.amountGross - 3;
       donation.email = `donor-${i}@example.com`;
       donation.stripeId = `stripe_code-${i}`;
       donation.postalCode = "12345";
+      const cancelled = Math.random() > 0.9;
+      if (cancelled) {
+        donation.cancelledAt = new Date();
+      }
       await donation.save();
 
-      overall.raised += donation.amount;
-      overall.donors += 1;
+      overall.raised += cancelled ? 0 : donation.amountGross;
+      overall.donors += cancelled ? 0 : 1;
+      overall.costs += cancelled ? 0 : 3;
     }
 
     for (const state of states) {
