@@ -181,7 +181,7 @@ describe("#webhook", () => {
     const donation = await Donation.findOne({ where: { email } });
     expect(donation.stripeId).toEqual(id);
     expect(donation.amountGross).toEqual(amount / 100);
-    expect(donation.amount).toEqual(485.20);
+    expect(donation.amount).toEqual(485.2);
     expect(donation.email).toEqual(email);
     expect(donation.postalCode).toEqual(postalCode);
     expect(donation.referrer).toEqual(referrer);
