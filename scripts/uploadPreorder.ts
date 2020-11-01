@@ -25,9 +25,12 @@ const preOrderReport = async (
 
   const newNow = new Date(`${date} ${Time} ${zone}`);
   const who = "preorder";
-  const [restaurant] = Restaurant.split(/\#[0-9]+\s/)
-    .reverse()
-    .map((el) => el.trim());
+  const restaurant = (Restaurant.includes("#")
+    ? Restaurant.split(/\#[0-9]+\s/).reverse()[0]
+    : Restaurant.replace(/[0-9]*/, "")
+  )
+    .split(/\ - |\(/)[0]
+    .trim();
 
   if (restaurant.length < 4) {
     throw new Error("No restaurant");
