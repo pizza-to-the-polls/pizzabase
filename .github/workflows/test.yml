@@ -90,6 +90,7 @@ jobs:
           ZAP_SKIP_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_TRUCK_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_CANCEL_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
           BUGSNAG_ENV: 'dev'
           STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}

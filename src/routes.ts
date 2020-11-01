@@ -57,6 +57,12 @@ export const Routes = [
     action: "order",
   },
   {
+    method: "delete",
+    route: "/locations/:idOrAddress",
+    controller: LocationsController,
+    action: "merge",
+  },
+  {
     method: "post",
     route: "/report",
     controller: ReportsController,
@@ -103,6 +109,12 @@ export const Routes = [
     route: "/orders/:id",
     controller: OrdersController,
     action: "show",
+  },
+  {
+    method: "delete",
+    route: "/orders/:id",
+    controller: OrdersController,
+    action: "delete",
   },
   {
     method: "post",

@@ -419,6 +419,58 @@ describe("#create", () => {
 
     expect(fetch.mock.calls.length).toEqual(0);
   });
+
+  test("Non-cannonical loc, creates new report on canonical loc", async () => {
+    const url = "http://twitter.com/different/";
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const contact = "555-234-2345";
+
+    const canonicalLoc = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress: "123 different st city OK zip",
+
+      address: "123 different st",
+      city: "city",
+      state: "OK",
+      zip: "zip",
+    });
+
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress: address,
+
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    location.canonicalLocation = canonicalLoc;
+    await location.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { url, contact, address },
+    });
+
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({
+      address: "123 different st city OK zip",
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toBe(200);
+
+    const newReport = await Report.findOne({ where: { reportURL: url } });
+    expect(newReport.location.id).toBe(canonicalLoc.id);
+  });
 });
 
 describe("#index", () => {

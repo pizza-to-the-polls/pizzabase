@@ -29,6 +29,35 @@ describe("#show", () => {
   });
 });
 
+describe("#delete", () => {
+  beforeEach(async () => await buildTestData());
+
+  it("cancells an order and opens it's reports", async () => {
+    const order = await Order.findOne();
+    const [report] = await order.reports;
+    const { cost, quantity } = order;
+
+    await controller.delete(
+      http_mocks.createRequest({
+        params: { id: `${order.id}` },
+        body: { user: "scott" },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    await order.reload();
+    expect(order.cancelNote).toContain(`quantity: ${quantity}, cost: ${cost}`);
+    expect(order.quantity).toEqual(0);
+    expect(order.meals).toEqual(0);
+    expect(order.cost).toEqual(0);
+    expect(order.cancelledAt).toBeTruthy();
+    await report.reload();
+    expect(report.order).toBeFalsy();
+  });
+});
+
 describe("#index", () => {
   beforeEach(async () => await buildTestData());
 

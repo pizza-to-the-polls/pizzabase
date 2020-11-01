@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
-import { zapNewOrder } from "../lib/zapier";
+import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -39,6 +39,26 @@ export class OrdersController {
     };
   }
 
+  async delete(request: Request, response: Response, next: NextFunction) {
+    if (!(await isAuthorized(request, response, next))) return null;
+
+    const order: Order = await findOr404(
+      await Order.findOne({ where: { id: Number(request.params.id || "") } }),
+      response,
+      next
+    );
+
+    if (!order) return;
+
+    const reports = await order.cancelAndZero(request.body?.user);
+
+    for (const report of reports) {
+      await zapCancelOrderReport(report);
+    }
+
+    return { success: true };
+  }
+
   async index(request: Request, _response: Response, _next: NextFunction) {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;
@@ -46,6 +66,7 @@ export class OrdersController {
     const skip = Number(request.query.page || 0) * take;
 
     const [orders, count] = await Order.findAndCount({
+      where: { cancelledAt: null },
       relations: ["reports", "location"],
       order: { createdAt: "DESC" },
       take,

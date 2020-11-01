@@ -52,7 +52,7 @@ export class LocationsController {
     const authorized = await checkAuthorization(request);
     const locJSON = await location.asJSON(authorized);
     const orders = await Order.find({
-      where: { location },
+      where: { location, ...(authorized ? {} : { cancelledAt: null }) },
       order: { createdAt: "ASC" },
     });
     const trucks = await Truck.find({
@@ -145,6 +145,35 @@ export class LocationsController {
     }
 
     await zapNewOrder(await Order.placeOrder(order, location));
+
+    return { success: true };
+  }
+
+  async merge(request: Request, response: Response, next: NextFunction) {
+    const location: Location | null = await this.authorizeAndFindLocation(
+      request,
+      response,
+      next
+    );
+    if (!location) return;
+
+    const { user, canonicalId } = request.body;
+
+    const canonicalLocation = canonicalId
+      ? await Location.findOne({ where: { id: canonicalId } })
+      : null;
+
+    if (!canonicalLocation) {
+      response.status(422);
+      return {
+        errors: {
+          canonicalId:
+            "Whoops! Need a canonicalId of the location this is going to merge into",
+        },
+      };
+    }
+
+    await location.mergeInto(canonicalLocation, user);
 
     return { success: true };
   }
