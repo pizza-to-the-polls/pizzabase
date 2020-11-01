@@ -664,6 +664,7 @@ describe("#merge", () => {
     );
 
     await location.reload();
+
     expect(location.validatedAt).toBeFalsy();
     expect(await location.canonicalLocation).toEqual(canonicalLocation);
 

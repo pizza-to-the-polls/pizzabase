@@ -84,11 +84,17 @@ export class Location extends BaseEntity {
   })
   uploads: Promise<Upload[]>;
 
-  @ManyToOne((_type) => Location, {
+  @OneToMany((_type) => Location, (loc) => loc.canonicalLocation, {
     onDelete: "RESTRICT",
   })
+  childLocations: Promise<Location[]>;
+
+  @ManyToOne((_type) => Location, (loc) => loc.childLocations, {
+    onDelete: "RESTRICT",
+    lazy: true,
+  })
   @JoinColumn({ name: "canonical_id" })
-  canonicalLocation: Location;
+  canonicalLocation: Promise<Location>;
 
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({
@@ -241,7 +247,10 @@ export class Location extends BaseEntity {
     normalAddress: NormalAddress
   ): Promise<[Location, boolean]> {
     const { fullAddress } = normalAddress;
-    const exists = await this.findOne({ where: { fullAddress } });
+    const exists = await this.findOne({
+      relations: ["canonicalLocation"],
+      where: { fullAddress },
+    });
 
     if (exists) {
       return [(await exists.canonicalLocation) || exists, false];
