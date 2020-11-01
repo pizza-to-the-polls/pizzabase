@@ -78,9 +78,11 @@ export class DonationsController {
     } catch (e) {
       if (process.env.BUGSNAG_KEY) {
         Bugsnag.notify(e, (event) => {
-          event.severity = "warn";
-          event.addMetadata("request", request.body);
-          event.addMetadata("product", process.env.STRIPE_PRODUCT_ID);
+          event.severity = "warning";
+          event.addMetadata("request", {
+            product: process.env.STRIPE_PRODUCT_ID,
+            ...request.body,
+          });
         });
       }
       console.error(e);
