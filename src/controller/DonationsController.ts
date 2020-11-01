@@ -76,11 +76,11 @@ export class DonationsController {
 
       return { success: true, checkoutSessionId: session.id };
     } catch (e) {
-      if( process.env.BUGSNAG_KEY ) {
+      if (process.env.BUGSNAG_KEY) {
         Bugsnag.notify(e, (event) => {
-          event.severity = 'warn'
-          event.addMetadata('request', request.body)
-          event.addMetadata('product', process.env.STRIPE_PRODUCT_ID)
+          event.severity = "warn";
+          event.addMetadata("request", request.body);
+          event.addMetadata("product", process.env.STRIPE_PRODUCT_ID);
         });
       }
       console.error(e);
