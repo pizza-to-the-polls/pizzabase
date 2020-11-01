@@ -88,7 +88,7 @@ export class Location extends BaseEntity {
     onDelete: "RESTRICT",
   })
   @JoinColumn({ name: "canonical_id" })
-  canonicalLocation: Promise<Location>;
+  canonicalLocation: Promise<Location> | Location;
 
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({
