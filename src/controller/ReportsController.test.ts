@@ -478,14 +478,14 @@ describe("#index", () => {
 
   test("Lists the reports", async () => {
     const body = await controller.index(
-      http_mocks.createRequest(),
+      http_mocks.createRequest({ query: { limit: "5" } }),
       http_mocks.createResponse(),
       () => undefined
     );
 
     expect(body).toEqual({
       results: await Promise.all(
-        (await Report.find({ order: { createdAt: "DESC" } })).map(
+        (await Report.find({ take: 5, order: { createdAt: "DESC" } })).map(
           async (report) => await report.asJSON()
         )
       ),
