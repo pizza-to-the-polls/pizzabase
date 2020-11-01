@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import Stripe from "stripe";
+import Bugsnag from '@bugsnag/js'
 
 import { Donation } from "../entity/Donation";
 
@@ -75,6 +76,7 @@ export class DonationsController {
 
       return { success: true, checkoutSessionId: session.id };
     } catch (e) {
+      Bugsnag.notify(e);
       console.error(e);
       return { success: false, message: e.message };
     }
