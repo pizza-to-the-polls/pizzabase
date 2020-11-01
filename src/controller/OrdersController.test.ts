@@ -40,7 +40,7 @@ describe("#delete", () => {
     await controller.delete(
       http_mocks.createRequest({
         params: { id: `${order.id}` },
-        body: { cancelledBy: "scott", cancelNote: "yeah not feeling it" },
+        body: { user: "scott" },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
@@ -48,9 +48,7 @@ describe("#delete", () => {
     );
 
     await order.reload();
-    expect(order.cancelNote).toContain(
-      `note: yeah not feeling it, quantity: ${quantity}, cost: ${cost}`
-    );
+    expect(order.cancelNote).toContain(`quantity: ${quantity}, cost: ${cost}`);
     expect(order.quantity).toEqual(0);
     expect(order.meals).toEqual(0);
     expect(order.cost).toEqual(0);

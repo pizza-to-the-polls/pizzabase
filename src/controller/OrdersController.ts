@@ -50,7 +50,7 @@ export class OrdersController {
 
     if (!order) return;
 
-    const reports = await order.cancelAndZero(request.body);
+    const reports = await order.cancelAndZero(request.body?.user);
 
     for (const report of reports) {
       await zapCancelOrderReport(report);

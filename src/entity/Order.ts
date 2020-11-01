@@ -81,15 +81,9 @@ export class Order extends BaseEntity {
     return (reports?.canDistribute || 0) > 0 ? reports : null;
   }
 
-  async cancelAndZero({
-    cancelNote,
-    cancelledBy,
-  }: {
-    cancelNote?: string;
-    cancelledBy?: string;
-  }): Promise<Report[]> {
+  async cancelAndZero(cancelledBy?: string): Promise<Report[]> {
     this.cancelledAt = new Date();
-    this.cancelNote = `note: ${cancelNote}, quantity: ${this.quantity}, cost: ${this.cost}`;
+    this.cancelNote = `quantity: ${this.quantity}, cost: ${this.cost}`;
     this.quantity = 0;
     this.meals = 0;
     this.cost = 0;
