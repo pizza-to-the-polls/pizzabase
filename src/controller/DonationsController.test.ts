@@ -35,6 +35,8 @@ describe("#create", () => {
     );
     expect(Stripe).toHaveBeenCalledWith("STRIPE SECRET KEY", {
       apiVersion: "2020-08-27",
+      maxNetworkRetries: 6,
+      timeout: 5_000,
     });
   });
 
@@ -145,6 +147,8 @@ describe("#webhook", () => {
     );
     expect(Stripe).toHaveBeenCalledWith("STRIPE SECRET KEY", {
       apiVersion: "2020-08-27",
+      maxNetworkRetries: 3,
+      timeout: 10_000,
     });
     expect(mockStripeClient.webhooks.constructEvent).toHaveBeenCalledWith(
       body,

@@ -11,6 +11,8 @@ export class DonationsController {
     try {
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
         apiVersion: "2020-08-27",
+        maxNetworkRetries: 3,
+        timeout: 10_000,
       });
       event = stripe.webhooks.constructEvent(
         request.body,
@@ -49,6 +51,8 @@ export class DonationsController {
     try {
       const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
         apiVersion: "2020-08-27",
+        maxNetworkRetries: 6,
+        timeout: 5_000,
       });
 
       const session = await stripe.checkout.sessions.create({
