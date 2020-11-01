@@ -12,6 +12,7 @@ enum ZapHooks {
   ZAP_NEW_TRUCK = "ZAP_NEW_TRUCK",
   ZAP_NEW_UPLOAD = "ZAP_NEW_UPLOAD",
   ZAP_ORDER_REPORT = "ZAP_ORDER_REPORT",
+  ZAP_CANCEL_ORDER_REPORT = "ZAP_CANCEL_ORDER_REPORT",
   ZAP_SKIP_REPORT = "ZAP_SKIP_REPORT",
   ZAP_TRUCK_REPORT = "ZAP_TRUCK_REPORT",
 }
@@ -105,6 +106,8 @@ export const zapNewUpload = async (upload: Upload) =>
   zapUpload(upload, ZapHooks.ZAP_NEW_UPLOAD);
 const zapOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_ORDER_REPORT);
+export const zapCancelOrderReport = async (report: Report) =>
+  zapReport(report, ZapHooks.ZAP_CANCEL_ORDER_REPORT);
 export const zapSkipReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_SKIP_REPORT);
 const zapTruckReport = async (report: Report) =>

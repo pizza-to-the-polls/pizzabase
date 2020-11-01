@@ -87,7 +87,7 @@ export class Order extends BaseEntity {
   }: {
     cancelNote?: string;
     cancelledBy?: string;
-  }): Promise<void> {
+  }): Promise<Report[]> {
     this.cancelledAt = new Date();
     this.cancelNote = `note: ${cancelNote}, quantity: ${this.quantity}, cost: ${this.cost}`;
     this.quantity = 0;
@@ -95,7 +95,18 @@ export class Order extends BaseEntity {
     this.cost = 0;
     await this.save();
 
+    const reports = await Report.find({ where: { order: this } });
+
+    if (reports) {
+      await Report.createQueryBuilder()
+        .update(Report)
+        .where({ order: this })
+        .set({ order: null })
+        .execute();
+    }
     await Action.log(this, "cancelled order", cancelledBy);
+
+    return reports;
   }
 
   asJSON(showPrivate: boolean = false) {

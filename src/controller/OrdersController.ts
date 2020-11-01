@@ -2,7 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
-import { zapNewOrder } from "../lib/zapier";
+import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -50,7 +50,11 @@ export class OrdersController {
 
     if (!order) return;
 
-    await order.cancelAndZero(request.body);
+    const reports = await order.cancelAndZero(request.body);
+
+    for (const report of reports) {
+      await zapCancelOrderReport(report);
+    }
 
     return { success: true };
   }

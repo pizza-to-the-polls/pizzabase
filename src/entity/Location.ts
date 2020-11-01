@@ -94,7 +94,7 @@ export class Location extends BaseEntity {
     lazy: true,
   })
   @JoinColumn({ name: "canonical_id" })
-  canonicalLocation: Promise<Location>;
+  canonicalLocation: Location | Promise<Location>;
 
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({

@@ -32,8 +32,9 @@ describe("#show", () => {
 describe("#delete", () => {
   beforeEach(async () => await buildTestData());
 
-  it("returns an order", async () => {
+  it("cancells an order and opens it's reports", async () => {
     const order = await Order.findOne();
+    const [report] = await order.reports;
     const { cost, quantity } = order;
 
     await controller.delete(
@@ -54,6 +55,8 @@ describe("#delete", () => {
     expect(order.meals).toEqual(0);
     expect(order.cost).toEqual(0);
     expect(order.cancelledAt).toBeTruthy();
+    await report.reload();
+    expect(report.order).toBeFalsy();
   });
 });
 
