@@ -52,7 +52,7 @@ export class LocationsController {
     const authorized = await checkAuthorization(request);
     const locJSON = await location.asJSON(authorized);
     const orders = await Order.find({
-      where: { location },
+      where: { location, ...(authorized ? {} : { cancelledAt: null }) },
       order: { createdAt: "ASC" },
     });
     const trucks = await Truck.find({

@@ -111,6 +111,12 @@ export const Routes = [
     action: "show",
   },
   {
+    method: "delete",
+    route: "/orders/:id",
+    controller: OrdersController,
+    action: "delete",
+  },
+  {
     method: "post",
     route: "/upload",
     controller: UploadsController,

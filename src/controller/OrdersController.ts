@@ -39,6 +39,22 @@ export class OrdersController {
     };
   }
 
+  async delete(request: Request, response: Response, next: NextFunction) {
+    if (!(await isAuthorized(request, response, next))) return null;
+
+    const order: Order = await findOr404(
+      await Order.findOne({ where: { id: Number(request.params.id || "") } }),
+      response,
+      next
+    );
+
+    if (!order) return;
+
+    await order.cancelAndZero(request.body);
+
+    return { success: true };
+  }
+
   async index(request: Request, _response: Response, _next: NextFunction) {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;
@@ -46,6 +62,7 @@ export class OrdersController {
     const skip = Number(request.query.page || 0) * take;
 
     const [orders, count] = await Order.findAndCount({
+      where: { cancelledAt: null },
       relations: ["reports", "location"],
       order: { createdAt: "DESC" },
       take,

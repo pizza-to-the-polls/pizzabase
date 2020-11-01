@@ -1,6 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import Stripe from "stripe";
-import Bugsnag from '@bugsnag/js'
+import Bugsnag from "@bugsnag/js";
 
 import { Donation } from "../entity/Donation";
 
