@@ -66,6 +66,16 @@ export class Order extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
+  @Column({
+    name: "cancelled_at",
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  cancelledAt: Date;
+
+  @Column({ name: "cancel_note", nullable: true })
+  cancelNote: string;
+
   async distributor(): Promise<Report | null> {
     const [reports] = await Report.allReports({ order: this });
     return (reports?.canDistribute || 0) > 0 ? reports : null;
@@ -74,7 +84,16 @@ export class Order extends BaseEntity {
   asJSON(showPrivate: boolean = false) {
     if (showPrivate) return this.asJSONPrivate();
 
-    const { id, meals, quantity, orderType, restaurant, createdAt } = this;
+    const {
+      id,
+      meals,
+      quantity,
+      orderType,
+      restaurant,
+      createdAt,
+      cancelledAt,
+      cancelNote,
+    } = this;
     return {
       id,
       meals,
@@ -83,6 +102,8 @@ export class Order extends BaseEntity {
       pizzas: quantity,
       restaurant,
       createdAt,
+      cancelledAt,
+      cancelNote,
     };
   }
 

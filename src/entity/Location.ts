@@ -4,7 +4,9 @@ import {
   PrimaryGeneratedColumn,
   Column,
   OneToMany,
+  ManyToOne,
   Index,
+  JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   MoreThan,
@@ -82,6 +84,12 @@ export class Location extends BaseEntity {
   })
   uploads: Promise<Upload[]>;
 
+  @ManyToOne((_type) => Location, {
+    onDelete: "RESTRICT",
+  })
+  @JoinColumn({ name: "canonical_id" })
+  canonicalLocation: Promise<Location>;
+
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({
       where: {
@@ -131,8 +139,10 @@ export class Location extends BaseEntity {
     };
   }
   async asJSONPrivate() {
+    const canonicalLocation = await this.canonicalLocation;
     return {
       ...(await this.asJSON()),
+      canonicalLocation: await canonicalLocation?.asJSON(),
       truckEligible: truckEligibility(this, new Date()),
       hasTruck: await this.hasTruckJSON(),
       pizzaDistributor: (await this.distributor())?.asJSONPrivate() || null,
@@ -164,6 +174,30 @@ export class Location extends BaseEntity {
     await Action.log(this, "assigned truck", assignedBy);
 
     return truck;
+  }
+
+  async mergeInto(
+    canonicalLocation: Location,
+    mergedBy: string
+  ): Promise<void> {
+    const query = { location: this };
+    const relations = [Report, Order, Truck];
+
+    for (const Relation of relations) {
+      if ((await Relation.count(query)) > 0) {
+        await Relation.createQueryBuilder()
+          .update(Relation)
+          .where(query)
+          .set({ location: canonicalLocation })
+          .execute();
+      }
+    }
+
+    this.canonicalLocation = canonicalLocation;
+    this.validatedAt = null;
+    await this.save();
+    await Action.log(this, `merged into ${canonicalLocation.id}`, mergedBy);
+    await Action.log(canonicalLocation, `absorbed ${this.id}`, mergedBy);
   }
 
   static async fidByIdOrFullAddress(
@@ -209,7 +243,9 @@ export class Location extends BaseEntity {
     const { fullAddress } = normalAddress;
     const exists = await this.findOne({ where: { fullAddress } });
 
-    if (exists) return [exists, false];
+    if (exists) {
+      return [(await exists.canonicalLocation) || exists, false];
+    }
 
     const location = await this.createFromAddress(normalAddress);
 

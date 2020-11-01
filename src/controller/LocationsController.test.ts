@@ -599,3 +599,97 @@ describe("#order", () => {
     expect(skipped.order).toBeFalsy();
   });
 });
+
+describe("#merge", () => {
+  it("merges into another location", async () => {
+    const { fullAddress, id } = location ? location : null;
+
+    const canonicalLocation = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+
+      fullAddress: "123 Street City WA 12345",
+
+      address: "123 Street",
+      city: "City",
+      state: "WA",
+      zip: "12345",
+    });
+
+    const [ordered] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+    const order = await Order.placeOrder(
+      { quantity: 1, cost: 5 },
+      ordered.location
+    );
+    const truck = await location.assignTruck("someone", "abd-id");
+
+    const [pending] = await Report.createNewReport(
+      "222-234-2345",
+      "http://twitter.com/what",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      }
+    );
+    await controller.merge(
+      http_mocks.createRequest({
+        method: "DELETE",
+        body: { user: "jimmy", canonicalId: canonicalLocation.id },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    await location.reload();
+    expect(location.validatedAt).toBeFalsy();
+    expect(await location.canonicalLocation).toEqual(canonicalLocation);
+
+    const { userId, actionType } = await Action.findOne({
+      where: { entityId: id, entityType: location.constructor.name },
+      order: { id: "DESC" },
+    });
+    expect(userId).toEqual("jimmy");
+    expect(actionType).toEqual(`merged into ${canonicalLocation.id}`);
+
+    const {
+      userId: mergedUserId,
+      actionType: mergedActionType,
+    } = await Action.findOne({
+      where: {
+        entityId: canonicalLocation.id,
+        entityType: location.constructor.name,
+      },
+      order: { id: "DESC" },
+    });
+    expect(mergedUserId).toEqual("jimmy");
+    expect(mergedActionType).toEqual(`absorbed ${id}`);
+
+    for (const obj of [pending, order, ordered, truck]) {
+      await obj.reload();
+      expect(obj.location).toEqual(canonicalLocation);
+    }
+  });
+});

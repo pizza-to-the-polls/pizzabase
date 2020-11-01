@@ -148,4 +148,33 @@ export class LocationsController {
 
     return { success: true };
   }
+
+  async merge(request: Request, response: Response, next: NextFunction) {
+    const location: Location | null = await this.authorizeAndFindLocation(
+      request,
+      response,
+      next
+    );
+    if (!location) return;
+
+    const { user, canonicalId } = request.body;
+
+    const canonicalLocation = canonicalId
+      ? await Location.findOne({ where: { id: canonicalId } })
+      : null;
+
+    if (!canonicalLocation) {
+      response.status(422);
+      return {
+        errors: {
+          canonicalId:
+            "Whoops! Need a canonicalId of the location this is going to merge into",
+        },
+      };
+    }
+
+    await location.mergeInto(canonicalLocation, user);
+
+    return { success: true };
+  }
 }
