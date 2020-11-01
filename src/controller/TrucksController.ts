@@ -11,7 +11,7 @@ export class TrucksController {
     const skip = Number(request.query.page || 0) * limit;
     const past = !!request.query.past;
     const location = request.query.location
-      ? { location: { id: request.query.location } }
+      ? { location: { id: Number(request.query.location) } }
       : {};
 
     const [trucks, count] = past

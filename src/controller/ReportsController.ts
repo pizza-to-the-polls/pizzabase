@@ -27,10 +27,14 @@ export class ReportsController {
     const take = limit < 100 ? limit : 100;
     const skip = Number(request.query.page || 0) * limit;
 
-    const truck = request.query.truck ? { truck: request.query.truck } : {};
-    const order = request.query.order ? { order: request.query.order } : {};
+    const truck = request.query.truck
+      ? { truck: Number(request.query.truck) }
+      : {};
+    const order = request.query.order
+      ? { order: Number(request.query.order) }
+      : {};
     const location = request.query.location
-      ? { location: request.query.location }
+      ? { location: Number(request.query.location) }
       : {};
 
     const where =

@@ -139,7 +139,7 @@ describe("#all", () => {
     const body = await controller.all(
       http_mocks.createRequest({
         method: "GET",
-        query: { past: true, location: location.id },
+        query: { past: true, location: `${location.id}` },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -159,7 +159,7 @@ describe("#all", () => {
     const body = await controller.all(
       http_mocks.createRequest({
         method: "GET",
-        query: { location: location.id },
+        query: { location: `${location.id}` },
       }),
       http_mocks.createResponse(),
       () => undefined

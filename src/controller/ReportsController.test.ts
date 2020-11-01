@@ -498,7 +498,7 @@ describe("#index", () => {
     const truck = await location.assignTruck();
 
     const body = await controller.index(
-      http_mocks.createRequest({ query: { truck: truck.id } }),
+      http_mocks.createRequest({ query: { truck: `${truck.id}` } }),
       http_mocks.createResponse(),
       () => undefined
     );
@@ -517,7 +517,7 @@ describe("#index", () => {
     const location = await Location.findOne();
 
     const body = await controller.index(
-      http_mocks.createRequest({ query: { location: location.id } }),
+      http_mocks.createRequest({ query: { location: `${location.id}` } }),
       http_mocks.createResponse(),
       () => undefined
     );
@@ -539,7 +539,7 @@ describe("#index", () => {
     const order = await Order.findOne();
 
     const body = await controller.index(
-      http_mocks.createRequest({ query: { order: order.id } }),
+      http_mocks.createRequest({ query: { order: `${order.id}` } }),
       http_mocks.createResponse(),
       () => undefined
     );
