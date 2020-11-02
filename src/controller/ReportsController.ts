@@ -44,12 +44,18 @@ export class ReportsController {
       take,
       skip,
       where,
+      relations: ["location", "truck", "order"],
       order: { createdAt: "DESC" },
     });
 
     return {
       results: await Promise.all(
-        reports.map(async (loc) => await loc.asJSON())
+        reports.map(async (report) => ({
+          ...report.asJSON(),
+          location: await report.location.asJSON(),
+          order: report.order?.asJSON(),
+          truck: report.truck?.asJSON(),
+        }))
       ),
       count,
     };

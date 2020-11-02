@@ -486,7 +486,12 @@ describe("#index", () => {
     expect(body).toEqual({
       results: await Promise.all(
         (await Report.find({ take: 5, order: { createdAt: "DESC" } })).map(
-          async (report) => await report.asJSON()
+          async (report) => ({
+            ...report.asJSON(),
+            location: await report.location.asJSON(),
+            order: report.order?.asJSON(),
+            truck: report.truck?.asJSON(),
+          })
         )
       ),
       count: await Report.count(),
@@ -507,7 +512,12 @@ describe("#index", () => {
       results: await Promise.all(
         (
           await Report.find({ order: { createdAt: "DESC" }, where: { truck } })
-        ).map(async (report) => await report.asJSON())
+        ).map(async (report) => ({
+          ...report.asJSON(),
+          location: await report.location.asJSON(),
+          order: report.order?.asJSON(),
+          truck: report.truck?.asJSON(),
+        }))
       ),
       count: await Report.count({ where: { truck } }),
     });
@@ -529,7 +539,12 @@ describe("#index", () => {
             order: { createdAt: "DESC" },
             where: { location },
           })
-        ).map(async (report) => await report.asJSON())
+        ).map(async (report) => ({
+          ...report.asJSON(),
+          location: await report.location.asJSON(),
+          order: report.order?.asJSON(),
+          truck: report.truck?.asJSON(),
+        }))
       ),
       count: await Report.count({ where: { location } }),
     });
@@ -548,7 +563,12 @@ describe("#index", () => {
       results: await Promise.all(
         (
           await Report.find({ order: { createdAt: "DESC" }, where: { order } })
-        ).map(async (report) => await report.asJSON())
+        ).map(async (report) => ({
+          ...report.asJSON(),
+          location: await report.location.asJSON(),
+          order: report.order?.asJSON(),
+          truck: report.truck?.asJSON(),
+        }))
       ),
       count: await Report.count({ where: { order } }),
     });
