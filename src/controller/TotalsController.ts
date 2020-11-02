@@ -25,6 +25,7 @@ export class TotalsController {
       COUNT(DISTINCT locations.state) as states
     FROM orders
     LEFT JOIN locations ON orders.location_id = locations.id
+    WHERE orders.cancelled_at is NULL
   `;
   private DONATION_QUERY = `
     SELECT
@@ -54,7 +55,7 @@ export class TotalsController {
       )[0],
       ...(
         await manager.query(
-          `${this.ORDER_QUERY} WHERE date_part('year', orders.created_at) = ${year}`
+          `${this.ORDER_QUERY} AND date_part('year', orders.created_at) = ${year}`
         )
       )[0],
     });
