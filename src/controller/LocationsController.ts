@@ -54,10 +54,12 @@ export class LocationsController {
     const orders = await Order.find({
       where: { location, ...(authorized ? {} : { cancelledAt: null }) },
       order: { createdAt: "ASC" },
+      relations: ["reports"],
     });
     const trucks = await Truck.find({
       where: { location },
       order: { createdAt: "ASC" },
+      relations: ["reports"],
     });
 
     return {
@@ -66,8 +68,22 @@ export class LocationsController {
       reports: (await location.openReports()).map((report) =>
         report.asJSON(authorized)
       ),
-      orders: orders.map((order) => order.asJSON(authorized)),
-      trucks: trucks.map((truck) => truck.asJSON()),
+      orders: await Promise.all(
+        orders.map(async (order) => ({
+          ...order.asJSON(authorized),
+          reports: (await order.reports).map((report) =>
+            report.asJSON(authorized)
+          ),
+        }))
+      ),
+      trucks: await Promise.all(
+        trucks.map(async (truck) => ({
+          ...truck.asJSON(),
+          reports: (await truck.reports).map((report) =>
+            report.asJSON(authorized)
+          ),
+        }))
+      ),
     };
   }
 

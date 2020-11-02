@@ -92,7 +92,12 @@ describe("#show", () => {
     expect(body).toEqual({
       ...(await location.asJSON()),
       hasTruck: false,
-      orders: [order.asJSON()],
+      orders: [
+        {
+          ...order.asJSON(),
+          reports: (await order.reports).map((rep) => rep.asJSON()),
+        },
+      ],
       reports: [report.asJSON()],
       trucks: [],
     });
