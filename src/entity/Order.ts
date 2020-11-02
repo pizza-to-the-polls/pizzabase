@@ -114,7 +114,6 @@ export class Order extends BaseEntity {
       restaurant,
       createdAt,
       cancelledAt,
-      cancelNote,
     } = this;
     return {
       id,
@@ -125,15 +124,15 @@ export class Order extends BaseEntity {
       restaurant,
       createdAt,
       cancelledAt,
-      cancelNote,
     };
   }
 
   asJSONPrivate() {
-    const { cost } = this;
+    const { cost, cancelNote } = this;
     return {
       ...this.asJSON(),
       cost,
+      cancelNote,
     };
   }
 
