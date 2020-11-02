@@ -76,7 +76,7 @@ export const validateReport = async (
     waitTime,
     contactFirstName,
     contactLastName,
-    contactRole: contactRole || "Trusted",
+    contactRole: contactRole || isAuthorized ? "Trusted" : "",
     canDistribute,
   };
 };
