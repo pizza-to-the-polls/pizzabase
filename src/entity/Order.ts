@@ -36,9 +36,6 @@ export class Order extends BaseEntity {
   cost: number;
 
   @Column({ type: "int" })
-  meals: number;
-
-  @Column({ type: "int", nullable: true })
   snacks: number;
 
   @Column({ name: "order_type", default: "pizzas" })
@@ -88,7 +85,6 @@ export class Order extends BaseEntity {
     this.cancelledAt = new Date();
     this.cancelNote = `quantity: ${this.quantity}, cost: ${this.cost}`;
     this.quantity = 0;
-    this.meals = 0;
     this.snacks = 0;
     this.cost = 0;
     await this.save();
@@ -112,7 +108,7 @@ export class Order extends BaseEntity {
 
     const {
       id,
-      meals,
+      snacks,
       quantity,
       orderType,
       restaurant,
@@ -122,7 +118,7 @@ export class Order extends BaseEntity {
     } = this;
     return {
       id,
-      meals,
+      snacks,
       quantity,
       orderType,
       pizzas: quantity,
@@ -175,7 +171,6 @@ export class Order extends BaseEntity {
 
     order.quantity = quantity;
     order.orderType = orderType || OrderTypes.pizzas;
-    order.meals = quantity * ORDER_TYPE_TO_SNACKS[order.orderType];
     order.snacks = quantity * ORDER_TYPE_TO_SNACKS[order.orderType];
     order.cost = cost;
     order.restaurant = restaurant;
