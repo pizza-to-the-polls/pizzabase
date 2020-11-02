@@ -50,7 +50,7 @@ describe("#delete", () => {
     await order.reload();
     expect(order.cancelNote).toContain(`quantity: ${quantity}, cost: ${cost}`);
     expect(order.quantity).toEqual(0);
-    expect(order.meals).toEqual(0);
+    expect(order.snacks).toEqual(0);
     expect(order.cost).toEqual(0);
     expect(order.cancelledAt).toBeTruthy();
     await report.reload();
