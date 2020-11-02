@@ -19,7 +19,7 @@ export class TotalsController {
     SELECT
       SUM(orders.cost) as costs,
       SUM(orders.quantity) as pizzas,
-      SUM(orders.meals) as meals,
+      SUM(orders.snacks) as snacks,
       COUNT(DISTINCT orders.id) as orders,
       COUNT(DISTINCT locations.id) as locations,
       COUNT(DISTINCT locations.state) as states

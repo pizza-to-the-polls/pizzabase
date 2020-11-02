@@ -20,10 +20,10 @@ export enum OrderTypes {
   donuts = "dozen donuts",
 }
 
-export const ORDER_TYPE_TO_MEALS: {
+export const ORDER_TYPE_TO_SNACKS: {
   [key in OrderTypes]: number;
 } = {
-  [OrderTypes.pizzas]: 14,
+  [OrderTypes.pizzas]: 10,
   [OrderTypes.donuts]: 12,
 };
 
@@ -37,6 +37,9 @@ export class Order extends BaseEntity {
 
   @Column({ type: "int" })
   meals: number;
+
+  @Column({ type: "int", nullable: true })
+  snacks: number;
 
   @Column({ name: "order_type", default: "pizzas" })
   @Index()
@@ -86,6 +89,7 @@ export class Order extends BaseEntity {
     this.cancelNote = `quantity: ${this.quantity}, cost: ${this.cost}`;
     this.quantity = 0;
     this.meals = 0;
+    this.snacks = 0;
     this.cost = 0;
     await this.save();
 
@@ -171,7 +175,8 @@ export class Order extends BaseEntity {
 
     order.quantity = quantity;
     order.orderType = orderType || OrderTypes.pizzas;
-    order.meals = quantity * ORDER_TYPE_TO_MEALS[order.orderType];
+    order.meals = quantity * ORDER_TYPE_TO_SNACKS[order.orderType];
+    order.snacks = quantity * ORDER_TYPE_TO_SNACKS[order.orderType];
     order.cost = cost;
     order.restaurant = restaurant;
     order.location = location;

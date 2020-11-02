@@ -29,7 +29,7 @@ const preOrderReport = async (
     ? Restaurant.split(/\#[0-9]+\s/).reverse()[0]
     : Restaurant.replace(/[0-9]*/, "")
   )
-    .split(/\ - |\(/)[0]
+    .split(/\ - |\(|\r|\n/)[0]
     .trim();
 
   if (restaurant.length < 4) {

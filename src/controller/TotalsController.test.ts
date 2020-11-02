@@ -13,7 +13,7 @@ describe("#overall", () => {
     const overall = {
       costs: 0,
       pizzas: 0,
-      meals: 0,
+      snacks: 0,
       states: states.length,
       raised: 0,
       donors: 0,
@@ -63,7 +63,7 @@ describe("#overall", () => {
 
           overall.orders += 1;
           overall.pizzas += quantity;
-          overall.meals += quantity * 14;
+          overall.snacks += quantity * 10;
           overall.costs += cost;
         }
       }
@@ -85,7 +85,7 @@ describe("#yearly", () => {
     const overall = {
       costs: 0,
       pizzas: 0,
-      meals: 0,
+      snacks: 0,
       raised: 0,
       donors: 0,
       states: states.length,
@@ -135,7 +135,7 @@ describe("#yearly", () => {
 
           overall.orders += 1;
           overall.pizzas += quantity;
-          overall.meals += quantity * 14;
+          overall.snacks += quantity * 10;
           overall.costs += cost;
         }
       }
@@ -160,7 +160,7 @@ describe("#yearly", () => {
     expect(pastBody).toEqual({
       costs: 0,
       pizzas: 0,
-      meals: 0,
+      snacks: 0,
       states: 0,
       raised: 0,
       donors: 0,
