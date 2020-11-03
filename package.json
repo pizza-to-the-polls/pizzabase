@@ -8,6 +8,7 @@
     "ava": "^3.12.1",
     "csv-parser": "^2.3.3",
     "dotenv": "^8.2.0",
+    "glob": "^7.1.6",
     "jest": "^26.4.2",
     "jest-fetch-mock": "^3.0.3",
     "node-mocks-http": "^1.9.0",

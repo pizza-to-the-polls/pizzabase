@@ -8,10 +8,14 @@ export const uploadBulkCSV = async (
     manager: EntityManager
   ) => Promise<boolean>,
   csvFile: string,
-  start: string | number | null = 0
+  start: string | number | null = 0,
+  timeout: number = 150
 ) => {
-  await createConnection();
-  const { manager } = await getConnection();
+  const conn = await getConnection();
+  if (!conn?.isConnected) {
+    await createConnection();
+  }
+  const { manager } = conn;
   const failures = [];
 
   const data: { [key: string]: string }[] = await new Promise((resolve) => {
@@ -41,7 +45,7 @@ export const uploadBulkCSV = async (
     console.log(
       `${num + 1} / ${data.length} ${success ? "success" : `fail with ${msg}`}`
     );
-    await new Promise((accept) => setTimeout(accept, 150));
+    await new Promise((accept) => setTimeout(accept, timeout));
   }
 
   console.log(failures.map((row) => Object.values(row).join(",")).join("\n"));
