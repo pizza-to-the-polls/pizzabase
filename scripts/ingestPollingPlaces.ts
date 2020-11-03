@@ -26,8 +26,8 @@ const backFillLocations = async (data, _manager) => {
   await createConnection();
 
   const files: string[] = await new Promise((resolve, reject) => {
-    glob(`${process.argv[2]}/*/*.csv`, (er, files) => {
-      er ? reject(er) : resolve(files);
+    glob(`${process.argv[2]}/*/*.csv`, (er, csvs) => {
+      er ? reject(er) : resolve(csvs);
     });
   });
 
