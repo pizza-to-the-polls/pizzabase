@@ -3,6 +3,7 @@ import { createConnection, getConnection } from "typeorm";
 const setUpDB = async () => {
   const config: any = {
     type: "postgres",
+    username: "postgres",
     database: process.env.POSTGRES_DB || "pizzabaseTest",
     dropSchema: true,
     synchronize: true,
@@ -19,7 +20,7 @@ const setUpDB = async () => {
 
   if (process.env.POSTGRES_PASSWORD)
     config.password = process.env.POSTGRES_PASSWORD;
-  if (process.env.POSTGRES_PASSWORD)
+  if (process.env.POSTGRES_USERNAME)
     config.username = process.env.POSTGRES_USERNAME;
 
   try {
