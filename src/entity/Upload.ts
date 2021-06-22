@@ -41,13 +41,26 @@ export class Upload extends BaseEntity {
   @Column({ name: "file_path", unique: true })
   filePath: string;
 
-  static async createOrRateLimit(
+  @Column({ name: "file_hash", unique: true, nullable: true })
+  fileHash: string;
+
+  static async createOrReject(
     ipAddress: string,
     {
       fileExt,
       normalizedAddress,
-    }: { fileExt: string; normalizedAddress: NormalAddress }
+      fileHash,
+    }: { fileExt: string; normalizedAddress: NormalAddress; fileHash: string }
   ): Promise<Upload> {
+    const unique = await this.count({
+      where: { fileHash },
+    });
+    if (unique > 0) {
+      throw new Error(
+        "Hmmmm - we've already seen this photo. How about a new one?"
+      );
+    }
+
     const count = await this.count({
       where: {
         ipAddress,
@@ -56,7 +69,9 @@ export class Upload extends BaseEntity {
     });
 
     if (count + 1 > UPLOAD_MAX) {
-      throw new Error("Too many uploads");
+      throw new Error(
+        "Whoops! You've had too many uploads recently - slow your roll"
+      );
     }
     const upload = new this();
 

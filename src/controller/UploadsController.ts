@@ -16,15 +16,14 @@ export class UploadsController {
     }
 
     try {
-      const upload = await Upload.createOrRateLimit(request.ip, uploadParams);
+      const upload = await Upload.createOrReject(request.ip, uploadParams);
       await zapNewUpload(upload);
       return await presignUpload(upload);
     } catch (e) {
       response.status(429);
       return {
         errors: {
-          fileName:
-            "Whoops! You've had too many uploads recently - slow your roll",
+          fileName: e.message,
         },
       };
     }
