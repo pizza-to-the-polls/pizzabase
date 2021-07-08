@@ -16,9 +16,22 @@ export class UploadsController {
     }
 
     try {
-      const upload = await Upload.createOrReject(request.ip, uploadParams);
-      await zapNewUpload(upload);
-      return await presignUpload(upload);
+      const [upload, exists] = await Upload.createOrReject(
+        request.ip,
+        uploadParams
+      );
+
+      if (exists) {
+        return {
+          filePath: upload.filePath,
+          id: upload.id,
+          presigned: { url: null, fields: {} },
+          isDuplicate: true,
+        };
+      } else {
+        await zapNewUpload(upload);
+        return await presignUpload(upload);
+      }
     } catch (e) {
       response.status(429);
       return {

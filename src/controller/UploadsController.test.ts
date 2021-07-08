@@ -98,7 +98,7 @@ describe("#create", () => {
     expect(response.statusCode).toEqual(429);
   });
 
-  it("returns error if repeat upload", async () => {
+  it("returns original upload if uploaded", async () => {
     const response = http_mocks.createResponse();
     const ip = "127.0.0.1";
     const location = await Location.createFromAddress({
@@ -112,18 +112,14 @@ describe("#create", () => {
       state: "IL",
       zip: "60615",
     });
-    await Promise.all(
-      Array(1)
-        .fill(null)
-        .map(async (_, i) => {
-          const upload = new Upload();
-          upload.ipAddress = ip;
-          upload.filePath = `${i}.png`;
-          upload.location = location;
-          upload.fileHash = "same";
-          await upload.save();
-        })
-    );
+
+    const upload = new Upload();
+    upload.ipAddress = ip;
+    upload.filePath = "dumb.gif";
+    upload.location = location;
+    upload.fileHash = "same";
+    await upload.save();
+
     const body = await controller.create(
       http_mocks.createRequest({
         ip,
@@ -137,12 +133,9 @@ describe("#create", () => {
       response,
       () => undefined
     );
-    expect(body).toEqual({
-      errors: {
-        fileName: "Hmmmm - we've already seen this photo. How about a new one?",
-      },
-    });
-    expect(response.statusCode).toEqual(429);
+    expect((body as any).isDuplicate).toEqual(true);
+    expect((body as any).id).toEqual(upload.id);
+    expect((body as any).filePath).toEqual(upload.filePath);
   });
 
   it("can create an upload on an existing location", async () => {
@@ -169,8 +162,10 @@ describe("#create", () => {
     );
     const upload = await Upload.findOne({ order: { id: "DESC" } });
 
+    expect((body as any).isDuplicate).toEqual(false);
     expect((body as any).id).toEqual(upload.id);
     expect((body as any).filePath).toEqual(upload.filePath);
+    expect(upload.fileHash).toEqual("same-loc");
     expect(upload.filePath).toContain(".png");
     expect(upload.location.id).toEqual(location.id);
   });
@@ -191,6 +186,7 @@ describe("#create", () => {
     );
     const upload = await Upload.findOne({ order: { id: "DESC" } });
 
+    expect(upload.fileHash).toEqual("new-loc");
     expect(upload.location.fullAddress).toEqual(
       "550 Different Address City OR 12345"
     );

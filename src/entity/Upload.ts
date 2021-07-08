@@ -51,15 +51,11 @@ export class Upload extends BaseEntity {
       normalizedAddress,
       fileHash,
     }: { fileExt: string; normalizedAddress: NormalAddress; fileHash: string }
-  ): Promise<Upload> {
-    const unique = await this.count({
+  ): Promise<[Upload, boolean]> {
+    const exists = await this.findOne({
       where: { fileHash },
     });
-    if (unique > 0) {
-      throw new Error(
-        "Hmmmm - we've already seen this photo. How about a new one?"
-      );
-    }
+    if (exists) return [exists, true];
 
     const count = await this.count({
       where: {
@@ -80,6 +76,7 @@ export class Upload extends BaseEntity {
     const { city, state } = location;
 
     upload.ipAddress = ipAddress;
+    upload.fileHash = fileHash;
     upload.filePath = `uploads/${city}-${state}-${
       uuidv4().split("-")[0]
     }.${fileExt}`
@@ -88,6 +85,6 @@ export class Upload extends BaseEntity {
 
     await upload.save();
 
-    return upload;
+    return [upload, false];
   }
 }
