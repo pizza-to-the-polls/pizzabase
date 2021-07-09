@@ -12,6 +12,7 @@ export const presignUpload = async ({ id, filePath }) => {
         "X-Amz-Signature": "signature",
       },
     },
+    isDuplicate: false,
     id,
     filePath,
   };

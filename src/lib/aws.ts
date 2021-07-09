@@ -12,6 +12,7 @@ interface Presigned {
   };
   id: number;
   filePath: string;
+  isDuplicate: boolean;
 }
 
 export const presignUpload = async (upload: Upload): Promise<Presigned> => {
@@ -45,6 +46,7 @@ export const presignUpload = async (upload: Upload): Promise<Presigned> => {
         resolve(data);
       });
     }),
+    isDuplicate: false,
     filePath,
     id,
   };

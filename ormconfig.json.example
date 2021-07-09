@@ -1,4 +1,3 @@
-[
 // To connect to production aurora db
 {
   "type": "aurora-data-api-pg",
@@ -16,7 +15,7 @@
     "migrationsDir": "src/migration",
     "subscribersDir": "src/subscriber"
   }
-},
+}
 // for local dev - set up a local postgres db
 {
   "type": "postgres",

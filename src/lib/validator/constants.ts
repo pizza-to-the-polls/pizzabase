@@ -6,7 +6,9 @@ export const URL_ERROR =
   "Whoops! That's not a valid URL. Try sending us a real one so we can verify there's a line";
 export const COST_ERROR =
   "Whoops! That's not a valid cost. Try sending us a real one like a number or something";
-export const UPLOAD_ERROR =
+export const FILE_HASH_ERROR =
+  "Whoops! Something didn't work with your upload. Try the upload again";
+export const FILE_TYPE_ERROR =
   "Whoops! That's not a valid file. Try sending us an image";
 export const ORDER_TYPE_ERROR =
   "Whoops! That's not a valid order type. Try sending pizzas or donuts or something else";
