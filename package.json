@@ -15,7 +15,7 @@
     "nodemon": "^2.0.4",
     "prettier": "^2.1.2",
     "serverless-domain-manager": "^5.0.0",
-    "serverless-plugin-typescript": "^1.1.9",
+    "serverless-plugin-typescript": "^2.0.0",
     "ts-jest": "^26.4.1",
     "ts-node": "^3.3.0",
     "tsconfig-paths": "^3.9.0",
