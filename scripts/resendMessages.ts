@@ -18,7 +18,7 @@ const resendHooks = async (since?: string): Promise<void> => {
   await createConnection();
 
   const after = since || `${new Date().toISOString()}`.split("T")[0];
-  const before = new Date() + 60 * 60 * 24;
+  const before = new Date(new Date().valueOf() + 60 * 60 * 24 * 1000);
 
   const reports = await Report.find({
     where: { createdAt: MoreThan(new Date(after)) },
