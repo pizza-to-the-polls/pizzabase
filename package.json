@@ -45,7 +45,7 @@
     "start": "ts-node src/index.ts",
     "clean": "rm -rf .build && npm run fix",
     "fix": "npm run prettier:fix && npm run lint:fix",
-    "schema:sync": "ts-node ./node_modules/typeorm/cli.js schema:sync",
+    "migration:run": "ts-node ./node_modules/typeorm/cli.js migration:run",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",
     "lint": "tslint --project .",
