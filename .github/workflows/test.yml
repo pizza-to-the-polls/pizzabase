@@ -97,5 +97,5 @@ jobs:
           STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STAGING_STRIPE_WH }}
 
-      - name: run migrations
-        run: npm run migration:run
+      - name: sync schema
+        run: npm run schema:sync
