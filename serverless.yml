@@ -45,7 +45,7 @@ provider:
         - "secretsmanager:DescribeSecret"
         - "secretsmanager:TagResource"
       Resource:
-        - "arn:aws:secretsmanager:*:*:secret:*"
+        - "arn:aws:secretsmanager:*:*:secret:PizzaBase*"
     - Effect: "Allow"
       Action:
         - "secretsmanager:CreateSecret"
