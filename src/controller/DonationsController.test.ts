@@ -43,7 +43,7 @@ describe("#create", () => {
   it("creates a Stripe Checkout session", async () => {
     const body = await controller.create(
       http_mocks.createRequest({
-        body: { amountUsd: 10, referrer: "http://google.com" },
+        body: { amountUsd: 10, referrer: "http://google.com", gift: "for bob" },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -66,6 +66,7 @@ describe("#create", () => {
       cancel_url: "http://polls.pizza/donate/",
       metadata: {
         referrer: "http://google.com",
+        gift: "for bob",
       },
     });
 
@@ -163,6 +164,7 @@ describe("#webhook", () => {
     const email = "sds@example.net";
     const postalCode = "12345";
     const referrer = "good-friends";
+    const gift = "for bob";
     const body = {
       type: "charge.succeeded",
       data: {
@@ -170,7 +172,7 @@ describe("#webhook", () => {
           id,
           amount,
           billing_details: { email, address: { postal_code: postalCode } },
-          metadata: { referrer },
+          metadata: { referrer, gift },
         },
       },
     };
@@ -189,6 +191,7 @@ describe("#webhook", () => {
     expect(donation.email).toEqual(email);
     expect(donation.postalCode).toEqual(postalCode);
     expect(donation.referrer).toEqual(referrer);
+    expect(donation.gift).toEqual(gift);
   });
 
   it("deducts a failed charge", async () => {

@@ -45,7 +45,7 @@ export class DonationsController {
   }
 
   async create(request: Request, _response: Response, _next: NextFunction) {
-    const { amountUsd, referrer } = request.body;
+    const { amountUsd, referrer, gift } = request.body;
 
     const numberOfPizzas = Math.ceil(amountUsd / 20);
     try {
@@ -73,6 +73,7 @@ export class DonationsController {
         mode: "payment",
         metadata: {
           referrer,
+          gift,
         },
         success_url: `${process.env.STATIC_SITE}/donate/?success=true&amount_usd=${amountUsd}`,
         cancel_url: `${process.env.STATIC_SITE}/donate/`,
