@@ -64,9 +64,11 @@ describe("#create", () => {
       mode: "payment",
       success_url: "http://polls.pizza/donate/?success=true&amount_usd=10",
       cancel_url: "http://polls.pizza/donate/",
-      metadata: {
-        referrer: "http://google.com",
-        gift: "for bob",
+      payment_intent_data: {
+        metadata: {
+          referrer: "http://google.com",
+          gift: "for bob",
+        },
       },
     });
 
@@ -76,7 +78,7 @@ describe("#create", () => {
   it("pluralizes pizzas", async () => {
     await controller.create(
       http_mocks.createRequest({
-        body: { amountUsd: 100, referrer: "http://google.com" },
+        body: { amountUsd: 100, url: "http://google.com" },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -97,8 +99,12 @@ describe("#create", () => {
       mode: "payment",
       success_url: "http://polls.pizza/donate/?success=true&amount_usd=100",
       cancel_url: "http://polls.pizza/donate/",
-      metadata: {
-        referrer: "http://google.com",
+      payment_intent_data: {
+        metadata: {
+          url: "http://google.com",
+          referrer: undefined,
+          gift: undefined,
+        },
       },
     });
   });
@@ -165,6 +171,7 @@ describe("#webhook", () => {
     const postalCode = "12345";
     const referrer = "good-friends";
     const gift = "for bob";
+    const url = "google.com";
     const body = {
       type: "charge.succeeded",
       data: {
@@ -172,7 +179,7 @@ describe("#webhook", () => {
           id,
           amount,
           billing_details: { email, address: { postal_code: postalCode } },
-          metadata: { referrer, gift },
+          metadata: { referrer, gift, url },
         },
       },
     };
@@ -192,6 +199,7 @@ describe("#webhook", () => {
     expect(donation.postalCode).toEqual(postalCode);
     expect(donation.referrer).toEqual(referrer);
     expect(donation.gift).toEqual(gift);
+    expect(donation.url).toEqual(url);
   });
 
   it("deducts a failed charge", async () => {

@@ -63,12 +63,12 @@ export class Donation extends BaseEntity {
       email,
       address: { postal_code },
     },
-    metadata: { referrer, gift },
+    metadata: { referrer, gift, url },
   }: {
     id: string;
     amount: number;
     receipt_email: string;
-    metadata: { referrer?: string; gift?: string };
+    metadata: { referrer?: string; gift?: string; url?: string };
     billing_details: { email: string; address: { postal_code: string } };
   }): Promise<Donation> {
     const donation = new Donation();
@@ -79,6 +79,7 @@ export class Donation extends BaseEntity {
     donation.postalCode = postal_code;
     donation.referrer = referrer;
     donation.gift = gift;
+    donation.url = url;
 
     await donation.save();
 

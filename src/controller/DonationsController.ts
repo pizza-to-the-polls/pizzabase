@@ -71,14 +71,15 @@ export class DonationsController {
           },
         ],
         mode: "payment",
-        metadata: {
-          referrer,
-          gift,
+        payment_intent_data: {
+          metadata: {
+            referrer,
+            gift,
+          },
         },
         success_url: `${process.env.STATIC_SITE}/donate/?success=true&amount_usd=${amountUsd}`,
         cancel_url: `${process.env.STATIC_SITE}/donate/`,
       });
-
       return { success: true, checkoutSessionId: session.id };
     } catch (e) {
       if (process.env.BUGSNAG_KEY) {
