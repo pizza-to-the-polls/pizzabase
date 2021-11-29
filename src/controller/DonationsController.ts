@@ -45,7 +45,8 @@ export class DonationsController {
   }
 
   async create(request: Request, _response: Response, _next: NextFunction) {
-    const { amountUsd, referrer, gift } = request.body;
+    const { amountUsd, referrer, giftName, giftEmail, url } = request.body;
+    const isGift = giftName && giftEmail;
 
     const numberOfPizzas = Math.ceil(amountUsd / 20);
     try {
@@ -59,9 +60,9 @@ export class DonationsController {
         payment_method_types: ["card"],
         line_items: [
           {
-            description: `About ${numberOfPizzas} ${
-              numberOfPizzas === 1 ? "pizza" : "pizzas"
-            }`,
+            description: `${
+              isGift ? "Gift of about" : "About"
+            } ${numberOfPizzas} ${numberOfPizzas === 1 ? "pizza" : "pizzas"}`,
             price_data: {
               product: process.env.STRIPE_PRODUCT_ID,
               unit_amount: amountUsd * 100,
@@ -74,11 +75,16 @@ export class DonationsController {
         payment_intent_data: {
           metadata: {
             referrer,
-            gift,
+            url,
+            ...(isGift ? { giftName, giftEmail } : {}),
           },
         },
-        success_url: `${process.env.STATIC_SITE}/donate/?success=true&amount_usd=${amountUsd}`,
-        cancel_url: `${process.env.STATIC_SITE}/donate/`,
+        success_url: `${process.env.STATIC_SITE}/${
+          isGift ? "gift" : "donate"
+        }/?success=true&amount_usd=${amountUsd}${
+          isGift ? `&gift_name=${giftName}` : ""
+        }`,
+        cancel_url: `${process.env.STATIC_SITE}/${isGift ? "gift" : "donate"}/`,
       });
       return { success: true, checkoutSessionId: session.id };
     } catch (e) {

@@ -43,7 +43,12 @@ describe("#create", () => {
   it("creates a Stripe Checkout session", async () => {
     const body = await controller.create(
       http_mocks.createRequest({
-        body: { amountUsd: 10, referrer: "http://google.com", gift: "for bob" },
+        body: {
+          amountUsd: 10,
+          referrer: "http://google.com",
+          giftName: "bob smith",
+          giftEmail: "bob@bob.com",
+        },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -52,7 +57,7 @@ describe("#create", () => {
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "About 1 pizza",
+          description: "Gift of about 1 pizza",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 1000,
@@ -62,12 +67,15 @@ describe("#create", () => {
         },
       ],
       mode: "payment",
-      success_url: "http://polls.pizza/donate/?success=true&amount_usd=10",
-      cancel_url: "http://polls.pizza/donate/",
+      success_url:
+        "http://polls.pizza/gift/?success=true&amount_usd=10&gift_name=bob smith",
+      cancel_url: "http://polls.pizza/gift/",
       payment_intent_data: {
         metadata: {
           referrer: "http://google.com",
-          gift: "for bob",
+          giftName: "bob smith",
+          giftEmail: "bob@bob.com",
+          url: undefined,
         },
       },
     });
@@ -103,7 +111,6 @@ describe("#create", () => {
         metadata: {
           url: "http://google.com",
           referrer: undefined,
-          gift: undefined,
         },
       },
     });
@@ -170,7 +177,8 @@ describe("#webhook", () => {
     const email = "sds@example.net";
     const postalCode = "12345";
     const referrer = "good-friends";
-    const gift = "for bob";
+    const giftName = "for bob";
+    const giftEmail = "for bob";
     const url = "google.com";
     const body = {
       type: "charge.succeeded",
@@ -179,7 +187,7 @@ describe("#webhook", () => {
           id,
           amount,
           billing_details: { email, address: { postal_code: postalCode } },
-          metadata: { referrer, gift, url },
+          metadata: { referrer, giftName, giftEmail, url },
         },
       },
     };
@@ -198,7 +206,7 @@ describe("#webhook", () => {
     expect(donation.email).toEqual(email);
     expect(donation.postalCode).toEqual(postalCode);
     expect(donation.referrer).toEqual(referrer);
-    expect(donation.gift).toEqual(gift);
+    expect(donation.gift).toEqual(`${giftName} <${giftEmail}>`);
     expect(donation.url).toEqual(url);
   });
 
