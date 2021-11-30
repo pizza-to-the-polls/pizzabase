@@ -43,6 +43,9 @@ export class Donation extends BaseEntity {
   @Column({ nullable: true })
   referrer: string;
 
+  @Column({ nullable: true, name: "gift" })
+  gift: string;
+
   @Column({ name: "cancel_note", nullable: true })
   cancelNote: string;
 
@@ -60,12 +63,17 @@ export class Donation extends BaseEntity {
       email,
       address: { postal_code },
     },
-    metadata: { referrer },
+    metadata: { referrer, giftName, giftEmail, url },
   }: {
     id: string;
     amount: number;
     receipt_email: string;
-    metadata: { referrer?: string };
+    metadata: {
+      referrer?: string;
+      giftName?: string;
+      giftEmail?: string;
+      url?: string;
+    };
     billing_details: { email: string; address: { postal_code: string } };
   }): Promise<Donation> {
     const donation = new Donation();
@@ -75,6 +83,8 @@ export class Donation extends BaseEntity {
     donation.stripeId = id;
     donation.postalCode = postal_code;
     donation.referrer = referrer;
+    if (giftName && giftEmail) donation.gift = `${giftName} <${giftEmail}>`;
+    donation.url = url;
 
     await donation.save();
 
