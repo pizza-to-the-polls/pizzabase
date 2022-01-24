@@ -55,7 +55,7 @@ test("can override invalid", async () => {
   expect(contactRole).toEqual("Trusted");
 });
 
-test("validateReport returns an error for empty request", async () => {
+test("validateReport returns an error for empty report", async () => {
   const { errors } = await validateReport({});
 
   expect(errors).toEqual({
@@ -65,7 +65,7 @@ test("validateReport returns an error for empty request", async () => {
   });
 });
 
-test("validates the request is valid", async () => {
+test("validates the report is valid", async () => {
   const {
     errors,
     reportURL,

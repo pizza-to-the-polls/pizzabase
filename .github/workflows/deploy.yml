@@ -95,6 +95,7 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STRIPE_WH }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
 
       - name: sync schema
         run: npm run schema:sync
