@@ -149,6 +149,12 @@ export const Routes = [
   },
   {
     method: "get",
+    route: "/health",
+    controller: RootController,
+    action: "health",
+  },
+  {
+    method: "get",
     route: "/",
     controller: RootController,
     action: "root",
