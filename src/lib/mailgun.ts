@@ -28,7 +28,7 @@ const sendMGTemplate = async ({
         to,
       },
       (error, body) => {
-        error ? reject(error, body) : resolve(body);
+        error ? reject(error) : resolve(body);
       }
     );
   });

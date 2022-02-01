@@ -131,7 +131,7 @@ export const Routes = [
   },
   {
     method: "put",
-    route: "/session/:token",
+    route: "/session",
     controller: SessionController,
     action: "update",
   },

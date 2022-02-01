@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import Stripe from "stripe";
+import Bugsnag from "@bugsnag/js";
 
 import { validateMembership } from "../lib/validator";
 import { pack, unpack } from "../lib/jwt";
@@ -28,16 +29,42 @@ export class SessionController {
     const { id } = customer || { id: null };
 
     if (!id) {
-      await sendNoMembershipFoundEmail(email, { email });
-      return { success: true };
+      try {
+        await sendNoMembershipFoundEmail(email, { email });
+        return { success: true };
+      } catch(e) {
+        console.error(e);
+        Bugsnag.notify(e, (event) => {
+          event.severity = "error";
+          event.addMetadata("request", {
+            template: "crust-club-no-membership",
+            ...request.body,
+          });
+        });
+
+        return { errors: { emai: "We can't send emails at this time" } }
+      }
     }
 
-    const token = await pack({ email, id });
-    await sendCrustClubEmail(email, {
-      token: `${process.env.STATIC_SITE}/session/${token}`,
-    });
+    const token = (await pack({ id })).replace(/\./g, '|||');
 
-    return { success: true };
+    try {
+      await sendCrustClubEmail(email, {
+        token: `${process.env.STATIC_SITE}/session/${token}/`,
+      });
+      return { success: true };
+    } catch(e) {
+      console.error(e)
+      Bugsnag.notify(e, (event) => {
+        event.severity = "error";
+        event.addMetadata("request", {
+          template: "crust-club-log-in",
+          ...request.body,
+        });
+      });
+
+      return { errors: { emai: "We can't send emails at this time" } }
+    }
   }
 
   async update(request: Request, response: Response, _next: NextFunction) {
@@ -48,7 +75,7 @@ export class SessionController {
         timeout: 10_000,
       });
 
-      const { email, id } = await unpack(request.body?.token || "");
+      const { id } = await unpack((request.body?.token || "").replace(/\|\|\|/g, '.'));
 
       const { url } = await stripe.billingPortal.sessions.create({
         customer: id,

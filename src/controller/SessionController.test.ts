@@ -27,7 +27,7 @@ describe("#create", () => {
         })),
       },
     };
-    mockMailGunSend = jest.fn(async (config, callback) => {
+    mockMailGunSend = jest.fn(async (_config, callback) => {
       callback(null, "yay");
     });
     mockMailGunClient = {
@@ -76,7 +76,7 @@ describe("#create", () => {
         subject: "Log into Crust Club",
         template: "crust-club-log-in",
         "h:X-Mailgun-Variables": JSON.stringify({
-          token: `${process.env.STATIC_SITE}/session/this-is-real-token`,
+          token: `${process.env.STATIC_SITE}/session/this-is-real-token/`,
         }),
         to: goodEmail,
       },
