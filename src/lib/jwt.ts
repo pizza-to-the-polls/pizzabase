@@ -10,9 +10,7 @@ export const pack = async (data): Promise<string> =>
     );
   });
 
-export const unpack = async (
-  token
-): Promise<{ [index: string]: string }> =>
+export const unpack = async (token): Promise<{ [index: string]: string }> =>
   await new Promise((succeed, fail) => {
     jwt.verify(token, secret, (err, decoded) =>
       err ? fail(err) : succeed(decoded)

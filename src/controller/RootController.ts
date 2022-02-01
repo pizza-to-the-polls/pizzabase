@@ -6,7 +6,7 @@ export class RootController {
     return { success: "🍕 🇺🇸 🦅 🗳 🎉 " };
   }
   async health(_request: Request, _response: Response, _next: NextFunction) {
-    const [loc, ] = await Location.find({ take: 1, select: ['id'] })
-    return { success: loc !== null }
+    const [loc] = await Location.find({ take: 1, select: ["id"] });
+    return { success: loc !== null };
   }
 }

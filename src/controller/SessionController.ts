@@ -32,7 +32,7 @@ export class SessionController {
       try {
         await sendNoMembershipFoundEmail(email, { email });
         return { success: true };
-      } catch(e) {
+      } catch (e) {
         console.error(e);
         Bugsnag.notify(e, (event) => {
           event.severity = "error";
@@ -42,19 +42,19 @@ export class SessionController {
           });
         });
 
-        return { errors: { emai: "We can't send emails at this time" } }
+        return { errors: { emai: "We can't send emails at this time" } };
       }
     }
 
-    const token = (await pack({ id })).replace(/\./g, '|||');
+    const token = (await pack({ id })).replace(/\./g, "|||");
 
     try {
       await sendCrustClubEmail(email, {
         token: `${process.env.STATIC_SITE}/session/${token}/`,
       });
       return { success: true };
-    } catch(e) {
-      console.error(e)
+    } catch (e) {
+      console.error(e);
       Bugsnag.notify(e, (event) => {
         event.severity = "error";
         event.addMetadata("request", {
@@ -63,7 +63,7 @@ export class SessionController {
         });
       });
 
-      return { errors: { emai: "We can't send emails at this time" } }
+      return { errors: { emai: "We can't send emails at this time" } };
     }
   }
 
@@ -75,7 +75,9 @@ export class SessionController {
         timeout: 10_000,
       });
 
-      const { id } = await unpack((request.body?.token || "").replace(/\|\|\|/g, '.'));
+      const { id } = await unpack(
+        (request.body?.token || "").replace(/\|\|\|/g, ".")
+      );
 
       const { url } = await stripe.billingPortal.sessions.create({
         customer: id,
