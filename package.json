@@ -33,7 +33,7 @@
     "jsonwebtoken": "^8.5.1",
     "mailgun-js": "^0.22.0",
     "node-fetch": "^2.6.1",
-    "pg": "^7.3.0",
+    "pg": "8.7.1",
     "reflect-metadata": "^0.1.10",
     "serverless": "^2.1.1",
     "serverless-http": "^2.6.0",
