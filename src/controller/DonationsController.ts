@@ -39,7 +39,7 @@ export class DonationsController {
   async create(request: Request, _response: Response, _next: NextFunction) {
     try {
       const id = await sessionForCheckout({
-        type: request.body?.amountUsd ? "donation" : "subscription",
+        type: request.body?.type || "donation",
         ...request.body,
       });
       return { success: true, checkoutSessionId: id };

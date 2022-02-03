@@ -18,9 +18,14 @@ describe("#create", () => {
           create: jest.fn(async () => ({ id: "returned_id" })),
         },
       },
-      proces: {
+      prices: {
         list: jest.fn(async () => ({
-          data: [],
+          data: [
+            {
+              unit_amount: 2000,
+              id: "price_blahblah",
+            },
+          ],
         })),
       },
     };
@@ -28,6 +33,7 @@ describe("#create", () => {
 
     process.env.STRIPE_SECRET_KEY = "STRIPE SECRET KEY";
     process.env.STRIPE_PRODUCT_ID = "stripe_product_12345";
+    process.env.STRIPE_PRODUCT_MEMBERSHIP_ID = "stripe_product_09876";
     process.env.STATIC_SITE = "http://polls.pizza";
   });
 
@@ -113,6 +119,45 @@ describe("#create", () => {
       success_url: "http://polls.pizza/donate/?success=true&amount_usd=100",
       cancel_url: "http://polls.pizza/donate/",
       payment_intent_data: {
+        metadata: {
+          url: "http://google.com",
+          referrer: undefined,
+        },
+      },
+    });
+  });
+
+  it("creates a subcription", async () => {
+    await controller.create(
+      http_mocks.createRequest({
+        body: { type: "subscription", amountUsd: 20, url: "http://google.com" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(mockStripeClient.prices.list).toHaveBeenCalledWith({
+      active: true,
+      type: "recurring",
+      product: "stripe_product_09876",
+    });
+
+    expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
+      payment_method_types: ["card"],
+      shipping_address_collection: {
+        allowed_countries: ["US"],
+      },
+      line_items: [
+        {
+          price: "price_blahblah",
+          quantity: 1,
+        },
+      ],
+
+      mode: "subscription",
+      success_url: "http://polls.pizza/crustclub/?success=true&amount_usd=20",
+      cancel_url: "http://polls.pizza/crustclub/",
+      subscription_data: {
         metadata: {
           url: "http://google.com",
           referrer: undefined,

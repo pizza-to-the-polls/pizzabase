@@ -3,7 +3,6 @@ import Stripe from "stripe";
 interface NewSubscription {
   type: "subscription";
   subscriptionTier: string;
-  level: string;
   amountUsd: number;
   url: string;
   referrer?: string;
@@ -25,15 +24,21 @@ const initStripe = (maxNetworkRetries: number = 6, timeout: number = 5_000) =>
     timeout,
   });
 
-const processSubscription = async (_body: NewSubscription): Promise<string> => {
+const processSubscription = async (body: NewSubscription): Promise<string> => {
+  const { amountUsd, referrer, url } = body;
   const stripe = initStripe();
 
   const { data } = await stripe.prices.list({
     type: "recurring",
     product: process.env.STRIPE_PRODUCT_MEMBERSHIP_ID,
+    active: true,
   });
 
-  const { id: price } = data[0] || { id: null };
+  const { id: price } = data.find(
+    ({ unit_amount }) => unit_amount === amountUsd * 100
+  ) || { id: null };
+
+  if (!price) throw new Error("Not a valid subscription level!");
 
   const { id } = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
@@ -47,8 +52,14 @@ const processSubscription = async (_body: NewSubscription): Promise<string> => {
       },
     ],
     mode: "subscription",
-    success_url: `${process.env.STATIC_SITE}/crustclub/?success=true&amount_usd=`,
-    cancel_url: `${process.env.STATIC_SITE}/donate/?type=recurring`,
+    subscription_data: {
+      metadata: {
+        referrer,
+        url,
+      },
+    },
+    success_url: `${process.env.STATIC_SITE}/crustclub/?success=true&amount_usd=${amountUsd}`,
+    cancel_url: `${process.env.STATIC_SITE}/crustclub/`,
   });
 
   return id;
