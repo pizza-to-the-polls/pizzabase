@@ -1,8 +1,8 @@
 import { NextFunction, Request, Response } from "express";
-import Stripe from "stripe";
 import Bugsnag from "@bugsnag/js";
 
 import { validateMembership } from "../lib/validator";
+import { findCustomer, sessionForPortal } from "../lib/stripe";
 import { pack, unpack } from "../lib/jwt";
 import { sendCrustClubEmail, sendNoMembershipFoundEmail } from "../lib/mailgun";
 
@@ -15,18 +15,7 @@ export class SessionController {
       return { errors };
     }
 
-    const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-      apiVersion: "2020-08-27",
-      maxNetworkRetries: 6,
-      timeout: 10_000,
-    });
-
-    const {
-      data: [customer],
-    } = await stripe.customers.list({
-      email,
-    });
-    const { id } = customer || { id: null };
+    const id = await findCustomer(email);
 
     if (!id) {
       try {
@@ -46,7 +35,7 @@ export class SessionController {
       }
     }
 
-    const token = (await pack({ id })).replace(/\./g, "|||");
+    const token = await pack({ id });
 
     try {
       await sendCrustClubEmail(email, {
@@ -69,20 +58,8 @@ export class SessionController {
 
   async update(request: Request, response: Response, _next: NextFunction) {
     try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-        apiVersion: "2020-08-27",
-        maxNetworkRetries: 6,
-        timeout: 10_000,
-      });
-
-      const { id } = await unpack(
-        (request.body?.token || "").replace(/\|\|\|/g, ".")
-      );
-
-      const { url } = await stripe.billingPortal.sessions.create({
-        customer: id,
-        return_url: `${process.env.STATIC_SITE}/crustclub`,
-      });
+      const { id } = await unpack(request.body?.token);
+      const url = await sessionForPortal(id);
 
       return { success: true, redirect: url };
     } catch (e) {

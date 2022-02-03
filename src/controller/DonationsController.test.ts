@@ -18,6 +18,11 @@ describe("#create", () => {
           create: jest.fn(async () => ({ id: "returned_id" })),
         },
       },
+      proces: {
+        list: jest.fn(async () => ({
+          data: [],
+        })),
+      },
     };
     (Stripe as any).mockImplementation(() => mockStripeClient);
 

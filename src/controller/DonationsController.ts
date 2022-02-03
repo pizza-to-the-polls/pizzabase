@@ -1,92 +1,48 @@
 import { NextFunction, Request, Response } from "express";
-import Stripe from "stripe";
 import Bugsnag from "@bugsnag/js";
 
 import { Donation } from "../entity/Donation";
+import { processWebhook, sessionForCheckout } from "../lib/stripe";
 
 export class DonationsController {
   async webhook(request: Request, response: Response, _next: NextFunction) {
-    let event;
-
     try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-        apiVersion: "2020-08-27",
-        maxNetworkRetries: 3,
-        timeout: 10_000,
-      });
-      event = stripe.webhooks.constructEvent(
+      const { event, type } = processWebhook(
         request.body,
-        request.headers["stripe-signature"],
-        process.env.STRIPE_SECRET_WH
+        request.headers["stripe-signature"]
       );
+
+      switch (type) {
+        case "charge.succeeded":
+          await Donation.succeedCharge(event);
+          break;
+        case "charge.failed":
+          await Donation.failCharge("failed", event);
+          break;
+        case "charge.refunded":
+          await Donation.failCharge("refunded", event);
+          break;
+        case "charge.dispute.funds_withdrawn":
+          await Donation.failCharge("dispute.funds_withdrawn", event);
+          break;
+        default:
+          console.log(`Unhandled event type ${type}`);
+      }
+
+      return { success: true };
     } catch (err) {
       response.status(400);
       return { errors: [`Webhook Error: ${err.message}`] };
     }
-
-    switch (event.type) {
-      case "charge.succeeded":
-        await Donation.succeedCharge(event.data.object);
-        break;
-      case "charge.failed":
-        await Donation.failCharge("failed", event.data.object);
-        break;
-      case "charge.refunded":
-        await Donation.failCharge("refunded", event.data.object);
-        break;
-      case "charge.dispute.funds_withdrawn":
-        await Donation.failCharge("dispute.funds_withdrawn", event.data.object);
-        break;
-      default:
-        console.log(`Unhandled event type ${event.type}`);
-    }
-
-    return { success: true };
   }
 
   async create(request: Request, _response: Response, _next: NextFunction) {
-    const { amountUsd, referrer, giftName, giftEmail, url } = request.body;
-    const isGift = giftName && giftEmail;
-
-    const numberOfPizzas = Math.ceil(amountUsd / 20);
     try {
-      const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
-        apiVersion: "2020-08-27",
-        maxNetworkRetries: 6,
-        timeout: 5_000,
+      const id = await sessionForCheckout({
+        type: request.body?.amountUsd ? "donation" : "subscription",
+        ...request.body,
       });
-
-      const session = await stripe.checkout.sessions.create({
-        payment_method_types: ["card"],
-        line_items: [
-          {
-            description: `${
-              isGift ? "Gift of about" : "About"
-            } ${numberOfPizzas} ${numberOfPizzas === 1 ? "pizza" : "pizzas"}`,
-            price_data: {
-              product: process.env.STRIPE_PRODUCT_ID,
-              unit_amount: amountUsd * 100,
-              currency: "usd",
-            },
-            quantity: 1,
-          },
-        ],
-        mode: "payment",
-        payment_intent_data: {
-          metadata: {
-            referrer,
-            url,
-            ...(isGift ? { giftName, giftEmail } : {}),
-          },
-        },
-        success_url: `${process.env.STATIC_SITE}/${
-          isGift ? "gift" : "donate"
-        }/?success=true&amount_usd=${amountUsd}${
-          isGift ? `&gift_name=${giftName}` : ""
-        }`,
-        cancel_url: `${process.env.STATIC_SITE}/${isGift ? "gift" : "donate"}/`,
-      });
-      return { success: true, checkoutSessionId: session.id };
+      return { success: true, checkoutSessionId: id };
     } catch (e) {
       if (process.env.BUGSNAG_KEY) {
         Bugsnag.notify(e, (event) => {
