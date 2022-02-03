@@ -94,6 +94,7 @@ jobs:
           ALLOWED_ORIGINS: polls.pizza
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STRIPE_PRODUCT_ID }}
+          STRIPE_PRODUCT_MEMBERSHIP_ID: ${{ secrets.STRIPE_PRODUCT_MEMBERSHIP_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STRIPE_WH }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           JWT_SECRET: ${{ secrets.JWT_SECRET }}

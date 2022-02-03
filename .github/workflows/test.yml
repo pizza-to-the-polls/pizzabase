@@ -95,6 +95,7 @@ jobs:
           BUGSNAG_ENV: 'dev'
           STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID }}
+          STRIPE_PRODUCT_MEMBERSHIP_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_MEMBERSHIP_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STAGING_STRIPE_WH }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
