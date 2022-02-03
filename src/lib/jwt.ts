@@ -1,6 +1,6 @@
 import * as jwt from "jsonwebtoken";
 
-const secret = process.env.MEMBERSHIP_JWT_SECRET || "shhhh";
+const secret = process.env.JWT_SECRET || "shhhh";
 const expiresIn = 60 * 15;
 
 // JWTs include two periods (.) which don't encode to URLs well - replace with a pipe (|)
