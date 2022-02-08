@@ -22,7 +22,7 @@ describe("#create", () => {
         list: jest.fn(async () => ({
           data: [
             {
-              unit_amount: 2000,
+              unit_amount: 1,
               id: "price_blahblah",
             },
           ],
@@ -149,8 +149,9 @@ describe("#create", () => {
       },
       line_items: [
         {
+          description: "Your gift will feed 100 people per year",
           price: "price_blahblah",
-          quantity: 1,
+          quantity: 2000,
         },
       ],
 
