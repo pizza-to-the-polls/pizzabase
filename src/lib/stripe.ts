@@ -24,23 +24,18 @@ const initStripe = (maxNetworkRetries: number = 6, timeout: number = 5_000) =>
     timeout,
   });
 
-const STRIPE_SUBSCRIPTION_PRICE = 1;
-
 const processSubscription = async (body: NewSubscription): Promise<string> => {
   const { amountUsd, referrer, url } = body;
   const stripe = initStripe();
 
   const { data } = await stripe.prices.list({
     type: "recurring",
-    product: process.env.STRIPE_PRODUCT_MEMBERSHIP_ID,
     active: true,
   });
 
   const { id: price } = data.find(
-    ({ unit_amount }) => unit_amount === STRIPE_SUBSCRIPTION_PRICE
+    ({ unit_amount }) => unit_amount === amountUsd * 100
   ) || { id: null };
-
-  const numberOfPeople = Math.ceil(amountUsd * 5);
 
   if (!price) throw new Error("Not a valid subscription level!");
 
@@ -51,9 +46,8 @@ const processSubscription = async (body: NewSubscription): Promise<string> => {
     },
     line_items: [
       {
-        description: `Your gift will feed ${numberOfPeople} people per year`,
         price,
-        quantity: (amountUsd / STRIPE_SUBSCRIPTION_PRICE) * 100,
+        quantity: 1,
       },
     ],
     mode: "subscription",
@@ -64,7 +58,9 @@ const processSubscription = async (body: NewSubscription): Promise<string> => {
       },
     },
     success_url: `${process.env.STATIC_SITE}/crustclub/?success=true&amount_usd=${amountUsd}`,
-    cancel_url: `${process.env.STATIC_SITE}/crustclub/`,
+    cancel_url: `${
+      (url || `${process.env.STATIC_SITE}/donate`).split("?")[0]
+    }?amount_usd=${amountUsd}&type=subscription`,
   });
 
   return id;

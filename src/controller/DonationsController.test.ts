@@ -22,8 +22,12 @@ describe("#create", () => {
         list: jest.fn(async () => ({
           data: [
             {
-              unit_amount: 1,
+              unit_amount: 20_00,
               id: "price_blahblah",
+            },
+            {
+              unit_amount: 10_00,
+              id: "price_other",
             },
           ],
         })),
@@ -33,7 +37,6 @@ describe("#create", () => {
 
     process.env.STRIPE_SECRET_KEY = "STRIPE SECRET KEY";
     process.env.STRIPE_PRODUCT_ID = "stripe_product_12345";
-    process.env.STRIPE_PRODUCT_MEMBERSHIP_ID = "stripe_product_09876";
     process.env.STATIC_SITE = "http://polls.pizza";
   });
 
@@ -130,7 +133,11 @@ describe("#create", () => {
   it("creates a subcription", async () => {
     await controller.create(
       http_mocks.createRequest({
-        body: { type: "subscription", amountUsd: 20, url: "http://google.com" },
+        body: {
+          type: "subscription",
+          amountUsd: 20,
+          url: "http://polls.pizza/donate",
+        },
       }),
       http_mocks.createResponse(),
       () => undefined
@@ -139,7 +146,6 @@ describe("#create", () => {
     expect(mockStripeClient.prices.list).toHaveBeenCalledWith({
       active: true,
       type: "recurring",
-      product: "stripe_product_09876",
     });
 
     expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
@@ -149,18 +155,17 @@ describe("#create", () => {
       },
       line_items: [
         {
-          description: "Your gift will feed 100 people per year",
           price: "price_blahblah",
-          quantity: 2000,
+          quantity: 1,
         },
       ],
 
       mode: "subscription",
       success_url: "http://polls.pizza/crustclub/?success=true&amount_usd=20",
-      cancel_url: "http://polls.pizza/crustclub/",
+      cancel_url: "http://polls.pizza/donate?amount_usd=20&type=subscription",
       subscription_data: {
         metadata: {
-          url: "http://google.com",
+          url: "http://polls.pizza/donate",
           referrer: undefined,
         },
       },
