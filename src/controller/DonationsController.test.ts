@@ -71,7 +71,7 @@ describe("#create", () => {
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "Gift of about 1 pizza",
+          description: "Gift of about 1/2 of a pizza",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 1000,

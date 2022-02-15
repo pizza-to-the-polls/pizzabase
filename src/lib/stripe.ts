@@ -70,7 +70,7 @@ const processDonation = async (body: NewDonation): Promise<string> => {
   const { amountUsd, url, referrer, giftName, giftEmail } = body;
   const isGift = giftName && giftEmail;
 
-  const numberOfPizzas = Math.ceil(amountUsd / 20);
+  const numberOfPizzas: number = amountUsd / 20;
 
   const stripe = initStripe();
 
@@ -78,9 +78,13 @@ const processDonation = async (body: NewDonation): Promise<string> => {
     payment_method_types: ["card"],
     line_items: [
       {
-        description: `${isGift ? "Gift of about" : "About"} ${numberOfPizzas} ${
-          numberOfPizzas === 1 ? "pizza" : "pizzas"
-        }`,
+        description: `${isGift ? "Gift of about" : "About"} ${
+          numberOfPizzas > 1
+            ? `${Math.round(numberOfPizzas)}`
+            : numberOfPizzas >= 0.5
+            ? "1/2 of a"
+            : "1/4 of a"
+        } ${numberOfPizzas < 1 ? "pizza" : "pizzas"}`,
         price_data: {
           product: process.env.STRIPE_PRODUCT_ID,
           unit_amount: amountUsd * 100,
