@@ -71,7 +71,8 @@ describe("#create", () => {
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "Gift of about 1/2 of a pizza",
+          description:
+            "Gift of about 1/2 of a pizza. Waiting in line is a bummer.\nWaiting in line with pizza is a little less of a bummer. Any extra dough you can spare for our Pizza Fund will go a long way in helping us make sure democracy is delicious this election season!",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 1000,
@@ -109,7 +110,8 @@ describe("#create", () => {
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "About 5 pizzas",
+          description:
+            "About 5 pizzas. Waiting in line is a bummer.\nWaiting in line with pizza is a little less of a bummer. Any extra dough you can spare for our Pizza Fund will go a long way in helping us make sure democracy is delicious this election season!",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 10000,

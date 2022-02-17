@@ -24,6 +24,9 @@ const initStripe = (maxNetworkRetries: number = 6, timeout: number = 5_000) =>
     timeout,
   });
 
+const EXTRA_COPY =
+  "Waiting in line is a bummer.\nWaiting in line with pizza is a little less of a bummer. Any extra dough you can spare for our Pizza Fund will go a long way in helping us make sure democracy is delicious this election season!";
+
 const processSubscription = async (body: NewSubscription): Promise<string> => {
   const { amountUsd, referrer, url } = body;
   const stripe = initStripe();
@@ -84,7 +87,7 @@ const processDonation = async (body: NewDonation): Promise<string> => {
             : numberOfPizzas >= 0.5
             ? "1/2 of a"
             : "1/4 of a"
-        } ${numberOfPizzas < 1 ? "pizza" : "pizzas"}`,
+        } ${numberOfPizzas < 1 ? "pizza" : "pizzas"}. ${EXTRA_COPY}`,
         price_data: {
           product: process.env.STRIPE_PRODUCT_ID,
           unit_amount: amountUsd * 100,
