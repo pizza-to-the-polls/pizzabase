@@ -1,10 +1,13 @@
-import { createConnection, getConnection } from "typeorm";
+import { createConnection, getConnection, ConnectionOptions } from "typeorm";
 
 const setUpDB = async () => {
-  const config: any = {
+  const config: ConnectionOptions = {
+    name: "default",
     type: "postgres",
-    username: "postgres",
+    port: 5432,
+    username: process.env.POSTGRES_USERNAME || "postgres",
     database: process.env.POSTGRES_DB || "pizzabaseTest",
+    password: process.env.POSTGRES_PASSWORD,
     dropSchema: true,
     synchronize: true,
     logging: false,
@@ -17,11 +20,6 @@ const setUpDB = async () => {
       subscribersDir: "src/subscriber",
     },
   };
-
-  if (process.env.POSTGRES_PASSWORD)
-    config.password = process.env.POSTGRES_PASSWORD;
-  if (process.env.POSTGRES_USERNAME)
-    config.username = process.env.POSTGRES_USERNAME;
 
   try {
     await createConnection(config);

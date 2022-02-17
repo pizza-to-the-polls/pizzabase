@@ -5,8 +5,9 @@ import { RootController } from "./controller/RootController";
 import { TotalsController } from "./controller/TotalsController";
 import { OrdersController } from "./controller/OrdersController";
 import { UploadsController } from "./controller/UploadsController";
-
+import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
+
 export const Routes = [
   {
     method: "get",
@@ -123,10 +124,16 @@ export const Routes = [
     action: "create",
   },
   {
-    method: "get",
-    route: "/",
-    controller: RootController,
-    action: "root",
+    method: "post",
+    route: "/session",
+    controller: SessionController,
+    action: "create",
+  },
+  {
+    method: "put",
+    route: "/session",
+    controller: SessionController,
+    action: "update",
   },
   {
     method: "post",
@@ -139,5 +146,17 @@ export const Routes = [
     route: "/webhook",
     controller: DonationsController,
     action: "webhook",
+  },
+  {
+    method: "get",
+    route: "/health",
+    controller: RootController,
+    action: "health",
+  },
+  {
+    method: "get",
+    route: "/",
+    controller: RootController,
+    action: "root",
   },
 ];

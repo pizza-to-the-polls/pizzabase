@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 12
+          node-version: 14
 
       - name: npm install dependencies
         run: npm install
@@ -62,7 +62,7 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 12
+          node-version: 14
 
       - name: npm install dependencies
         run: npm install
@@ -96,6 +96,8 @@ jobs:
           STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STAGING_STRIPE_WH }}
+          MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+          JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
 
       - name: sync schema
         run: npm run schema:sync

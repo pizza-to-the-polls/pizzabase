@@ -8,7 +8,7 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs12.x
+  runtime: nodejs14.x
   timeout: 30
   region: us-west-2
   environment:
@@ -27,6 +27,9 @@ provider:
 
     GOOGLE_MAPS_KEY: ${env:GOOGLE_MAPS_KEY}
     BUGSNAG_KEY: ${env:BUGSNAG_KEY}
+    MAILGUN_API_KEY: ${env:MAILGUN_API_KEY}
+    JWT_SECRET: ${env:JWT_SECRET}
+
     ALLOWED_ORIGINS: ${env:ALLOWED_ORIGINS}
     STATIC_SITE: ${env:STATIC_SITE}
     UPLOAD_S3_BUCKET: reports.polls.pizza

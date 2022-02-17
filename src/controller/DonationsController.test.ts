@@ -18,6 +18,20 @@ describe("#create", () => {
           create: jest.fn(async () => ({ id: "returned_id" })),
         },
       },
+      prices: {
+        list: jest.fn(async () => ({
+          data: [
+            {
+              unit_amount: 20_00,
+              id: "price_blahblah",
+            },
+            {
+              unit_amount: 10_00,
+              id: "price_other",
+            },
+          ],
+        })),
+      },
     };
     (Stripe as any).mockImplementation(() => mockStripeClient);
 
@@ -57,7 +71,7 @@ describe("#create", () => {
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "Gift of about 1 pizza",
+          description: "Gift of about 1/2 of a pizza",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 1000,
@@ -66,6 +80,7 @@ describe("#create", () => {
           quantity: 1,
         },
       ],
+      submit_type: "donate",
       mode: "payment",
       success_url:
         "http://polls.pizza/gift/?success=true&amount_usd=10&gift_name=bob smith",
@@ -104,12 +119,55 @@ describe("#create", () => {
           quantity: 1,
         },
       ],
+      submit_type: "donate",
       mode: "payment",
       success_url: "http://polls.pizza/donate/?success=true&amount_usd=100",
       cancel_url: "http://polls.pizza/donate/",
       payment_intent_data: {
         metadata: {
           url: "http://google.com",
+          referrer: undefined,
+        },
+      },
+    });
+  });
+
+  it("creates a subcription", async () => {
+    await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 20,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+
+    expect(mockStripeClient.prices.list).toHaveBeenCalledWith({
+      active: true,
+      type: "recurring",
+    });
+
+    expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
+      payment_method_types: ["card"],
+      shipping_address_collection: {
+        allowed_countries: ["US"],
+      },
+      line_items: [
+        {
+          price: "price_blahblah",
+          quantity: 1,
+        },
+      ],
+
+      mode: "subscription",
+      success_url: "http://polls.pizza/crustclub/?success=true&amount_usd=20",
+      cancel_url: "http://polls.pizza/donate?amount_usd=20&type=subscription",
+      subscription_data: {
+        metadata: {
+          url: "http://polls.pizza/donate",
           referrer: undefined,
         },
       },
