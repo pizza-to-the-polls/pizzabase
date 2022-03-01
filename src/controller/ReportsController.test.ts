@@ -117,7 +117,7 @@ describe("#create", () => {
   });
 
   test("New request/loc returns success, creates location, report, zaps new location", async () => {
-    const url = "http://twitter.com/something/";
+    const url = "http://twitter.com/something/status/123";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
     const waitTime = "5";
@@ -178,7 +178,7 @@ describe("#create", () => {
   });
 
   test("Re-used loc / new returns success, sets existing location, creates new report, zaps new report", async () => {
-    const url = "http://twitter.com/different/";
+    const url = "http://twitter.com/different/status/123";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
     const waitTime = "5";
@@ -231,7 +231,7 @@ describe("#create", () => {
   });
 
   test("Re-used loc / re-used url, sets existing location, creates new report, does not zap", async () => {
-    const url = "http://twitter.com/different/";
+    const url = "http://twitter.com/different/status/123";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
     const waitTime = "5";
@@ -279,7 +279,7 @@ describe("#create", () => {
   });
 
   test("New loc / re-used url, creates new report, zaps new location", async () => {
-    const url = "http://twitter.com/anewone/";
+    const url = "http://twitter.com/anewone/status/123";
     const address = "550 Different Address City OR 12345";
     const contact = "666-234-2345";
 
@@ -327,7 +327,7 @@ describe("#create", () => {
   });
 
   test("Re-used loc with truck / new url returns success, sets existing location, creates new report, no zap", async () => {
-    const url = "http://twitter.com/different/";
+    const url = "http://twitter.com/different/status/123";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
 
@@ -372,7 +372,7 @@ describe("#create", () => {
   });
 
   test("Re-used loc with order / new url returns success, sets existing location, creates new report, no zap", async () => {
-    const url = "http://twitter.com/different/";
+    const url = "http://twitter.com/different/status/123";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
 
@@ -421,7 +421,7 @@ describe("#create", () => {
   });
 
   test("Non-cannonical loc, creates new report on canonical loc", async () => {
-    const url = "http://twitter.com/different/";
+    const url = "http://twitter.com/different/status/123";
     const address = "5335 S Kimbark Ave Chicago IL 60615";
     const contact = "555-234-2345";
 

@@ -1,5 +1,12 @@
 import { validateReport } from ".";
-import { ADDRESS_ERROR, URL_ERROR, CONTACT_ERROR } from "./constants";
+import {
+  ADDRESS_ERROR,
+  URL_ERROR,
+  CONTACT_ERROR,
+  TWITTER_ERROR,
+  OUR_TWITTER_ERROR,
+  FACEBOOK_ERROR,
+} from "./constants";
 
 jest.mock("./geocode");
 
@@ -72,13 +79,13 @@ test("validates the report is valid", async () => {
     contactInfo,
     normalizedAddress,
   } = await validateReport({
-    url: "http://twitter.com/something/?utm_diff",
+    url: "http://twitter.com/something/status/123?utm_diff",
     contact: "555-234-2345",
     address: "5335 S Kimbark Ave Chicago IL 60615",
   });
 
   expect(errors).toEqual({});
-  expect(reportURL).toEqual("http://twitter.com/something/");
+  expect(reportURL).toEqual("http://twitter.com/something/status/123");
   expect(contactInfo).toEqual("555-234-2345");
   expect(normalizedAddress).toEqual({
     latitude: 1234,
@@ -91,4 +98,34 @@ test("validates the report is valid", async () => {
     state: "IL",
     zip: "60615",
   });
+});
+
+test("link to tweet without a status is invalid", async () => {
+  const { errors } = await validateReport({
+    url: "http://twitter.com/something/",
+    contact: "555-234-2345",
+    address: "5335 S Kimbark Ave Chicago IL 60615",
+  });
+
+  expect(errors).toEqual({ url: TWITTER_ERROR });
+});
+
+test("link to tweet that is our tweets is invalid", async () => {
+  const { errors } = await validateReport({
+    url: "http://twitter.com/pizzatothepolls/status/1235",
+    contact: "555-234-2345",
+    address: "5335 S Kimbark Ave Chicago IL 60615",
+  });
+
+  expect(errors).toEqual({ url: OUR_TWITTER_ERROR });
+});
+
+test("facebook link with story is invalid", async () => {
+  const { errors } = await validateReport({
+    url: "https://facebook.com/photo",
+    contact: "555-234-2345",
+    address: "5335 S Kimbark Ave Chicago IL 60615",
+  });
+
+  expect(errors).toEqual({ url: FACEBOOK_ERROR });
 });
