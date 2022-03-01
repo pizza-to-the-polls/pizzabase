@@ -101,12 +101,7 @@ test("validates the report is valid", async () => {
 });
 
 test("link to tweet without a status is invalid", async () => {
-  const {
-    errors,
-    reportURL,
-    contactInfo,
-    normalizedAddress,
-  } = await validateReport({
+  const { errors } = await validateReport({
     url: "http://twitter.com/something/",
     contact: "555-234-2345",
     address: "5335 S Kimbark Ave Chicago IL 60615",
@@ -116,12 +111,7 @@ test("link to tweet without a status is invalid", async () => {
 });
 
 test("link to tweet that is our tweets is invalid", async () => {
-  const {
-    errors,
-    reportURL,
-    contactInfo,
-    normalizedAddress,
-  } = await validateReport({
+  const { errors } = await validateReport({
     url: "http://twitter.com/pizzatothepolls/status/1235",
     contact: "555-234-2345",
     address: "5335 S Kimbark Ave Chicago IL 60615",
@@ -131,12 +121,7 @@ test("link to tweet that is our tweets is invalid", async () => {
 });
 
 test("facebook link with story is invalid", async () => {
-  const {
-    errors,
-    reportURL,
-    contactInfo,
-    normalizedAddress,
-  } = await validateReport({
+  const { errors } = await validateReport({
     url: "https://facebook.com/photo",
     contact: "555-234-2345",
     address: "5335 S Kimbark Ave Chicago IL 60615",
