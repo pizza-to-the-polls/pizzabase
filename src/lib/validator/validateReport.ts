@@ -46,11 +46,17 @@ export const validateReport = async (
   canDistribute?: boolean;
 }> => {
   const errors: ValidationError = {};
-  const reportURL = normalizeURL(
-    url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : ""
-  );
-  if (!reportURL) {
-    errors.url = URL_ERROR;
+  let reportURL: string | null = null;
+
+  try {
+    reportURL = normalizeURL(
+      url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : ""
+    );
+    if (!reportURL) {
+      errors.url = URL_ERROR;
+    }
+  } catch (error) {
+    errors.url = error;
   }
 
   const contactInfo = normalizeContact(
