@@ -23,8 +23,10 @@ const GMAPS_COMPONENT_MAPPING = {
 
 import { NormalAddress } from "./types";
 
+// NOTE: Removed call to (await smartyGeocode(body)) in geocode
+// need to set up non Power the Polls account to use as Pizza
 export const geocode = async (body: string): Promise<null | NormalAddress> =>
-  (await smartyGeocode(body)) || (await gmapsGeocode(body));
+  (await gmapsGeocode(body));
 
 const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
   const resp = await fetch(
