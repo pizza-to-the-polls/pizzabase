@@ -1,4 +1,3 @@
-import { toStateName } from "../states";
 import fetch from "node-fetch";
 
 const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY;

@@ -12,8 +12,6 @@ provider:
   timeout: 30
   region: us-west-2
   environment:
-    SS_AUTH_ID: ${env:SS_AUTH_ID}
-    SS_AUTH_TOKEN: ${env:SS_AUTH_TOKEN}
     NODE_ENV: prod
     ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
