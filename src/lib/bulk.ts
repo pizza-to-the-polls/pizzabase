@@ -11,11 +11,10 @@ export const uploadBulkCSV = async (
   start: string | number | null = 0,
   timeout: number = 150
 ) => {
+  await createConnection();
   const conn = await getConnection();
-  if (!conn?.isConnected) {
-    await createConnection();
-  }
   const { manager } = conn;
+
   const failures = [];
 
   const data: { [key: string]: string }[] = await new Promise((resolve) => {
