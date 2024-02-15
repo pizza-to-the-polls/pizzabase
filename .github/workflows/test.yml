@@ -27,7 +27,7 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 20
 
       - name: npm install dependencies
         run: npm install
@@ -62,7 +62,7 @@ jobs:
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 14
+          node-version: 20
 
       - name: npm install dependencies
         run: npm install
