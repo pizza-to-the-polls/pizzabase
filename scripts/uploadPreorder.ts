@@ -41,7 +41,7 @@ const preOrderReport = async (
     address: Address,
   });
   if (Object.keys(errors).length > 0) {
-    throw new Error(`Bad address ${Address}`);
+    throw new Error(`Bad address ${Address} ${JSON.stringify(errors)}`);
   }
 
   const [location] = await Location.getOrCreateFromAddress(normalizedAddress);
