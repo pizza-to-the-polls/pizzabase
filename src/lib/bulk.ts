@@ -47,5 +47,7 @@ export const uploadBulkCSV = async (
     await new Promise((accept) => setTimeout(accept, timeout));
   }
 
-  console.log(failures.map((row) => Object.values(row).join(",")).join("\n"));
+  console.log(
+    failures.map((row) => `"${Object.values(row).join('","')}"`).join("\n")
+  );
 };
