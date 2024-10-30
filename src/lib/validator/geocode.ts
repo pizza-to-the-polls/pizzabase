@@ -10,6 +10,9 @@ const GMAPS_COMPONENT_MAPPING = {
   street_number: "num",
   administrative_area_level_1: "state",
   premise: "premise",
+  establishmen: "premise",
+  transit_station: "premise",
+  point_of_interest: "premise",
 };
 
 import { NormalAddress } from "./types";
