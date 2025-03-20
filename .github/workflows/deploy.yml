@@ -73,7 +73,7 @@ jobs:
           ORMCONFIG_JSON: ${{ secrets.ORMCONFIG_JSON }}
 
       - name: deploy to aws
-        uses: serverless/github-action@v3.2
+        uses: serverless/github-action@v1
         with:
           args: deploy --stage prod
         env:
