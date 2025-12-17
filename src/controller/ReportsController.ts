@@ -28,17 +28,17 @@ export class ReportsController {
     const skip = Number(request.query.page || 0) * limit;
 
     const truck = request.query.truck
-      ? { truck: Number(request.query.truck) }
+      ? { truck: { id: request.query.truck } }
       : {};
     const order = request.query.order
-      ? { order: Number(request.query.order) }
+      ? { order: { id: request.query.order } }
       : {};
     const location = request.query.location
-      ? { location: Number(request.query.location) }
+      ? { location: { id: request.query.location } }
       : {};
 
     const where =
-      truck || location || order ? { ...truck, ...order, ...location } : null;
+      truck || location || order ? { ...truck, ...order, ...location } : {};
 
     const [reports, count] = await Report.findAndCount({
       take,

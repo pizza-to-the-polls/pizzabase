@@ -11,6 +11,7 @@ import {
   UpdateDateColumn,
   MoreThan,
 } from "typeorm";
+import { AppDataSource } from "../data-source";
 import { Truck } from "./Truck";
 import { Report } from "./Report";
 import { Order } from "./Order";
@@ -99,7 +100,7 @@ export class Location extends BaseEntity {
   async activeTruck(): Promise<Truck> {
     return Truck.findOne({
       where: {
-        location: this,
+        location: { id: this.id },
         createdAt: MoreThan(new Date(Number(new Date()) - TRUCK_DECAY)),
       },
     });
@@ -186,12 +187,14 @@ export class Location extends BaseEntity {
     canonicalLocation: Location,
     mergedBy: string
   ): Promise<void> {
-    const query = { location: this };
+    const query = { location: { id: this.id } };
     const relations = [Report, Order, Truck];
 
     for (const Relation of relations) {
-      if ((await Relation.count(query)) > 0) {
-        await Relation.createQueryBuilder()
+      const repo = AppDataSource.getRepository(Relation);
+      if ((await repo.countBy(query)) > 0) {
+        await repo
+          .createQueryBuilder()
           .update(Relation)
           .where(query)
           .set({ location: canonicalLocation })

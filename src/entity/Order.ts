@@ -77,7 +77,7 @@ export class Order extends BaseEntity {
   cancelNote: string;
 
   async distributor(): Promise<Report | null> {
-    const [reports] = await Report.allReports({ order: this });
+    const [reports] = await Report.allReports({ order: { id: this.id } });
     return (reports?.canDistribute || 0) > 0 ? reports : null;
   }
 

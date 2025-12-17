@@ -1,8 +1,10 @@
-import { createConnection, getConnection, ConnectionOptions } from "typeorm";
+import { DataSource, DataSourceOptions } from "typeorm";
+import { initializeDataSource } from "../data-source";
+
+let dataSource: DataSource;
 
 const setUpDB = async () => {
-  const config: ConnectionOptions = {
-    name: "default",
+  const config: DataSourceOptions = {
     type: "postgres",
     port: 5432,
     username: process.env.POSTGRES_USERNAME || "postgres",
@@ -14,15 +16,13 @@ const setUpDB = async () => {
     entities: ["src/entity/**/*.ts"],
     migrations: ["src/migration/**/*.ts"],
     subscribers: ["src/subscriber/**/*.ts"],
-    cli: {
-      entitiesDir: "src/entity",
-      migrationsDir: "src/migration",
-      subscribersDir: "src/subscriber",
-    },
   };
 
   try {
-    await createConnection(config);
+    dataSource = new DataSource(config);
+    await dataSource.initialize();
+    // Set this as the global AppDataSource for the app to use
+    initializeDataSource(dataSource);
   } catch (e) {
     console.error("Could not establish db connection - is your schema ok?");
     throw e;
@@ -30,15 +30,15 @@ const setUpDB = async () => {
 };
 
 const closeDB = async () => {
-  const conn = await getConnection();
-  await conn.close();
+  if (dataSource && dataSource.isInitialized) {
+    await dataSource.destroy();
+  }
 };
 
 const getEntities = async () => {
   const exclude = ["api_keys"];
   const entities = [];
-  const conn = await getConnection();
-  (await conn.entityMetadatas).forEach(({ name, tableName }) => {
+  dataSource.entityMetadatas.forEach(({ name, tableName }) => {
     if (!exclude.includes(tableName)) entities.push({ name, tableName });
   });
   return entities;
@@ -46,10 +46,9 @@ const getEntities = async () => {
 
 const cleanAll = async () => {
   const entities = await getEntities();
-  const conn = await getConnection();
   try {
     for (const entity of entities) {
-      const repository = await conn.getRepository(entity.name);
+      const repository = dataSource.getRepository(entity.name);
       await repository.query(`TRUNCATE TABLE ${entity.tableName} CASCADE;`);
     }
   } catch (error) {
