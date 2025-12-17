@@ -52,12 +52,15 @@ export class LocationsController {
     const authorized = await checkAuthorization(request);
     const locJSON = await location.asJSON(authorized);
     const orders = await Order.find({
-      where: { location, ...(authorized ? {} : { cancelledAt: null }) },
+      where: {
+        location: { id: location.id },
+        ...(authorized ? {} : { cancelledAt: null }),
+      },
       order: { createdAt: "ASC" },
       relations: ["reports"],
     });
     const trucks = await Truck.find({
-      where: { location },
+      where: { location: { id: location.id } },
       order: { createdAt: "ASC" },
       relations: ["reports"],
     });
@@ -71,17 +74,17 @@ export class LocationsController {
       orders: await Promise.all(
         orders.map(async (order) => ({
           ...order.asJSON(authorized),
-          reports: (await order.reports).map((report) =>
-            report.asJSON(authorized)
-          ),
+          reports: (
+            await order.reports
+          ).map((report) => report.asJSON(authorized)),
         }))
       ),
       trucks: await Promise.all(
         trucks.map(async (truck) => ({
           ...truck.asJSON(),
-          reports: (await truck.reports).map((report) =>
-            report.asJSON(authorized)
-          ),
+          reports: (
+            await truck.reports
+          ).map((report) => report.asJSON(authorized)),
         }))
       ),
     };

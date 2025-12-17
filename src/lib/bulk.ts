@@ -1,4 +1,5 @@
-import { createConnection, getConnection, EntityManager } from "typeorm";
+import { AppDataSource } from "../data-source";
+import { EntityManager } from "typeorm";
 import * as csv from "csv-parser";
 import * as fs from "fs";
 
@@ -11,9 +12,10 @@ export const uploadBulkCSV = async (
   start: string | number | null = 0,
   timeout: number = 150
 ) => {
-  await createConnection();
-  const conn = await getConnection();
-  const { manager } = conn;
+  if (!AppDataSource.isInitialized) {
+    await AppDataSource.initialize();
+  }
+  const manager = AppDataSource.manager;
 
   const failures = [];
 

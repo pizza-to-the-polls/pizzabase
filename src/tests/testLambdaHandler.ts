@@ -85,9 +85,9 @@ const makeContext = (): any => ({
   invokedFunctionArn:
     "arn:aws:lambda:us-west-2:123456789:function:pizzabase-dev-app",
   getRemainingTimeInMillis: () => 30000,
-  done: () => {},
-  fail: () => {},
-  succeed: () => {},
+  done: () => undefined,
+  fail: () => undefined,
+  succeed: () => undefined,
 });
 
 // ── Public API ─────────────────────────────────────────────────
@@ -102,10 +102,8 @@ export const lambdaRequest = async (
   return handler(makeEvent(method, path, body, headers), makeContext());
 };
 
-export const lambdaGet = (
-  path: string,
-  headers?: Record<string, string>
-) => lambdaRequest("GET", path, undefined, headers);
+export const lambdaGet = (path: string, headers?: Record<string, string>) =>
+  lambdaRequest("GET", path, undefined, headers);
 
 export const lambdaPost = (
   path: string,
@@ -119,7 +117,5 @@ export const lambdaPut = (
   headers?: Record<string, string>
 ) => lambdaRequest("PUT", path, body, headers);
 
-export const lambdaDelete = (
-  path: string,
-  headers?: Record<string, string>
-) => lambdaRequest("DELETE", path, undefined, headers);
+export const lambdaDelete = (path: string, headers?: Record<string, string>) =>
+  lambdaRequest("DELETE", path, undefined, headers);

@@ -680,16 +680,14 @@ describe("#merge", () => {
     expect(userId).toEqual("jimmy");
     expect(actionType).toEqual(`merged into ${canonicalLocation.id}`);
 
-    const {
-      userId: mergedUserId,
-      actionType: mergedActionType,
-    } = await Action.findOne({
-      where: {
-        entityId: canonicalLocation.id,
-        entityType: location.constructor.name,
-      },
-      order: { id: "DESC" },
-    });
+    const { userId: mergedUserId, actionType: mergedActionType } =
+      await Action.findOne({
+        where: {
+          entityId: canonicalLocation.id,
+          entityType: location.constructor.name,
+        },
+        order: { id: "DESC" },
+      });
     expect(mergedUserId).toEqual("jimmy");
     expect(mergedActionType).toEqual(`absorbed ${id}`);
 

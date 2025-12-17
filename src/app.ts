@@ -8,10 +8,8 @@ import { initBugSnagMiddleware } from "./lib/middleware/bugsnag";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",");
 
-const {
-  addBugSnagRequestHandler,
-  addBugSnagErrorHandler,
-} = initBugSnagMiddleware();
+const { addBugSnagRequestHandler, addBugSnagErrorHandler } =
+  initBugSnagMiddleware();
 
 const app = express();
 

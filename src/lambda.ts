@@ -1,21 +1,14 @@
 import * as serverless from "serverless-http";
-import { createConnection, Connection } from "typeorm";
+import { AppDataSource, initializeDataSource } from "./data-source";
 import app from "./app";
 
 const handler = serverless(app);
 
-let connection: Connection | null;
-
-const setUpDB = async (): Promise<Connection | null> => {
+const setUpDB = async () => {
   try {
-    if (!connection) {
-      return await createConnection();
-    } else {
-      if (connection.isConnected) {
-        return connection;
-      } else {
-        await connection.connect();
-      }
+    if (!AppDataSource || !AppDataSource.isInitialized) {
+      const dataSource = initializeDataSource();
+      await dataSource.initialize();
     }
   } catch (e) {
     console.error("Could not create connection");
@@ -24,6 +17,6 @@ const setUpDB = async (): Promise<Connection | null> => {
 };
 
 module.exports.handler = async (event, context) => {
-  connection = await setUpDB();
+  await setUpDB();
   return await handler(event, context);
 };

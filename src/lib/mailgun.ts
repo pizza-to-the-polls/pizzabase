@@ -1,4 +1,4 @@
-import * as mailgun from "mailgun-js";
+import mailgun = require("mailgun-js");
 
 const sendMGTemplate = async ({
   from,

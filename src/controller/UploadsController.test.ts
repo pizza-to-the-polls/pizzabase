@@ -160,7 +160,7 @@ describe("#create", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const upload = await Upload.findOne({ order: { id: "DESC" } });
+    const upload = await Upload.findOne({ order: { id: "DESC" }, where: {} });
 
     expect((body as any).isDuplicate).toEqual(false);
     expect((body as any).id).toEqual(upload.id);
@@ -184,7 +184,7 @@ describe("#create", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const upload = await Upload.findOne({ order: { id: "DESC" } });
+    const upload = await Upload.findOne({ order: { id: "DESC" }, where: {} });
 
     expect(upload.fileHash).toEqual("new-loc");
     expect(upload.location.fullAddress).toEqual(

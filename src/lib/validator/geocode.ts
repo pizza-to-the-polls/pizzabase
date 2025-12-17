@@ -35,21 +35,15 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       address_components,
     } = result;
 
-    const {
-      city,
-      state,
-      zip,
-      num,
-      street,
-      premise,
-    } = address_components.reduce((obj, { short_name, types }) => {
-      for (const type of types) {
-        if (GMAPS_COMPONENT_MAPPING[type]) {
-          obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+    const { city, state, zip, num, street, premise } =
+      address_components.reduce((obj, { short_name, types }) => {
+        for (const type of types) {
+          if (GMAPS_COMPONENT_MAPPING[type]) {
+            obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+          }
         }
-      }
-      return obj;
-    }, {});
+        return obj;
+      }, {});
     const address = num && street ? `${num} ${street}` : premise;
 
     if (!address || !city || !state || !zip) {

@@ -1,7 +1,7 @@
-import { createConnection, getConnection, ConnectionOptions } from "typeorm";
+import { AppDataSource, initializeDataSource } from "../data-source";
 
 /**
- * Test DB helper using the application's connection singleton.
+ * Test DB helper using the application's DataSource singleton.
  *
  * Production Lambda behavior we mirror:
  *   - DB connection initializes ONCE on cold start (first test file)
@@ -10,7 +10,7 @@ import { createConnection, getConnection, ConnectionOptions } from "typeorm";
  *
  * Jest behavior we rely on:
  *   - maxWorkers: 1 means module cache is shared across test files
- *   - Connection is obtained via getConnection() after first createConnection()
+ *   - AppDataSource is a module singleton → stays alive everywhere
  */
 
 let initialized = false;
@@ -18,23 +18,10 @@ let initialized = false;
 const setUpDB = async () => {
   if (!initialized) {
     try {
-      await createConnection({
-        name: "default",
-        type: "postgres",
-        port: 5432,
-        username: process.env.POSTGRES_USERNAME || "postgres",
-        database: process.env.POSTGRES_DB || "pizzabaseTest",
-        password: process.env.POSTGRES_PASSWORD,
-        dropSchema: true,
-        synchronize: true,
-        logging: false,
-        entities: ["src/entity/**/*.ts"],
-        migrations: ["src/migration/**/*.ts"],
-        subscribers: ["src/subscriber/**/*.ts"],
-      } as ConnectionOptions);
+      await initializeDataSource();
       initialized = true;
     } catch (e) {
-      console.error("Could not establish db connection - is your schema ok?");
+      console.error("Could not establish db connection — is your schema ok?");
       throw e;
     }
   }
@@ -51,9 +38,8 @@ const closeDB = async () => {
 
 const getEntities = async () => {
   const exclude = ["api_keys"];
-  const entities = [];
-  const conn = await getConnection();
-  (await conn.entityMetadatas).forEach(({ name, tableName }) => {
+  const entities: { name: string; tableName: string }[] = [];
+  AppDataSource.entityMetadatas.forEach(({ name, tableName }) => {
     if (!exclude.includes(tableName)) entities.push({ name, tableName });
   });
   return entities;
@@ -61,10 +47,9 @@ const getEntities = async () => {
 
 const cleanAll = async () => {
   const entities = await getEntities();
-  const conn = await getConnection();
   try {
     for (const entity of entities) {
-      const repository = await conn.getRepository(entity.name);
+      const repository = AppDataSource.getRepository(entity.name);
       await repository.query(`TRUNCATE TABLE ${entity.tableName} CASCADE;`);
     }
   } catch (error) {

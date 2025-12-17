@@ -9,6 +9,7 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   MoreThan,
+  IsNull,
 } from "typeorm";
 import { Location } from "./Location";
 import { Order } from "./Order";
@@ -17,9 +18,9 @@ import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
 
 const OPEN_QUERY = {
-  order: null,
-  truck: null,
-  skippedAt: null,
+  order: IsNull(),
+  truck: IsNull(),
+  skippedAt: IsNull(),
   createdAt: MoreThan(new Date(Number(new Date()) - REPORT_DECAY)),
 };
 
@@ -129,17 +130,17 @@ export class Report extends BaseEntity {
   }
   static async openReports(location: Location): Promise<Report[]> {
     return await this.allReports({
-      location,
+      location: { id: location.id },
       ...OPEN_QUERY,
     });
   }
   static async updateOpen(location: Location, set): Promise<void> {
     const query = {
-      location,
+      location: { id: location.id },
       ...OPEN_QUERY,
     };
 
-    if ((await this.count(query)) > 0) {
+    if ((await this.count({ where: query })) > 0) {
       this.createQueryBuilder().update(this).where(query).set(set).execute();
     }
   }
@@ -192,9 +193,11 @@ export class Report extends BaseEntity {
     report.contactLastName = contactLastName;
     report.contactRole = contactRole;
 
-    const reportExists = await this.findOne({
-      where: { reportURL, location: report.location },
-    });
+    const reportExists =
+      !isNewLocation &&
+      (await this.findOne({
+        where: { reportURL, location: { id: location.id } },
+      }));
     if (reportExists) report.order = reportExists.order;
 
     await report.save();
