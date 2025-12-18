@@ -4,8 +4,7 @@ import app from "./app";
 
 (async () => {
   try {
-    const dataSource = initializeDataSource();
-    await dataSource.initialize();
+    await initializeDataSource();
   } catch (e) {
     console.error("Could not create connection");
     throw e;
