@@ -21,7 +21,7 @@ const setUpDB = async () => {
       await initializeDataSource();
       initialized = true;
     } catch (e) {
-      console.error("Could not establish db connection — is your schema ok?");
+      console.error("Could not establish db connection - is your schema ok?");
       throw e;
     }
   }
