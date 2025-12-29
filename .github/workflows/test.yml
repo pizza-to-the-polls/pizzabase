@@ -8,6 +8,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      NODE_ENV: test
+
     services:
       postgres:
         image: postgres
@@ -54,6 +57,7 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      NODE_ENV: 'production'
 
     needs: test
 
@@ -66,7 +70,7 @@ jobs:
           node-version: 20
 
       - name: npm install dependencies
-        run: npm install
+        run: npm install --include=dev
 
       - name: deploy to aws
         uses: serverless/github-action@v1
