@@ -1,15 +1,12 @@
 import * as serverless from "serverless-http";
-import { AppDataSource, initializeDataSource } from "./data-source";
+import { initializeDataSource } from "./data-source";
 import app from "./app";
 
 const handler = serverless(app);
 
 const setUpDB = async () => {
   try {
-    if (!AppDataSource || !AppDataSource.isInitialized) {
-      const dataSource = initializeDataSource();
-      await dataSource.initialize();
-    }
+    await initializeDataSource();
   } catch (e) {
     console.error("Could not create connection");
     throw e;
