@@ -32,7 +32,7 @@ const prodConfig: AuroraPostgresConnectionOptions = {
 
 const devConfig: PostgresConnectionOptions = {
   type: "postgres",
-  port: parseInt(process.env.POSTGRES_PORT || "5432"),
+  port: parseInt(process.env.POSTGRES_PORT || "5432", 10),
   username: process.env.POSTGRES_USERNAME || "postgres",
   database: process.env.POSTGRES_DB || "pizzabase",
   password: process.env.POSTGRES_PASSWORD,
