@@ -58,7 +58,7 @@ const testConfig: PostgresConnectionOptions = {
 };
 
 let options: DataSourceOptions;
-if (process.env.NODE_ENV === "prod") {
+if (process.env.NODE_ENV === "production") {
   options = prodConfig;
 } else if (process.env.NODE_ENV === "test") {
   options = testConfig;
