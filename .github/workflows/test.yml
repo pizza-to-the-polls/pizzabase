@@ -78,11 +78,17 @@ jobs:
         with:
           args: deploy --stage dev
         env:
-          SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
-          SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
+          DB_NAME: $${ secrets.STAGING_DB_NAME }}
+          AURORA_RESOURCE_ARN: $${ secrets.AURORA_RESOURCE_ARN }}
+          AURORA_SECRET_ARN: $${ secrets.AURORA_SECRET_ARN }}
+          AWS_REGION: us-west-2
+
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+
           ALLOWED_ORIGINS: 'polls.pizza,localhost'
+
           STATIC_SITE: https://next.polls.pizza
+
           ZAP_NEW_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_LOCATION: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_ORDER: ${{ secrets.STAGING_ZAP_ALL }}
@@ -92,12 +98,17 @@ jobs:
           ZAP_TRUCK_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_CANCEL_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
+
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
+
           BUGSNAG_ENV: 'dev'
+
           STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STAGING_STRIPE_WH }}
+
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
 
       - name: sync schema
