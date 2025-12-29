@@ -77,8 +77,11 @@ jobs:
         with:
           args: deploy --stage prod
         env:
-          SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
-          SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
+          DB_NAME: $${ secrets.DB_NAME }}
+          AURORA_RESOURCE_ARN: $${ secrets.AURORA_RESOURCE_ARN }}
+          AURORA_SECRET_ARN: $${ secrets.AURORA_SECRET_ARN }}
+          AWS_REGION: us-west-2
+
           ZAP_NEW_REPORT: ${{ secrets.ZAP_NEW_REPORT }}
           ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
           ZAP_NEW_ORDER: ${{ secrets.ZAP_NEW_ORDER }}
@@ -88,14 +91,21 @@ jobs:
           ZAP_TRUCK_REPORT: ${{ secrets.ZAP_TRUCK_REPORT }}
           ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}
           ZAP_CANCEL_ORDER_REPORT: ${{ secrets.ZAP_CANCEL_ORDER_REPORT }}
+
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+
           STATIC_SITE: 'https://polls.pizza'
+
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
+
           ALLOWED_ORIGINS: polls.pizza
+
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STRIPE_WH }}
+
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
       - name: sync schema
