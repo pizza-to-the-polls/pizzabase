@@ -47,7 +47,7 @@ const testConfig: PostgresConnectionOptions = {
   type: "postgres",
   port: 5432,
   username: process.env.POSTGRES_USERNAME || "postgres",
-  database: `${process.env.POSTGRES_DB || "pizzabase"}Test`,
+  database: `${process.env.POSTGRES_DB || "pizzabaseTest"}`,
   password: process.env.POSTGRES_PASSWORD,
   dropSchema: true,
   synchronize: true,
