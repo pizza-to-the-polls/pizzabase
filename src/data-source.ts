@@ -24,7 +24,7 @@ const prodConfig: AuroraPostgresConnectionOptions = {
     castParameters: true, // Recommended for Aurora Data API
   },
   synchronize: false,
-  migrationsRun: true,
+  migrationsRun: false,
   entities,
   migrations,
   subscribers,

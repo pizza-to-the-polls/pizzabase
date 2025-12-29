@@ -68,11 +68,6 @@ jobs:
       - name: npm install dependencies
         run: npm install
 
-      - name: create ormconfig.json
-        run: echo $ORMCONFIG_JSON > $GITHUB_WORKSPACE/ormconfig.json
-        env:
-          ORMCONFIG_JSON: ${{ secrets.STAGING_ORMCONFIG_JSON }}
-
       - name: deploy to aws
         uses: serverless/github-action@v1
         with:
@@ -111,5 +106,5 @@ jobs:
 
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
 
-      - name: sync schema
-        run: npm run schema:sync
+      - name: run migrations
+        run: npm run migration:run
