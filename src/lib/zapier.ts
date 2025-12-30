@@ -68,13 +68,15 @@ const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
     hook
   );
 
-const zapAny = async (objs: any, hook: ZapHooks): Promise<void> =>
-  process.env[hook as string] &&
-  (await fetch(process.env[hook as string], {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ hook, ...objs }),
-  }));
+const zapAny = async (objs: any, hook: ZapHooks): Promise<void> => {
+  if (process.env[hook as string]) {
+    await fetch(process.env[hook as string], {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hook, ...objs }),
+    });
+  }
+};
 
 export const zapNewReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_NEW_REPORT);
