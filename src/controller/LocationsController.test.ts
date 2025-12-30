@@ -293,7 +293,7 @@ describe("#validate", () => {
 
     await report.reload();
 
-    const [url, { body }] = fetch.mock.calls[0];
+    const [url, { body }] = (fetch as any).mock.calls[0];
     expect(url).toEqual(process.env.ZAP_NEW_REPORT);
     expect(body).toEqual(
       JSON.stringify({
