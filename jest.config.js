@@ -18,9 +18,6 @@ module.exports = {
     ],
   },
   transformIgnorePatterns: ["<rootDir>/node_modules/(?!node-fetch)"],
-  moduleNameMapper: {
-    "node-fetch": "<rootDir>/src/tests/__mocks__/node-fetch.ts",
-  },
   setupFilesAfterEnv: ["<rootDir>/src/tests/jest.setup.ts"],
   preset: "ts-jest",
   testEnvironment: "node",

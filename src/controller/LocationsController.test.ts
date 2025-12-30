@@ -7,10 +7,9 @@ import { Order } from "../entity/Order";
 import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
+import fetch from "node-fetch";
 jest.mock("node-fetch");
 jest.mock("../lib/validator/geocode");
-
-import fetch from "node-fetch";
 
 let location: Location | null;
 const controller = new LocationsController();
