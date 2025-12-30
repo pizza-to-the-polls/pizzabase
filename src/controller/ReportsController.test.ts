@@ -13,8 +13,8 @@ import {
 
 import { buildTestData } from "../tests/factories";
 
-jest.mock("../lib/validator/geocode");
 jest.mock("node-fetch");
+jest.mock("../lib/validator/geocode");
 
 import fetch from "node-fetch";
 
