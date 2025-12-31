@@ -1,6 +1,6 @@
-import * as express from "express";
-import * as bodyParser from "body-parser";
-import * as cors from "cors";
+import express = require("express");
+import bodyParser = require("body-parser");
+import cors = require("cors");
 
 import { Request, Response, NextFunction } from "express";
 import { Routes } from "./routes";
