@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 const GMAPS_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GMAPS_COMPONENT_MAPPING = {
@@ -36,6 +34,7 @@ export const geocode = async (body: string): Promise<null | NormalAddress> =>
   await gmapsGeocode(body);
 
 const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
+  const fetch = (await import("node-fetch")).default;
   const resp = await fetch(
     `${GMAPS_URL}?key=${GMAPS_KEY}&address=${escape(body)}`
   );
