@@ -1,6 +1,6 @@
 service: pizzabase
 
-frameworkVersion: "1"
+frameworkVersion: "3"
 
 plugins:
   - serverless-domain-manager
