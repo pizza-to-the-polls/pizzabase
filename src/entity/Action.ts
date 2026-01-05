@@ -15,7 +15,7 @@ export class Action extends BaseEntity {
   @CreateDateColumn({ name: "created_at" })
   createdAt;
 
-  @Column({ name: "user_id" })
+  @Column({ name: "user_id", type: "text" })
   @Index()
   userId: string;
 
