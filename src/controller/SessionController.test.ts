@@ -1,20 +1,20 @@
 import * as http_mocks from "node-mocks-http";
 import Stripe from "stripe";
-import * as mailgun from "mailgun-js";
+import Mailgun from "mailgun.js";
 
 import { SessionController } from "./SessionController";
 import { EMAIL_ERROR } from "../lib/validator/constants";
 
 jest.mock("stripe");
-jest.mock("mailgun-js");
+jest.mock("mailgun.js");
 jest.mock("../lib/jwt");
 
 const controller = new SessionController();
 
 describe("#create", () => {
   let mockStripeClient;
-  let mockMailGunClient;
-  let mockMailGunSend;
+  let mockMailgunClient;
+  let mockMailgunCreate;
 
   const goodEmail = "good@email.com";
   const customerId = "cust_123id";
@@ -27,17 +27,21 @@ describe("#create", () => {
         })),
       },
     };
-    mockMailGunSend = jest.fn(async (_config, callback) => {
-      callback(null, "yay");
-    });
-    mockMailGunClient = {
-      messages: () => ({
-        send: mockMailGunSend,
-      }),
+    mockMailgunCreate = jest.fn(async () => ({
+      status: 200,
+      body: {
+        id: "<20230516185545.72433b2597c5f82d@polls.pizza>",
+        message: "Queued. Thank you.",
+      },
+    }));
+    mockMailgunClient = {
+      messages: { create: mockMailgunCreate },
     };
 
     (Stripe as any).mockImplementation(() => mockStripeClient);
-    (mailgun as any).mockImplementation(() => mockMailGunClient);
+    (Mailgun as any).mockImplementation(() => ({
+      client: () => mockMailgunClient,
+    }));
 
     process.env.STRIPE_SECRET_KEY = "STRIPE SECRET KEY";
     process.env.STRIPE_PRODUCT_ID = "stripe_product_12345";
@@ -70,18 +74,15 @@ describe("#create", () => {
     expect(mockStripeClient.customers.list).toHaveBeenCalledWith({
       email: goodEmail,
     });
-    expect(mockMailGunSend).toHaveBeenCalledWith(
-      {
-        from: "Crust Club @ Pizza to the Polls<crustclub@polls.pizza>",
-        subject: "Log into Crust Club",
-        template: "crust-club-log-in",
-        "h:X-Mailgun-Variables": JSON.stringify({
-          token: `${process.env.STATIC_SITE}/session/this-is-real-token/`,
-        }),
-        to: goodEmail,
-      },
-      expect.any(Function)
-    );
+    expect(mockMailgunCreate).toHaveBeenCalledWith("polls.pizza", {
+      from: "Crust Club @ Pizza to the Polls<crustclub@polls.pizza>",
+      subject: "Log into Crust Club",
+      template: "crust-club-log-in",
+      "h:X-Mailgun-Variables": JSON.stringify({
+        token: `${process.env.STATIC_SITE}/session/this-is-real-token/`,
+      }),
+      to: goodEmail,
+    });
   });
 
   it("returns 422 if no email sent", async () => {
@@ -114,16 +115,13 @@ describe("#create", () => {
     expect(mockStripeClient.customers.list).toHaveBeenCalledWith({
       email,
     });
-    expect(mockMailGunSend).toHaveBeenCalledWith(
-      {
-        from: "Crust Club @ Pizza to the Polls<crustclub@polls.pizza>",
-        subject: "Couldn't Find Your Membership",
-        template: "crust-club-no-membership",
-        "h:X-Mailgun-Variables": JSON.stringify({ email }),
-        to: email,
-      },
-      expect.any(Function)
-    );
+    expect(mockMailgunCreate).toHaveBeenCalledWith("polls.pizza", {
+      from: "Crust Club @ Pizza to the Polls<crustclub@polls.pizza>",
+      subject: "Couldn't Find Your Membership",
+      template: "crust-club-no-membership",
+      "h:X-Mailgun-Variables": JSON.stringify({ email }),
+      to: email,
+    });
   });
 });
 
