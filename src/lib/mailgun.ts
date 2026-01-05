@@ -1,4 +1,5 @@
-import mailgun = require("mailgun-js");
+import Mailgun from "mailgun.js";
+import FormData from "form-data";
 
 const sendMGTemplate = async ({
   from,
@@ -13,25 +14,21 @@ const sendMGTemplate = async ({
   to: string;
   data: { [id: string]: string };
 }) => {
-  const mg = mailgun({
-    apiKey: process.env.MAILGUN_API_KEY,
-    domain: "polls.pizza",
+  const mailgun = new Mailgun(FormData);
+  const client = mailgun.client({
+    username: "api",
+    key: process.env.MAILGUN_API_KEY,
   });
 
-  await new Promise((resolve, reject) => {
-    mg.messages().send(
-      {
-        from,
-        subject,
-        template,
-        "h:X-Mailgun-Variables": JSON.stringify(data),
-        to,
-      },
-      (error, body) => {
-        error ? reject(error) : resolve(body);
-      }
-    );
-  });
+  const messageData = {
+    from,
+    to,
+    subject,
+    template,
+    "h:X-Mailgun-Variables": JSON.stringify(data),
+  };
+
+  await client.messages.create("polls.pizza", messageData);
 };
 
 export const sendCrustClubEmail = async (to: string, data: { token: string }) =>
