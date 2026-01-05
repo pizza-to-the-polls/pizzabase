@@ -15,7 +15,6 @@
     "nodemon": "^2.0.4",
     "prettier": "^2.1.2",
     "serverless-domain-manager": "^5.0.0",
-    "serverless-esbuild": "^1.57.0",
     "serverless-offline": "^14.4.0",
     "ts-jest": "^29.4.6",
     "ts-node": "^10.9.2",
