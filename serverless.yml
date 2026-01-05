@@ -72,7 +72,7 @@ provider:
 
 functions:
   app:
-    handler: src/lambda.handler
+    handler: build/lambda.handler
     events:
       - http: ANY /
       - http: "ANY {proxy+}"
