@@ -2,6 +2,7 @@ service: pizzabase
 
 plugins:
   - serverless-domain-manager
+  - serverless-esbuild
   - serverless-offline
 
 provider:
@@ -71,7 +72,7 @@ provider:
 
 functions:
   app:
-    handler: build/lambda.handler
+    handler: src/lambda.handler
     events:
       - http: ANY /
       - http: "ANY {proxy+}"
