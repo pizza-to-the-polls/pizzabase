@@ -2,18 +2,13 @@ import * as serverless from "serverless-http";
 import { initializeDataSource } from "./data-source";
 import app from "./app";
 
-const handler = serverless(app);
+let handler;
 
-const setUpDB = async () => {
-  try {
-    await initializeDataSource();
-  } catch (e) {
-    console.error("Could not create connection");
-    throw e;
-  }
-};
+(async () => {
+  await initializeDataSource();
+  handler = serverless(app);
+})();
 
 module.exports.handler = async (event, context) => {
-  await setUpDB();
   return await handler(event, context);
 };
