@@ -4,11 +4,13 @@ import app from "./app";
 
 let handler;
 
-(async () => {
+const handlerPromise = (async () => {
   await initializeDataSource();
   handler = serverless(app);
+  return handler;
 })();
 
 module.exports.handler = async (event, context) => {
-  return await handler(event, context);
+  const resolvedHandler = await handlerPromise;
+  return await resolvedHandler(event, context);
 };
