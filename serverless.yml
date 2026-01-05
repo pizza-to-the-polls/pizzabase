@@ -1,7 +1,5 @@
 service: pizzabase
 
-frameworkVersion: "3"
-
 plugins:
   - serverless-domain-manager
   - serverless-offline
