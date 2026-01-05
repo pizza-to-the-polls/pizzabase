@@ -2,7 +2,6 @@ service: pizzabase
 
 plugins:
   - serverless-domain-manager
-  - serverless-esbuild
   - serverless-offline
 
 provider:
