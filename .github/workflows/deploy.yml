@@ -72,7 +72,7 @@ jobs:
         run: npm install --include=dev
 
       - name: deploy to aws
-        uses: serverless/github-action@v1
+        uses: serverless/github-action@v3.2
         with:
           args: deploy --stage prod
         env:
