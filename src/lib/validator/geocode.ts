@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 const GMAPS_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GMAPS_COMPONENT_MAPPING = {
@@ -17,14 +15,30 @@ const GMAPS_COMPONENT_MAPPING = {
 
 import { NormalAddress } from "./types";
 
+interface GmapsResponse {
+  results: {
+    geometry: {
+      location: {
+        lat: number;
+        lng: number;
+      };
+    };
+    address_components: {
+      short_name: string;
+      types: string[];
+    }[];
+  }[];
+}
+
 export const geocode = async (body: string): Promise<null | NormalAddress> =>
   await gmapsGeocode(body);
 
 const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
+  const fetch = (await import("node-fetch")).default;
   const resp = await fetch(
     `${GMAPS_URL}?key=${GMAPS_KEY}&address=${escape(body)}`
   );
-  const { results } = await resp.json();
+  const { results } = (await resp.json()) as GmapsResponse;
   const [result] = results || [];
 
   if (result) {
@@ -42,14 +56,24 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       num,
       street,
       premise,
-    } = address_components.reduce((obj, { short_name, types }) => {
-      for (const type of types) {
-        if (GMAPS_COMPONENT_MAPPING[type]) {
-          obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+    } = address_components.reduce(
+      (obj, { short_name, types }) => {
+        for (const type of types) {
+          if (GMAPS_COMPONENT_MAPPING[type]) {
+            obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+          }
         }
+        return obj;
+      },
+      {
+        city: "",
+        state: "",
+        zip: "",
+        num: "",
+        street: "",
+        premise: "",
       }
-      return obj;
-    }, {});
+    );
     const address = num && street ? `${num} ${street}` : premise;
 
     if (!address || !city || !state || !zip) {

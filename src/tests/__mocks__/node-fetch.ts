@@ -1,3 +1,1 @@
-const fetch = jest.createMockFromModule("node-fetch");
-
-export default fetch;
+module.exports = jest.fn();

@@ -14,7 +14,7 @@ describe("#show", () => {
   beforeEach(async () => await buildTestData());
 
   it("returns an order", async () => {
-    const order = await Order.findOne();
+    const order = await Order.findOne({ where: {} });
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${order.id}` } }),
       http_mocks.createResponse(),
@@ -33,7 +33,7 @@ describe("#delete", () => {
   beforeEach(async () => await buildTestData());
 
   it("cancells an order and opens it's reports", async () => {
-    const order = await Order.findOne();
+    const order = await Order.findOne({ where: {} });
     const [report] = await order.reports;
     const { cost, quantity } = order;
 

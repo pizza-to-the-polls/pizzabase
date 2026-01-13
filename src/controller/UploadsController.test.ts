@@ -1,14 +1,22 @@
 import * as http_mocks from "node-mocks-http";
-
+import * as aws from "aws-sdk";
 import { UploadsController } from "./UploadsController";
 import { Upload } from "../entity/Upload";
 import { Location } from "../entity/Location";
 import { FILE_TYPE_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
 
+jest.mock("aws-sdk", () => {
+  const mS3 = {
+    getObject: jest.fn().mockReturnThis(),
+    promise: jest.fn(),
+  };
+  return { S3: jest.fn(() => mS3) };
+});
 jest.mock("../lib/aws");
 jest.mock("../lib/validator/geocode");
 
 const controller = new UploadsController();
+const s3 = new aws.S3();
 
 describe("#create", () => {
   it("returns validation errors", async () => {
@@ -160,7 +168,7 @@ describe("#create", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const upload = await Upload.findOne({ order: { id: "DESC" } });
+    const upload = await Upload.findOne({ order: { id: "DESC" }, where: {} });
 
     expect((body as any).isDuplicate).toEqual(false);
     expect((body as any).id).toEqual(upload.id);
@@ -184,11 +192,150 @@ describe("#create", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const upload = await Upload.findOne({ order: { id: "DESC" } });
+    const upload = await Upload.findOne({ order: { id: "DESC" }, where: {} });
 
     expect(upload.fileHash).toEqual("new-loc");
     expect(upload.location.fullAddress).toEqual(
       "550 Different Address City OR 12345"
     );
+  });
+});
+
+describe("#getExif", () => {
+  let upload: Upload;
+
+  beforeEach(async () => {
+    const address = {
+      latitude: 45.523064,
+      longitude: -122.676483,
+      fullAddress: "123 Main St, Portland, OR 97204",
+      address: "123 Main St",
+      city: "Portland",
+      state: "OR",
+      zip: "97204",
+    };
+
+    [upload] = await Upload.createOrReject("127.0.0.1", {
+      fileExt: "jpg",
+      fileHash: "somehash1",
+      normalizedAddress: address,
+    });
+  });
+
+  it("should return exif data for an upload that has it", async () => {
+    // A realistic but fake exif buffer
+    const exifBuffer = Buffer.from([
+      0x45,
+      0x78,
+      0x69,
+      0x66,
+      0x00,
+      0x00,
+      0x4d,
+      0x4d,
+      0x00,
+      0x2a,
+      0x00,
+      0x00,
+      0x00,
+      0x08,
+      0x00,
+      0x02,
+      0x01,
+      0x1a,
+      0x00,
+      0x05,
+      0x00,
+      0x00,
+      0x00,
+      0x01,
+    ]);
+    (s3.getObject().promise as jest.Mock).mockResolvedValue({
+      Body: exifBuffer,
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${upload.id}/exif`,
+        params: { id: upload.id },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(200);
+    // exif-reader will return a partially parsed object for this fake buffer
+    expect(body).toEqual({ Image: null, bigEndian: true });
+  });
+
+  it("should return null for an upload that does not have exif data", async () => {
+    (s3.getObject().promise as jest.Mock).mockResolvedValue({
+      Body: Buffer.from([]),
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${upload.id}/exif`,
+        params: { id: upload.id },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toBe(null);
+  });
+
+  it("should return 401 for a request without an API key", async () => {
+    const response = http_mocks.createResponse();
+    await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${upload.id}/exif`,
+        params: { id: upload.id },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(401);
+  });
+
+  it("should return 401 for a request with a bad API key", async () => {
+    const response = http_mocks.createResponse();
+    await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${upload.id}/exif`,
+        params: { id: upload.id },
+        headers: { Authorization: "Basic badkey" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(401);
+  });
+
+  it("should return 404 for a non-existent upload", async () => {
+    const response = http_mocks.createResponse();
+    await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/999999/exif`,
+        params: { id: 999999 },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(404);
   });
 });

@@ -7,10 +7,9 @@ import { Order } from "../entity/Order";
 import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
+import fetch from "node-fetch";
 jest.mock("node-fetch");
 jest.mock("../lib/validator/geocode");
-
-import fetch from "node-fetch";
 
 let location: Location | null;
 const controller = new LocationsController();
@@ -293,7 +292,7 @@ describe("#validate", () => {
 
     await report.reload();
 
-    const [url, { body }] = fetch.mock.calls[0];
+    const [url, { body }] = (fetch as any).mock.calls[0];
     expect(url).toEqual(process.env.ZAP_NEW_REPORT);
     expect(body).toEqual(
       JSON.stringify({

@@ -8,11 +8,16 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs14.x
+  runtime: nodejs20.x
   timeout: 30
   region: us-west-2
   environment:
-    NODE_ENV: prod
+    NODE_ENV: production
+
+    DB_NAME: ${env:DB_NAME }
+    AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+    AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+
     ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
     ZAP_NEW_ORDER: ${env:ZAP_NEW_ORDER}
@@ -65,10 +70,6 @@ provider:
         - "s3:*"
       Resource:
         - "arn:aws:s3:::*"
-
-package:
-  include:
-    - ormconfig.json
 
 functions:
   app:

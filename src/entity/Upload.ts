@@ -50,7 +50,11 @@ export class Upload extends BaseEntity {
       fileExt,
       normalizedAddress,
       fileHash,
-    }: { fileExt: string; normalizedAddress: NormalAddress; fileHash: string }
+    }: {
+      fileExt: string;
+      normalizedAddress: NormalAddress;
+      fileHash: string;
+    }
   ): Promise<[Upload, boolean]> {
     const exists = await this.findOne({
       where: { fileHash },

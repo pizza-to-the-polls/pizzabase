@@ -13,8 +13,8 @@ import {
 
 import { buildTestData } from "../tests/factories";
 
-jest.mock("../lib/validator/geocode");
 jest.mock("node-fetch");
+jest.mock("../lib/validator/geocode");
 
 import fetch from "node-fetch";
 
@@ -103,7 +103,9 @@ describe("#create", () => {
     expect(location).toBeTruthy();
     expect(location.validatedAt).toBeTruthy();
 
-    const report = await Report.findOne({ where: { location } });
+    const report = await Report.findOne({
+      where: { location: { id: location.id } },
+    });
     expect(report).toBeTruthy();
     expect(report.location).toEqual(location);
     expect(report.order).toBeFalsy();
@@ -166,7 +168,7 @@ describe("#create", () => {
     expect(report.contactLastName).toEqual(contactLastName);
     expect(report.contactRole).toEqual(contactRole);
 
-    const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (fetch as any).mock.calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
@@ -219,7 +221,7 @@ describe("#create", () => {
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
 
-    const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (fetch as any).mock.calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_REPORT);
     expect(zapBody).toEqual(
       JSON.stringify({
@@ -275,7 +277,7 @@ describe("#create", () => {
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(existingReport.location.id);
 
-    expect(fetch.mock.calls.length).toBe(0);
+    expect((fetch as any).mock.calls.length).toBe(0);
   });
 
   test("New loc / re-used url, creates new report, zaps new location", async () => {
@@ -315,7 +317,7 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { contactInfo: contact } });
     expect(report).toBeTruthy();
 
-    const [zapUrl, { body: zapBody }] = fetch.mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (fetch as any).mock.calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
@@ -368,7 +370,7 @@ describe("#create", () => {
     expect(report.location.id).toBe(location.id);
     expect(report.truck.id).toBe(truck.id);
 
-    expect(fetch.mock.calls.length).toEqual(0);
+    expect((fetch as any).mock.calls.length).toEqual(0);
   });
 
   test("Re-used loc with order / new url returns success, sets existing location, creates new report, no zap", async () => {
@@ -417,7 +419,7 @@ describe("#create", () => {
     expect(newReport.order.id).toBe(order.id);
     expect(report.order.id).toBe(order.id);
 
-    expect(fetch.mock.calls.length).toEqual(0);
+    expect((fetch as any).mock.calls.length).toEqual(0);
   });
 
   test("Non-cannonical loc, creates new report on canonical loc", async () => {
@@ -499,7 +501,7 @@ describe("#index", () => {
   });
 
   test("Lists the reports for a truck", async () => {
-    const location = await Location.findOne();
+    const location = await Location.findOne({ where: {} });
     const truck = await location.assignTruck();
 
     const body = await controller.index(
@@ -511,7 +513,10 @@ describe("#index", () => {
     expect(body).toEqual({
       results: await Promise.all(
         (
-          await Report.find({ order: { createdAt: "DESC" }, where: { truck } })
+          await Report.find({
+            order: { createdAt: "DESC" },
+            where: { truck: { id: truck.id } },
+          })
         ).map(async (report) => ({
           ...report.asJSON(),
           location: await report.location.asJSON(),
@@ -519,12 +524,12 @@ describe("#index", () => {
           truck: report.truck?.asJSON(),
         }))
       ),
-      count: await Report.count({ where: { truck } }),
+      count: await Report.count({ where: { truck: { id: truck.id } } }),
     });
   });
 
   test("Lists the reports for a location", async () => {
-    const location = await Location.findOne();
+    const location = await Location.findOne({ where: {} });
 
     const body = await controller.index(
       http_mocks.createRequest({ query: { location: `${location.id}` } }),
@@ -537,7 +542,7 @@ describe("#index", () => {
         (
           await Report.find({
             order: { createdAt: "DESC" },
-            where: { location },
+            where: { location: { id: location.id } },
           })
         ).map(async (report) => ({
           ...report.asJSON(),
@@ -546,12 +551,12 @@ describe("#index", () => {
           truck: report.truck?.asJSON(),
         }))
       ),
-      count: await Report.count({ where: { location } }),
+      count: await Report.count({ where: { location: { id: location.id } } }),
     });
   });
 
   test("Lists the reports for an order", async () => {
-    const order = await Order.findOne();
+    const order = await Order.findOne({ where: {} });
 
     const body = await controller.index(
       http_mocks.createRequest({ query: { order: `${order.id}` } }),
@@ -562,7 +567,10 @@ describe("#index", () => {
     expect(body).toEqual({
       results: await Promise.all(
         (
-          await Report.find({ order: { createdAt: "DESC" }, where: { order } })
+          await Report.find({
+            order: { createdAt: "DESC" },
+            where: { order: { id: order.id } },
+          })
         ).map(async (report) => ({
           ...report.asJSON(),
           location: await report.location.asJSON(),
@@ -570,7 +578,7 @@ describe("#index", () => {
           truck: report.truck?.asJSON(),
         }))
       ),
-      count: await Report.count({ where: { order } }),
+      count: await Report.count({ where: { order: { id: order.id } } }),
     });
   });
 });
@@ -579,7 +587,7 @@ describe("#show", () => {
   beforeEach(async () => await buildTestData());
 
   it("returns a report", async () => {
-    const report = await Report.findOne();
+    const report = await Report.findOne({ where: {} });
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${report.id}` } }),
       http_mocks.createResponse(),
@@ -589,7 +597,7 @@ describe("#show", () => {
     expect(body).toEqual({
       ...report.asJSON(),
       location: await report.location.asJSON(),
-      order: report.order.asJSON(),
+      order: report.order?.asJSON(),
       truck: report.truck?.asJSON(),
     });
   });

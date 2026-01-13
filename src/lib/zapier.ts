@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
 import { Upload } from "../entity/Upload";
@@ -68,13 +66,16 @@ const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
     hook
   );
 
-const zapAny = async (objs: any, hook: ZapHooks): Promise<void> =>
-  process.env[hook as string] &&
-  (await fetch(process.env[hook as string], {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ hook, ...objs }),
-  }));
+const zapAny = async (objs: any, hook: ZapHooks): Promise<void> => {
+  if (process.env[hook as string]) {
+    const fetch = (await import("node-fetch")).default;
+    await fetch(process.env[hook as string], {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ hook, ...objs }),
+    });
+  }
+};
 
 export const zapNewReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_NEW_REPORT);
@@ -83,7 +84,7 @@ export const zapNewLocation = async (report: Report) =>
 export const zapNewOrder = async (order: Order) => {
   await zapOrder(order, ZapHooks.ZAP_NEW_ORDER);
   const reports = await Report.find({
-    where: { order },
+    where: { order: { id: order.id } },
     relations: ["location"],
   });
 
@@ -94,7 +95,7 @@ export const zapNewOrder = async (order: Order) => {
 export const zapNewTruck = async (truck: Truck) => {
   await zapTruck(truck, ZapHooks.ZAP_NEW_TRUCK);
   const reports = await Report.find({
-    where: { truck },
+    where: { truck: { id: truck.id } },
     relations: ["location"],
   });
 
