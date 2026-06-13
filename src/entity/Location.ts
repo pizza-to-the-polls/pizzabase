@@ -190,8 +190,9 @@ export class Location extends BaseEntity {
     const relations = [Report, Order, Truck];
 
     for (const Relation of relations) {
-      if ((await Relation.count(query)) > 0) {
-        await Relation.createQueryBuilder()
+      const entityClass = Relation as any;
+      if ((await entityClass.count(query)) > 0) {
+        await entityClass.createQueryBuilder()
           .update(Relation)
           .where(query)
           .set({ location: canonicalLocation })

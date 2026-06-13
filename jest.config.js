@@ -1,5 +1,9 @@
 module.exports = {
   clearMocks: true,
+  // CRITICAL: single worker so all test files share the same Node process.
+  // The DB connection is a module singleton → stays alive across all tests.
+  // This mirrors Lambda's "never close" behavior.
+  maxWorkers: 1,
   roots: ["<rootDir>/src", "<rootDir>/src/tests"],
   testMatch: [
     "**/__tests__/**/*.+(ts|tsx|js)",
@@ -10,6 +14,7 @@ module.exports = {
   transform: {
     "^.+\\.(ts|tsx)$": "ts-jest",
   },
+  transformIgnorePatterns: ["<rootDir>/node_modules/(?!node-fetch)"],
   setupFilesAfterEnv: ["<rootDir>/src/tests/jest.setup.ts"],
   preset: "ts-jest",
 };

@@ -52,7 +52,7 @@
     "prettier:fix": "prettier --write .",
     "lint": "tslint --project .",
     "lint:fix": "tslint --fix --force --project .",
-    "test": "jest -w 1",
+    "test": "jest -w 1 --forceExit",
     "test:watch": "jest -w 1 --watchAll"
   }
 }

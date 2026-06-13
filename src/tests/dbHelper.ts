@@ -1,37 +1,52 @@
 import { createConnection, getConnection, ConnectionOptions } from "typeorm";
 
-const setUpDB = async () => {
-  const config: ConnectionOptions = {
-    name: "default",
-    type: "postgres",
-    port: 5432,
-    username: process.env.POSTGRES_USERNAME || "postgres",
-    database: process.env.POSTGRES_DB || "pizzabaseTest",
-    password: process.env.POSTGRES_PASSWORD,
-    dropSchema: true,
-    synchronize: true,
-    logging: false,
-    entities: ["src/entity/**/*.ts"],
-    migrations: ["src/migration/**/*.ts"],
-    subscribers: ["src/subscriber/**/*.ts"],
-    cli: {
-      entitiesDir: "src/entity",
-      migrationsDir: "src/migration",
-      subscribersDir: "src/subscriber",
-    },
-  };
+/**
+ * Test DB helper using the application's connection singleton.
+ *
+ * Production Lambda behavior we mirror:
+ *   - DB connection initializes ONCE on cold start (first test file)
+ *   - NEVER explicitly closed (Lambda containers don't)
+ *   - Data cleaned between requests with fast TRUNCATE
+ *
+ * Jest behavior we rely on:
+ *   - maxWorkers: 1 means module cache is shared across test files
+ *   - Connection is obtained via getConnection() after first createConnection()
+ */
 
-  try {
-    await createConnection(config);
-  } catch (e) {
-    console.error("Could not establish db connection - is your schema ok?");
-    throw e;
+let initialized = false;
+
+const setUpDB = async () => {
+  if (!initialized) {
+    try {
+      await createConnection({
+        name: "default",
+        type: "postgres",
+        port: 5432,
+        username: process.env.POSTGRES_USERNAME || "postgres",
+        database: process.env.POSTGRES_DB || "pizzabaseTest",
+        password: process.env.POSTGRES_PASSWORD,
+        dropSchema: true,
+        synchronize: true,
+        logging: false,
+        entities: ["src/entity/**/*.ts"],
+        migrations: ["src/migration/**/*.ts"],
+        subscribers: ["src/subscriber/**/*.ts"],
+      } as ConnectionOptions);
+      initialized = true;
+    } catch (e) {
+      console.error("Could not establish db connection - is your schema ok?");
+      throw e;
+    }
   }
 };
 
+/**
+ * INTENTIONAL NO-OP.
+ * Lambda never closes DB connections. The OS reclaims the TCP socket
+ * when the Node process exits. Tests mirror this.
+ */
 const closeDB = async () => {
-  const conn = await getConnection();
-  await conn.close();
+  // No-op
 };
 
 const getEntities = async () => {
