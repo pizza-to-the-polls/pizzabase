@@ -1,6 +1,5 @@
-import { createConnection, getConnection } from "typeorm";
 import Stripe from "stripe";
-
+import { initializeDataSource, AppDataSource } from "../src/data-source";
 import { Donation } from "../src/entity/Donation";
 
 const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
@@ -9,8 +8,8 @@ const stripe = new Stripe(process.env.STRIPE_SECRET_KEY, {
 const maxChargesPerPage = 100; // 1 to 100
 
 (async () => {
-  await createConnection();
-  const { manager } = await getConnection();
+  await initializeDataSource();
+  const manager = AppDataSource.manager;
 
   // Stripe orders charges from most recent to oldest.
   // Get the most recent transactions.
@@ -56,4 +55,5 @@ const maxChargesPerPage = 100; // 1 to 100
     });
   }
   console.error(JSON.stringify(errors));
+  await AppDataSource.destroy();
 })();

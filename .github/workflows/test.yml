@@ -41,6 +41,9 @@ jobs:
       - name: run tslint
         run: npm run lint
 
+      - name: type check
+        run: npx tsc --noEmit
+
       - name: run tests
         run: npm run test
         env:

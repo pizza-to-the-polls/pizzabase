@@ -141,7 +141,11 @@ export class Report extends BaseEntity {
     };
 
     if ((await this.count({ where: query })) > 0) {
-      this.createQueryBuilder().update(this).where(query).set(set).execute();
+      await this.createQueryBuilder()
+        .update(this)
+        .where(query)
+        .set(set)
+        .execute();
     }
   }
 

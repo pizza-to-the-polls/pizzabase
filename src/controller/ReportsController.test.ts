@@ -487,14 +487,14 @@ describe("#index", () => {
 
     expect(body).toEqual({
       results: await Promise.all(
-        (
-          await Report.find({ take: 5, order: { createdAt: "DESC" } })
-        ).map(async (report) => ({
-          ...report.asJSON(),
-          location: await report.location.asJSON(),
-          order: report.order?.asJSON(),
-          truck: report.truck?.asJSON(),
-        }))
+        (await Report.find({ take: 5, order: { createdAt: "DESC" } })).map(
+          async (report) => ({
+            ...report.asJSON(),
+            location: await report.location.asJSON(),
+            order: report.order?.asJSON(),
+            truck: report.truck?.asJSON(),
+          })
+        )
       ),
       count: await Report.count(),
     });

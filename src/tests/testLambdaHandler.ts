@@ -11,9 +11,9 @@
  *   - Tests the handler Promise pattern: first call = cold start, rest = warm
  */
 
-import * as serverless from "serverless-http";
+import serverlessHttp from "serverless-http";
 
-let handlerPromise: Promise<serverless.Handler> | null = null;
+let handlerPromise: Promise<ReturnType<typeof serverlessHttp>> | null = null;
 
 /**
  * Lazy handler initialization with deferred app import.
@@ -22,30 +22,18 @@ let handlerPromise: Promise<serverless.Handler> | null = null;
  * we guarantee that jest.setup.ts (which runs beforeAll first) has had
  * a chance to set env vars like ALLOWED_ORIGINS before app.ts reads them.
  */
-export const getHandler = async (): Promise<serverless.Handler> => {
+export const getHandler = async (): Promise<
+  ReturnType<typeof serverlessHttp>
+> => {
   if (!handlerPromise) {
     handlerPromise = (async () => {
-      const { createConnection, getConnection } = await import("typeorm");
-
-      // Ensure DB is connected (jest.setup.ts may have done this already)
-      try {
-        await getConnection();
-      } catch {
-        await createConnection({
-          name: "default",
-          type: "postgres",
-          port: 5432,
-          username: process.env.POSTGRES_USERNAME || "postgres",
-          database: process.env.POSTGRES_DB || "pizzabaseTest",
-          password: process.env.POSTGRES_PASSWORD,
-        } as any);
-      }
-
-      // Defer Express app import so env is already set
+      // DB is already initialized by jest.setup.ts beforeAll().
+      // We defer the Express app import until here so env vars
+      // (like ALLOWED_ORIGINS) are set before app.ts reads them.
       const appModule = await import("../app");
       const app = appModule.default || appModule;
 
-      return serverless(app);
+      return serverlessHttp(app);
     })();
   }
   return handlerPromise;

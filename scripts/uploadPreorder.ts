@@ -25,10 +25,9 @@ const preOrderReport = async (
 
   const newNow = new Date(`${date} ${Time} ${zone}`);
   const who = "preorder";
-  const restaurant = (
-    Restaurant.includes("#")
-      ? Restaurant.split(/\#[0-9]+\s/).reverse()[0]
-      : Restaurant.replace(/[0-9]*/, "")
+  const restaurant = (Restaurant.includes("#")
+    ? Restaurant.split(/\#[0-9]+\s/).reverse()[0]
+    : Restaurant.replace(/[0-9]*/, "")
   )
     .split(/\ - |\(|\r|\n/)[0]
     .trim();

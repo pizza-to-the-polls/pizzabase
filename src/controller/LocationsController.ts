@@ -74,17 +74,17 @@ export class LocationsController {
       orders: await Promise.all(
         orders.map(async (order) => ({
           ...order.asJSON(authorized),
-          reports: (
-            await order.reports
-          ).map((report) => report.asJSON(authorized)),
+          reports: (await order.reports).map((report) =>
+            report.asJSON(authorized)
+          ),
         }))
       ),
       trucks: await Promise.all(
         trucks.map(async (truck) => ({
           ...truck.asJSON(),
-          reports: (
-            await truck.reports
-          ).map((report) => report.asJSON(authorized)),
+          reports: (await truck.reports).map((report) =>
+            report.asJSON(authorized)
+          ),
         }))
       ),
     };

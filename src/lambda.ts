@@ -1,5 +1,5 @@
 import "reflect-metadata";
-import * as serverless from "serverless-http";
+import serverless from "serverless-http";
 import { initializeDataSource } from "./data-source";
 import app from "./app";
 

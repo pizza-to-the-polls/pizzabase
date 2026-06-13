@@ -25,21 +25,26 @@ test("validateReport returns an error for not valid requests", async () => {
 });
 
 test("can override invalid", async () => {
-  const { errors, contactRole, normalizedAddress, contactInfo, reportURL } =
-    await validateReport(
-      {
-        address: "not-valid",
-        addressOverride: {
-          address: "address",
-          city: "city",
-          state: "OR",
-          latitude: "420",
-          longitude: "-420",
-          zip: "zip",
-        },
+  const {
+    errors,
+    contactRole,
+    normalizedAddress,
+    contactInfo,
+    reportURL,
+  } = await validateReport(
+    {
+      address: "not-valid",
+      addressOverride: {
+        address: "address",
+        city: "city",
+        state: "OR",
+        latitude: "420",
+        longitude: "-420",
+        zip: "zip",
       },
-      true
-    );
+    },
+    true
+  );
   expect(errors).toEqual({});
   expect(reportURL).toContain("http://trusted.url");
   expect(contactInfo).toEqual("trusted@example.com");
@@ -68,12 +73,16 @@ test("validateReport returns an error for empty report", async () => {
 });
 
 test("validates the report is valid", async () => {
-  const { errors, reportURL, contactInfo, normalizedAddress } =
-    await validateReport({
-      url: "http://twitter.com/something/status/123?utm_diff",
-      contact: "555-234-2345",
-      address: "5335 S Kimbark Ave Chicago IL 60615",
-    });
+  const {
+    errors,
+    reportURL,
+    contactInfo,
+    normalizedAddress,
+  } = await validateReport({
+    url: "http://twitter.com/something/status/123?utm_diff",
+    contact: "555-234-2345",
+    address: "5335 S Kimbark Ave Chicago IL 60615",
+  });
 
   expect(errors).toEqual({});
   expect(reportURL).toEqual("http://twitter.com/something/status/123");

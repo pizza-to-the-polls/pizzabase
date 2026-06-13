@@ -64,21 +64,28 @@ export class ReportsController {
   async create(request: Request, response: Response, _next: NextFunction) {
     const authed = await checkAuthorization(request);
 
-    const { errors, normalizedAddress, reportURL, contactInfo, ...extra } =
-      await validateReport(request.body || {}, authed);
+    const {
+      errors,
+      normalizedAddress,
+      reportURL,
+      contactInfo,
+      ...extra
+    } = await validateReport(request.body || {}, authed);
 
     if (Object.keys(errors).length > 0) {
       response.status(422);
       return { errors };
     }
 
-    const [report, { alreadyOrdered, isUnique, hasTruck, willReceive }] =
-      await Report.createNewReport(
-        contactInfo,
-        reportURL,
-        normalizedAddress,
-        extra
-      );
+    const [
+      report,
+      { alreadyOrdered, isUnique, hasTruck, willReceive },
+    ] = await Report.createNewReport(
+      contactInfo,
+      reportURL,
+      normalizedAddress,
+      extra
+    );
 
     if (authed) {
       await Action.log(report, "trusted report", request.body?.user);

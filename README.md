@@ -2,6 +2,8 @@
 
 The HQ for Pizza to the Polls. Powering our admin API... and other things.
 
+_See also: [Agent Notes](docs/AGENTS.md) for development conventions and common tasks._
+
 # Getting Started
 
 1. Install dependencies `npm i`

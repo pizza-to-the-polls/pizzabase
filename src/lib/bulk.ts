@@ -1,6 +1,6 @@
 import { AppDataSource } from "../data-source";
 import { EntityManager } from "typeorm";
-import * as csv from "csv-parser";
+import csv from "csv-parser";
 import * as fs from "fs";
 
 export const uploadBulkCSV = async (

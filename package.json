@@ -26,7 +26,6 @@
     "@bugsnag/js": "^7.5.1",
     "@bugsnag/plugin-express": "^7.3.5",
     "@types/jsonwebtoken": "^8.5.8",
-    "ansis": "^4.2.0",
     "aws-sdk": ">=2.814.0",
     "body-parser": "^1.20.4",
     "cors": "^2.8.5",
@@ -54,6 +53,7 @@
     "prettier:fix": "prettier --write .",
     "lint": "tslint --project .",
     "lint:fix": "tslint --fix --force --project .",
+    "migration:run": "ts-node ./node_modules/typeorm/cli.js migration:run -d src/data-source.ts",
     "test": "jest -w 1 --forceExit",
     "test:watch": "jest -w 1 --watchAll"
   }

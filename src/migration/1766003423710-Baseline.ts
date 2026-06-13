@@ -5,7 +5,7 @@ export class Baseline1766003423710 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `CREATE TABLE "actions" ("id" SERIAL NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "user_id" character varying NOT NULL, "entity_type" character varying NOT NULL, "entity_id" integer NOT NULL, "action_type" character varying NOT NULL, CONSTRAINT "PK_7bfb822f56be449c0b8adbf83cf" PRIMARY KEY ("id"))`
+      `CREATE TABLE "actions" ("id" SERIAL NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "user_id" text NOT NULL, "entity_type" character varying NOT NULL, "entity_id" integer NOT NULL, "action_type" character varying NOT NULL, CONSTRAINT "PK_7bfb822f56be449c0b8adbf83cf" PRIMARY KEY ("id"))`
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_314aaf9c37b61b0a1267c1f4b5" ON "actions" ("user_id") `
@@ -18,6 +18,12 @@ export class Baseline1766003423710 implements MigrationInterface {
     );
     await queryRunner.query(
       `CREATE INDEX "IDX_839402b7086804741a9f1b6a61" ON "actions" ("action_type") `
+    );
+    await queryRunner.query(
+      `CREATE TABLE "api_keys" ("id" SERIAL NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "key" character varying NOT NULL, "description" character varying, CONSTRAINT "UQ_ee97e01c5cd33c1d98ff612326d" UNIQUE ("key"), CONSTRAINT "PK_b1a8a0ab356dbecb2a91e983dba" PRIMARY KEY ("id"))`
+    );
+    await queryRunner.query(
+      `CREATE UNIQUE INDEX "IDX_ee97e01c5cd33c1d98ff612326" ON "api_keys" ("key") `
     );
     await queryRunner.query(
       `CREATE TABLE "donations" ("id" SERIAL NOT NULL, "created_at" TIMESTAMP NOT NULL DEFAULT now(), "updated_at" TIMESTAMP NOT NULL DEFAULT now(), "cancelled_at" TIMESTAMP WITH TIME ZONE, "email" character varying NOT NULL, "amount_gross" double precision NOT NULL, "amount" double precision NOT NULL, "stripe_id" character varying NOT NULL, "referrer" character varying, "gift" character varying, "cancel_note" character varying, "postal_code" character varying, "url" character varying NOT NULL DEFAULT 'https://polls.pizza', CONSTRAINT "UQ_d6e5e0390697ea354a0806c4cec" UNIQUE ("stripe_id"), CONSTRAINT "PK_c01355d6f6f50fc6d1b4a946abf" PRIMARY KEY ("id"))`
@@ -183,6 +189,10 @@ export class Baseline1766003423710 implements MigrationInterface {
     await queryRunner.query(
       `DROP INDEX "public"."IDX_4a264e74ce3cf1b31541cc70e2"`
     );
+    await queryRunner.query(
+      `DROP INDEX "public"."IDX_ee97e01c5cd33c1d98ff612326"`
+    );
+    await queryRunner.query(`DROP TABLE "api_keys"`);
     await queryRunner.query(`DROP TABLE "donations"`);
     await queryRunner.query(
       `DROP INDEX "public"."IDX_839402b7086804741a9f1b6a61"`

@@ -6,8 +6,16 @@ import { Report } from "../src/entity/Report";
 const SUCCESS = /Done|Delivered/i;
 
 const backfillReport = async (data: { [key: string]: string }, manager) => {
-  const { who, status, timestamp, cost, pizzas, full_address, url, contact } =
-    data;
+  const {
+    who,
+    status,
+    timestamp,
+    cost,
+    pizzas,
+    full_address,
+    url,
+    contact,
+  } = data;
 
   const newNow = new Date(timestamp);
 

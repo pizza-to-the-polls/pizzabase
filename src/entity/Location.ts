@@ -222,8 +222,15 @@ export class Location extends BaseEntity {
   static async createFromAddress(
     normalAddress: NormalAddress
   ): Promise<Location> {
-    const { fullAddress, address, city, state, zip, latitude, longitude } =
-      normalAddress;
+    const {
+      fullAddress,
+      address,
+      city,
+      state,
+      zip,
+      latitude,
+      longitude,
+    } = normalAddress;
 
     const location = new this();
 

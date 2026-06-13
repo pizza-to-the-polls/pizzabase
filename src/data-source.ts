@@ -1,3 +1,4 @@
+import * as path from "path";
 import "reflect-metadata";
 import { DataSource, DataSourceOptions } from "typeorm";
 import { PostgresConnectionOptions } from "typeorm/driver/postgres/PostgresConnectionOptions";
@@ -11,8 +12,8 @@ import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
 
 const entities = [Action, Donation, Location, Order, Report, Truck, Upload];
-const migrations = ["src/migration/**/*.ts"];
-const subscribers = ["src/subscriber/**/*.ts"];
+const migrations = [path.join(__dirname, "migration", "*.{ts,js}")];
+const subscribers = [path.join(__dirname, "subscriber", "*.{ts,js}")];
 
 const prodConfig: AuroraPostgresConnectionOptions = {
   type: "aurora-postgres",
