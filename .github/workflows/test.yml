@@ -75,6 +75,9 @@ jobs:
       - name: npm install dependencies
         run: npm install --include=dev
 
+      - name: build typescript
+        run: npx tsc --build
+
       - name: deploy to aws
         uses: serverless/github-action@v3.2
         with:
