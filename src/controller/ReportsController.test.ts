@@ -507,7 +507,10 @@ describe("#index", () => {
   });
 
   test("Lists the reports for a truck", async () => {
-    const location = await Location.findOne({ where: {} });
+    const location = await Location.findOne({
+      where: {},
+      order: { id: "ASC" },
+    });
     const truck = await location.assignTruck();
 
     const body = await controller.index(
@@ -535,7 +538,10 @@ describe("#index", () => {
   });
 
   test("Lists the reports for a location", async () => {
-    const location = await Location.findOne({ where: {} });
+    const location = await Location.findOne({
+      where: {},
+      order: { id: "ASC" },
+    });
 
     const body = await controller.index(
       http_mocks.createRequest({ query: { location: `${location.id}` } }),
@@ -562,7 +568,7 @@ describe("#index", () => {
   });
 
   test("Lists the reports for an order", async () => {
-    const order = await Order.findOne({ where: {} });
+    const order = await Order.findOne({ where: {}, order: { id: "ASC" } });
 
     const body = await controller.index(
       http_mocks.createRequest({ query: { order: `${order.id}` } }),
@@ -593,7 +599,7 @@ describe("#show", () => {
   beforeEach(async () => await buildTestData());
 
   it("returns a report", async () => {
-    const report = await Report.findOne({ where: {} });
+    const report = await Report.findOne({ where: {}, order: { id: "ASC" } });
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${report.id}` } }),
       http_mocks.createResponse(),

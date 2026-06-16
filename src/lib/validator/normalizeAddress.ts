@@ -1,17 +1,7 @@
 import { toStateName } from "../states";
 import { geocode, GeocodingError } from "./geocode";
 import { NormalAddress, OverrideAddress } from "./types";
-import Bugsnag from "@bugsnag/js";
-
-const notifyBugsnag = (err: Error) => {
-  try {
-    if (process.env.BUGSNAG_KEY) {
-      Bugsnag.notify(err);
-    }
-  } catch {
-    // Ignore when Bugsnag is not configured (unit tests)
-  }
-};
+import { notifyBugsnag } from "../notifyBugsnag";
 
 const overrideAddress = (
   addressOverride: null | OverrideAddress

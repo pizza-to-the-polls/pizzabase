@@ -3,17 +3,7 @@ import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
 import { zapNewUpload } from "../lib/zapier";
-import Bugsnag from "@bugsnag/js";
-
-const notifyBugsnag = (err: Error) => {
-  try {
-    if (process.env.BUGSNAG_KEY) {
-      Bugsnag.notify(err);
-    }
-  } catch {
-    // Ignore if Bugsnag isn't configured (e.g. in unit tests without env vars)
-  }
-};
+import { notifyBugsnag } from "../lib/notifyBugsnag";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {

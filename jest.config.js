@@ -15,9 +15,7 @@ module.exports = {
     "^.+\\.(ts|tsx)$": [
       "ts-jest",
       {
-        tsconfig: {
-          esModuleInterop: true,
-        },
+        tsconfig: "<rootDir>/tsconfig.json",
       },
     ],
   },
