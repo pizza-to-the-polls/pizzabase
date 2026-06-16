@@ -199,29 +199,31 @@ describe("#create", () => {
       .fn()
       .mockRejectedValueOnce(new mockModule.GeocodingError("missing API key"));
 
-    const response = http_mocks.createResponse();
-    const body = await controller.create(
-      http_mocks.createRequest({
-        ip: "127.0.0.1",
-        method: "POST",
-        body: {
-          fileName: "thing.jpg",
-          address: "550 Different Address City OR 12345",
-          fileHash: "geo-fail",
+    try {
+      const response = http_mocks.createResponse();
+      const body = await controller.create(
+        http_mocks.createRequest({
+          ip: "127.0.0.1",
+          method: "POST",
+          body: {
+            fileName: "thing.jpg",
+            address: "550 Different Address City OR 12345",
+            fileHash: "geo-fail",
+          },
+        }),
+        response,
+        () => undefined
+      );
+
+      expect(response.statusCode).toEqual(503);
+      expect(body).toEqual({
+        errors: {
+          address:
+            "Address verification is temporarily unavailable. Please try again later.",
         },
-      }),
-      response,
-      () => undefined
-    );
-
-    expect(response.statusCode).toEqual(503);
-    expect(body).toEqual({
-      errors: {
-        address:
-          "Address verification is temporarily unavailable. Please try again later.",
-      },
-    });
-
-    mockModule.geocode = originalGeocode;
+      });
+    } finally {
+      mockModule.geocode = originalGeocode;
+    }
   });
 });
