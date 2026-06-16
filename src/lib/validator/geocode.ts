@@ -1,3 +1,5 @@
+import fetch from "node-fetch";
+
 const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 const GMAPS_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GMAPS_COMPONENT_MAPPING = {
@@ -15,7 +17,16 @@ const GMAPS_COMPONENT_MAPPING = {
 
 import { NormalAddress } from "./types";
 
+export class GeocodingError extends Error {
+  constructor(message: string, public readonly status?: string) {
+    super(message);
+    this.name = "GeocodingError";
+  }
+}
+
 interface GmapsResponse {
+  status: string;
+  error_message?: string;
   results: {
     geometry: {
       location: {
@@ -34,11 +45,35 @@ export const geocode = async (body: string): Promise<null | NormalAddress> =>
   await gmapsGeocode(body);
 
 const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
-  const fetch = (await import("node-fetch")).default;
+  if (!GMAPS_KEY) {
+    throw new GeocodingError("GOOGLE_MAPS_KEY is not configured");
+  }
+
   const resp = await fetch(
-    `${GMAPS_URL}?key=${GMAPS_KEY}&address=${escape(body)}`
+    `${GMAPS_URL}?key=${GMAPS_KEY}&address=${encodeURIComponent(body)}`
   );
-  const { results } = (await resp.json()) as GmapsResponse;
+
+  if (!resp.ok) {
+    throw new GeocodingError(
+      `Google Maps API returned HTTP ${resp.status}: ${resp.statusText}`
+    );
+  }
+
+  const {
+    status,
+    error_message,
+    results,
+  } = (await resp.json()) as GmapsResponse;
+
+  if (status !== "OK") {
+    if (status === "ZERO_RESULTS") {
+      return null;
+    }
+    throw new GeocodingError(
+      `Google Maps API error: ${status} — ${error_message || "No details"}`
+    );
+  }
+
   const [result] = results || [];
 
   if (result) {
