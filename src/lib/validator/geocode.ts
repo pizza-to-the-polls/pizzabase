@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 const GMAPS_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GMAPS_COMPONENT_MAPPING = {

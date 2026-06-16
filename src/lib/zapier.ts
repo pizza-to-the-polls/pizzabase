@@ -68,7 +68,6 @@ const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
 
 const zapAny = async (objs: any, hook: ZapHooks): Promise<void> => {
   if (process.env[hook as string]) {
-    const fetch = (await import("node-fetch")).default;
     await fetch(process.env[hook as string], {
       method: "POST",
       headers: { "Content-Type": "application/json" },
