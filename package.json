@@ -48,7 +48,6 @@
     "start": "ts-node src/index.ts",
     "clean": "rm -rf .build && npm run fix",
     "fix": "npm run prettier:fix && npm run lint:fix",
-    "schema:sync": "typeorm-ts-node-commonjs schema:sync -d src/data-source.ts",
     "prettier": "prettier --check .",
     "prettier:fix": "prettier --write .",
     "lint": "tslint --project .",

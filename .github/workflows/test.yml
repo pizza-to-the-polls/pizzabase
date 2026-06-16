@@ -87,7 +87,7 @@ jobs:
         run: npx tsc --build
 
       - name: deploy to aws
-        uses: serverless/github-action@v3.2
+        uses: serverless/github-action@v4.0.0
         with:
           args: deploy --stage dev
         env:
@@ -122,6 +122,8 @@ jobs:
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
 
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
+
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
       - name: run migrations
         run: npm run migration:run
