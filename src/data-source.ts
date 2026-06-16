@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { DataSource, DataSourceOptions } from "typeorm";
 import { PostgresConnectionOptions } from "typeorm/driver/postgres/PostgresConnectionOptions";
 import { AuroraPostgresConnectionOptions } from "typeorm/driver/aurora-postgres/AuroraPostgresConnectionOptions";
+import { APIKey } from "./entity/APIKey";
 import { Action } from "./entity/Action";
 import { Donation } from "./entity/Donation";
 import { Location } from "./entity/Location";
@@ -11,7 +12,16 @@ import { Report } from "./entity/Report";
 import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
 
-const entities = [Action, Donation, Location, Order, Report, Truck, Upload];
+const entities = [
+  Action,
+  APIKey,
+  Donation,
+  Location,
+  Order,
+  Report,
+  Truck,
+  Upload,
+];
 const migrations = [path.join(__dirname, "migration", "*.{ts,js}")];
 const subscribers = [path.join(__dirname, "subscriber", "*.{ts,js}")];
 

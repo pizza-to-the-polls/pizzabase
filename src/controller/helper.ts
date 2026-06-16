@@ -1,5 +1,6 @@
 import { Request, Response, NextFunction } from "express";
 
+import { AppDataSource } from "../data-source";
 import { APIKey } from "../entity/APIKey";
 
 export const findOr404 = (
@@ -20,7 +21,9 @@ export const checkAuthorization = async (
   const { authorization } = request.headers;
   const key = (authorization || "").replace("Basic ", "");
 
-  return (await APIKey.count({ where: { key } })) > 0;
+  return (
+    (await AppDataSource.getRepository(APIKey).count({ where: { key } })) > 0
+  );
 };
 
 export const isAuthorized = async (
