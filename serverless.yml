@@ -6,7 +6,7 @@ plugins:
 
 provider:
   name: aws
-  runtime: nodejs20.x
+  runtime: nodejs${file(.nvmrc)}.x
   timeout: 30
   region: us-west-2
   environment:

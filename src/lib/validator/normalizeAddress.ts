@@ -5,7 +5,7 @@ import Bugsnag from "@bugsnag/js";
 
 const notifyBugsnag = (err: Error) => {
   try {
-    if (Bugsnag.isStarted()) {
+    if (process.env.BUGSNAG_KEY) {
       Bugsnag.notify(err);
     }
   } catch {

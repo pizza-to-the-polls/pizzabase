@@ -27,10 +27,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Read Node version
+        id: read_version
+        run: echo "NODE_VER=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 20
+          node-version: ${{ steps.read_version.outputs.NODE_VER }}
 
       - name: npm install dependencies
         run: npm install
@@ -67,10 +71,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Read Node version
+        id: read_version
+        run: echo "NODE_VER=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 20
+          node-version: ${{ steps.read_version.outputs.NODE_VER }}
 
       - name: npm install dependencies
         run: npm install --include=dev
