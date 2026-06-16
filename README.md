@@ -2,11 +2,13 @@
 
 The HQ for Pizza to the Polls. Powering our admin API... and other things.
 
+_See also: [Agent Notes](docs/AGENTS.md) for development conventions and common tasks._
+
 # Getting Started
 
 1. Install dependencies `npm i`
 
-1. Make sure you've got postgres running locally with a user and a db
+1. Make sure you've got postgres running locally with a user and a db - if you are going to run tests also create a test db.
 
 1. Copy `ormconfig.json.example` to `ormconfig.json` and add your db/credentials
 

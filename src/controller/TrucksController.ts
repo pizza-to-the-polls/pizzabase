@@ -16,7 +16,7 @@ export class TrucksController {
 
     const [trucks, count] = past
       ? await Truck.findAndCount({
-          where: { ...location },
+          where: location,
           order: { createdAt: "DESC" },
           take,
           skip,

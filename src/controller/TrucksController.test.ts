@@ -134,8 +134,9 @@ describe("#all", () => {
   });
 
   it("returns trucks for a location", async () => {
-    const location = (await Truck.findOne({ order: { createdAt: "ASC" } }))
-      .location;
+    const location = (
+      await Truck.findOne({ order: { createdAt: "ASC" }, where: {} })
+    ).location;
     const body = await controller.all(
       http_mocks.createRequest({
         method: "GET",
@@ -154,8 +155,9 @@ describe("#all", () => {
   });
 
   it("returns trucks for a location", async () => {
-    const location = (await Truck.findOne({ order: { createdAt: "DESC" } }))
-      .location;
+    const location = (
+      await Truck.findOne({ order: { createdAt: "DESC" }, where: {} })
+    ).location;
     const body = await controller.all(
       http_mocks.createRequest({
         method: "GET",

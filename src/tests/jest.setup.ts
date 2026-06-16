@@ -1,7 +1,14 @@
 import dbHelper from "./dbHelper";
 import { APIKey } from "../entity/APIKey";
 
+global.fetch = jest.fn(() =>
+  Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+) as jest.Mock;
+
 beforeAll(async () => {
+  // Set allowed origins for CORS testing — consumed when Express app is first loaded
+  process.env.ALLOWED_ORIGINS = "polls.pizza";
+
   await dbHelper.setUpDB();
 
   process.env.ZAP_NEW_REPORT = "https://hooks.example.com/new-report-hook/";
@@ -13,7 +20,5 @@ beforeAll(async () => {
 });
 afterEach(async () => {
   await dbHelper.cleanAll();
-});
-afterAll(async () => {
-  await dbHelper.closeDB();
+  (global.fetch as jest.Mock).mockClear();
 });

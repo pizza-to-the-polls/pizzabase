@@ -1,5 +1,5 @@
 import { NextFunction, Request, Response } from "express";
-import { getConnection } from "typeorm";
+import { AppDataSource } from "../data-source";
 
 export class TotalsController {
   private toNumber(object): { [key: string]: number } {
@@ -36,7 +36,7 @@ export class TotalsController {
     WHERE cancelled_at is NULL
   `;
   async overall(_request: Request, _response: Response, _next: NextFunction) {
-    const { manager } = await getConnection();
+    const manager = AppDataSource.manager;
 
     return this.toTotals({
       ...(await manager.query(this.DONATION_QUERY))[0],
@@ -44,7 +44,7 @@ export class TotalsController {
     });
   }
   async yearly(request: Request, _response: Response, _next: NextFunction) {
-    const { manager } = await getConnection();
+    const manager = AppDataSource.manager;
     const year = (request.params.year || "").replace(/\D/g, "");
 
     return this.toTotals({

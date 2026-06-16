@@ -1,6 +1,6 @@
-import * as express from "express";
-import * as bodyParser from "body-parser";
-import * as cors from "cors";
+import express from "express";
+import bodyParser from "body-parser";
+import cors from "cors";
 
 import { Request, Response, NextFunction } from "express";
 import { Routes } from "./routes";
@@ -43,11 +43,15 @@ Routes.forEach(({ method, route, controller, action }) => {
     (req: Request, res: Response, next: NextFunction) => {
       const result = new (controller as any)()[action](req, res, next);
       if (result instanceof Promise) {
-        result.then((controllerResult) =>
-          controllerResult !== null && controllerResult !== undefined
-            ? res.send(controllerResult)
-            : undefined
-        );
+        result
+          .then((controllerResult) =>
+            controllerResult !== null && controllerResult !== undefined
+              ? res.send(controllerResult)
+              : undefined
+          )
+          .catch((e) => {
+            next(e);
+          });
       } else if (result !== null && result !== undefined) {
         res.json(result);
       }

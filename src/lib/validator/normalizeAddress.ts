@@ -1,6 +1,7 @@
 import { toStateName } from "../states";
-import { geocode } from "./geocode";
+import { geocode, GeocodingError } from "./geocode";
 import { NormalAddress, OverrideAddress } from "./types";
+import { notifyBugsnag } from "../notifyBugsnag";
 
 const overrideAddress = (
   addressOverride: null | OverrideAddress
@@ -33,6 +34,15 @@ export const normalizeAddress = async (
       overrideAddress(addressOverride)
     );
   } catch (e) {
+    if (e instanceof GeocodingError) {
+      // Re-throw so callers can distinguish system-level geocoding failures
+      // from "address not found" (null return).
+      notifyBugsnag(e);
+      throw e;
+    }
+    // Log unexpected errors but still return null for backward-compat
     console.error(e);
+    notifyBugsnag(e as Error);
+    return null;
   }
 };

@@ -77,7 +77,7 @@ export class Order extends BaseEntity {
   cancelNote: string;
 
   async distributor(): Promise<Report | null> {
-    const [reports] = await Report.allReports({ order: this });
+    const [reports] = await Report.allReports({ order: { id: this.id } });
     return (reports?.canDistribute || 0) > 0 ? reports : null;
   }
 
@@ -89,12 +89,12 @@ export class Order extends BaseEntity {
     this.cost = 0;
     await this.save();
 
-    const reports = await Report.find({ where: { order: this } });
+    const reports = await Report.find({ where: { order: { id: this.id } } });
 
     if (reports) {
       await Report.createQueryBuilder()
         .update(Report)
-        .where({ order: this })
+        .where({ order: { id: this.id } })
         .set({ order: null })
         .execute();
     }

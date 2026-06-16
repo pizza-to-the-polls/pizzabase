@@ -1,10 +1,10 @@
 import "reflect-metadata";
-import { createConnection } from "typeorm";
+import { initializeDataSource } from "./data-source";
 import app from "./app";
 
 (async () => {
   try {
-    await createConnection();
+    await initializeDataSource();
   } catch (e) {
     console.error("Could not create connection");
     throw e;

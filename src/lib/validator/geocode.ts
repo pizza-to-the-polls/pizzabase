@@ -1,5 +1,3 @@
-import fetch from "node-fetch";
-
 const GMAPS_KEY = process.env.GOOGLE_MAPS_KEY;
 const GMAPS_URL = "https://maps.googleapis.com/maps/api/geocode/json";
 const GMAPS_COMPONENT_MAPPING = {
@@ -17,14 +15,63 @@ const GMAPS_COMPONENT_MAPPING = {
 
 import { NormalAddress } from "./types";
 
+export class GeocodingError extends Error {
+  constructor(message: string, public readonly status?: string) {
+    super(message);
+    this.name = "GeocodingError";
+  }
+}
+
+interface GmapsResponse {
+  status: string;
+  error_message?: string;
+  results: {
+    geometry: {
+      location: {
+        lat: number;
+        lng: number;
+      };
+    };
+    address_components: {
+      short_name: string;
+      types: string[];
+    }[];
+  }[];
+}
+
 export const geocode = async (body: string): Promise<null | NormalAddress> =>
   await gmapsGeocode(body);
 
 const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
+  if (!GMAPS_KEY) {
+    throw new GeocodingError("GOOGLE_MAPS_KEY is not configured");
+  }
+
   const resp = await fetch(
-    `${GMAPS_URL}?key=${GMAPS_KEY}&address=${escape(body)}`
+    `${GMAPS_URL}?key=${GMAPS_KEY}&address=${encodeURIComponent(body)}`
   );
-  const { results } = await resp.json();
+
+  if (!resp.ok) {
+    throw new GeocodingError(
+      `Google Maps API returned HTTP ${resp.status}: ${resp.statusText}`
+    );
+  }
+
+  const {
+    status,
+    error_message,
+    results,
+  } = (await resp.json()) as GmapsResponse;
+
+  if (status !== "OK") {
+    if (status === "ZERO_RESULTS") {
+      return null;
+    }
+    throw new GeocodingError(
+      `Google Maps API error: ${status} — ${error_message || "No details"}`
+    );
+  }
+
   const [result] = results || [];
 
   if (result) {
@@ -42,14 +89,24 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       num,
       street,
       premise,
-    } = address_components.reduce((obj, { short_name, types }) => {
-      for (const type of types) {
-        if (GMAPS_COMPONENT_MAPPING[type]) {
-          obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+    } = address_components.reduce(
+      (obj, { short_name, types }) => {
+        for (const type of types) {
+          if (GMAPS_COMPONENT_MAPPING[type]) {
+            obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+          }
         }
+        return obj;
+      },
+      {
+        city: "",
+        state: "",
+        zip: "",
+        num: "",
+        street: "",
+        premise: "",
       }
-      return obj;
-    }, {});
+    );
     const address = num && street ? `${num} ${street}` : premise;
 
     if (!address || !city || !state || !zip) {

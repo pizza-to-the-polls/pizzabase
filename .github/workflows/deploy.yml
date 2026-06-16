@@ -8,6 +8,9 @@ jobs:
   test:
     runs-on: ubuntu-latest
 
+    env:
+      NODE_ENV: test
+
     services:
       postgres:
         image: postgres
@@ -24,10 +27,14 @@ jobs:
     steps:
       - uses: actions/checkout@v2
 
+      - name: Read Node version
+        id: read_version
+        run: echo "NODE_VER=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 20
+          node-version: ${{ steps.read_version.outputs.NODE_VER }}
 
       - name: npm install dependencies
         run: npm install
@@ -55,30 +62,35 @@ jobs:
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+      NODE_ENV: 'production'
 
     steps:
       - uses: actions/checkout@v2
 
+      - name: Read Node version
+        id: read_version
+        run: echo "NODE_VER=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+
       - name: Setup Node.js environment
         uses: actions/setup-node@v2
         with:
-          node-version: 20
+          node-version: ${{ steps.read_version.outputs.NODE_VER }}
 
       - name: npm install dependencies
-        run: npm install
+        run: npm install --include=dev
 
-      - name: create ormconfig.json
-        run: echo $ORMCONFIG_JSON > $GITHUB_WORKSPACE/ormconfig.json
-        env:
-          ORMCONFIG_JSON: ${{ secrets.ORMCONFIG_JSON }}
+      - name: build typescript
+        run: npx tsc --build
 
       - name: deploy to aws
-        uses: serverless/github-action@v1
+        uses: serverless/github-action@v4.0.0
         with:
           args: deploy --stage prod
         env:
-          SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
-          SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
+          DB_NAME: ${{ secrets.DB_NAME }}
+          AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
+          AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
+
           ZAP_NEW_REPORT: ${{ secrets.ZAP_NEW_REPORT }}
           ZAP_NEW_LOCATION: ${{ secrets.ZAP_NEW_LOCATION }}
           ZAP_NEW_ORDER: ${{ secrets.ZAP_NEW_ORDER }}
@@ -88,15 +100,29 @@ jobs:
           ZAP_TRUCK_REPORT: ${{ secrets.ZAP_TRUCK_REPORT }}
           ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}
           ZAP_CANCEL_ORDER_REPORT: ${{ secrets.ZAP_CANCEL_ORDER_REPORT }}
+
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
+
           STATIC_SITE: 'https://polls.pizza'
+
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
+
           ALLOWED_ORIGINS: polls.pizza
+
           STRIPE_SECRET_KEY: ${{ secrets.STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STRIPE_WH }}
+
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
+
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
-      - name: sync schema
-        run: npm run schema:sync
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+
+      - name: run migrations
+        run: npm run migration:run
+        env:
+          DB_NAME: ${{ secrets.DB_NAME }}
+          AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
+          AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
+          AWS_REGION: us-west-2

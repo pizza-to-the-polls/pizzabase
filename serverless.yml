@@ -1,18 +1,21 @@
 service: pizzabase
 
-frameworkVersion: "1"
-
 plugins:
-  - serverless-plugin-typescript
   - serverless-domain-manager
+  - serverless-offline
 
 provider:
   name: aws
-  runtime: nodejs14.x
+  runtime: nodejs${file(.nvmrc)}.x
   timeout: 30
   region: us-west-2
   environment:
-    NODE_ENV: prod
+    NODE_ENV: production
+
+    DB_NAME: ${env:DB_NAME}
+    AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+    AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+
     ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
     ZAP_NEW_ORDER: ${env:ZAP_NEW_ORDER}
@@ -67,15 +70,22 @@ provider:
         - "arn:aws:s3:::*"
 
 package:
-  include:
-    - ormconfig.json
+  patterns:
+    - build/**
+    - package.json
+    - "!.git/**"
+    - "!.github/**"
+    - "!docs/**"
+    - "!scripts/**"
+    - "!src/**/*.test.ts"
+    - "!src/tests/**"
 
 functions:
   app:
-    handler: src/lambda.handler
+    handler: build/lambda.handler
     events:
       - http: ANY /
-      - http: "ANY {proxy+}"
+      - http: ANY /{proxy+}
 
 custom:
   customDomain:
