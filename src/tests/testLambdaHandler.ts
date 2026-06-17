@@ -13,7 +13,9 @@
 
 import serverlessHttp from "serverless-http";
 
-let handlerPromise: Promise<ReturnType<typeof serverlessHttp>> | null = null;
+let cachedHandlerPromise: Promise<
+  ReturnType<typeof serverlessHttp>
+> | null = null;
 
 /**
  * Lazy handler initialization with deferred app import.
@@ -25,8 +27,8 @@ let handlerPromise: Promise<ReturnType<typeof serverlessHttp>> | null = null;
 export const getHandler = async (): Promise<
   ReturnType<typeof serverlessHttp>
 > => {
-  if (!handlerPromise) {
-    handlerPromise = (async () => {
+  if (!cachedHandlerPromise) {
+    cachedHandlerPromise = (async () => {
       // DB is already initialized by jest.setup.ts beforeAll().
       // We defer the Express app import until here so env vars
       // (like ALLOWED_ORIGINS) are set before app.ts reads them.
@@ -36,7 +38,7 @@ export const getHandler = async (): Promise<
       return serverlessHttp(app);
     })();
   }
-  return handlerPromise;
+  return cachedHandlerPromise;
 };
 
 // ── Event factory ──────────────────────────────────────────────
