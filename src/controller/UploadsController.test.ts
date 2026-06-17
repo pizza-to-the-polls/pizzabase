@@ -7,6 +7,7 @@ import { FILE_TYPE_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/aws");
 jest.mock("../lib/validator/geocode");
+jest.mock("exif-reader");
 
 const controller = new UploadsController();
 
@@ -225,5 +226,140 @@ describe("#create", () => {
     } finally {
       mockModule.geocode = originalGeocode;
     }
+  });
+});
+
+describe("#getExif", () => {
+  let upload: Upload;
+  let fileName: string;
+
+  beforeEach(async () => {
+    const address = {
+      latitude: 45.523064,
+      longitude: -122.676483,
+      fullAddress: "123 Main St, Portland, OR 97204",
+      address: "123 Main St",
+      city: "Portland",
+      state: "OR",
+      zip: "97204",
+    };
+
+    [upload] = await Upload.createOrReject("127.0.0.1", {
+      fileExt: "jpg",
+      fileHash: "somehash1",
+      normalizedAddress: address,
+    });
+
+    fileName = upload.filePath.split("/")[1];
+  });
+
+  it("should return exif data for an upload that has it", async () => {
+    const mockAws = require("aws-sdk");
+    mockAws.S3 = jest.fn().mockImplementation(() => ({
+      getObject: jest.fn().mockReturnValue({
+        promise: jest.fn().mockResolvedValue({
+          Body: Buffer.from([0x45, 0x78]),
+        }),
+      }),
+    }));
+
+    const exifReader = require("exif-reader");
+    exifReader.mockReturnValueOnce({
+      Image: { Make: "Apple" },
+      bigEndian: true,
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/exif/${fileName}`,
+        params: { fileName },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toEqual({ Image: { Make: "Apple" }, bigEndian: true });
+  });
+
+  it("should return null for an upload that does not have exif data", async () => {
+    const mockAws = require("aws-sdk");
+    mockAws.S3 = jest.fn().mockImplementation(() => ({
+      getObject: jest.fn().mockReturnValue({
+        promise: jest.fn().mockResolvedValue({
+          Body: Buffer.from([0x00, 0x00]),
+        }),
+      }),
+    }));
+
+    const exifReader = require("exif-reader");
+    exifReader.mockImplementationOnce(() => {
+      throw new Error("No EXIF data");
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/exif/${fileName}`,
+        params: { fileName },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toBe(null);
+  });
+
+  it("should return 401 for a request without an API key", async () => {
+    const response = http_mocks.createResponse();
+    await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/exif/${fileName}`,
+        params: { fileName },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(401);
+  });
+
+  it("should return 401 for a request with a bad API key", async () => {
+    const response = http_mocks.createResponse();
+    await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/exif/${fileName}`,
+        params: { fileName },
+        headers: { Authorization: "Basic badkey" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(401);
+  });
+
+  it("should return 404 for a non-existent upload", async () => {
+    const response = http_mocks.createResponse();
+    await controller.getExif(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/exif/not-real.jpg`,
+        params: { fileName: "not-real.jpg" },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(404);
   });
 });

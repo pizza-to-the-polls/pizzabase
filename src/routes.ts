@@ -124,6 +124,12 @@ export const Routes = [
     action: "create",
   },
   {
+    method: "get",
+    route: "/uploads/exif/:fileName",
+    controller: UploadsController,
+    action: "getExif",
+  },
+  {
     method: "post",
     route: "/session",
     controller: SessionController,

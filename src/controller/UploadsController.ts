@@ -4,6 +4,7 @@ import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
 import { zapNewUpload } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
+import { isAuthorized, findOr404 } from "./helper";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {
@@ -70,5 +71,45 @@ export class UploadsController {
       }
       throw e;
     }
+  }
+
+  async getExif(request: Request, response: Response, next: NextFunction) {
+    if (!(await isAuthorized(request, response, next))) return null;
+
+    const { fileName } = request.params;
+    const filePath = `uploads/${fileName}`;
+
+    const upload = await Upload.findOne({
+      where: { filePath } as any,
+    });
+    if (!findOr404(upload, response, next)) return null;
+
+    try {
+      const s3Client = new (require("aws-sdk").S3)({
+        region: process.env.AWS_REGION || "us-west-2",
+      });
+      const S3_BUCKET = process.env.UPLOAD_S3_BUCKET;
+
+      const s3Object = await s3Client
+        .getObject({
+          Bucket: S3_BUCKET,
+          Key: upload.filePath,
+          Range: "bytes=0-65535", // Read the first 64KB where EXIF lives
+        })
+        .promise();
+
+      if (s3Object.Body) {
+        const exifReader = require("exif-reader");
+        return exifReader(s3Object.Body);
+      }
+    } catch (error) {
+      // Log the error, but don't block the main flow
+      console.error(
+        `Could not extract EXIF data for upload ${upload.filePath}:`,
+        error
+      );
+    }
+
+    return null;
   }
 }
