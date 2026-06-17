@@ -37,8 +37,7 @@ export class ReportsController {
       ? { location: { id: request.query.location } }
       : {};
 
-    const where =
-      truck || location || order ? { ...truck, ...order, ...location } : {};
+    const where = { ...truck, ...order, ...location };
 
     const [reports, count] = await Report.findAndCount({
       take,
