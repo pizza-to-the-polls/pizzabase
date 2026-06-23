@@ -38,7 +38,7 @@
     "serverless": "^4.29.4",
     "serverless-http": "^2.7.0",
     "stripe": "^8.119.0",
-    "typeorm": "^0.3.28",
+    "typeorm": "^0.3.29",
     "typeorm-aurora-data-api-driver": "^3.0.2",
     "uuid": "^8.3.1"
   },
