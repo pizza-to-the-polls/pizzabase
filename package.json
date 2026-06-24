@@ -40,7 +40,7 @@
     "stripe": "^8.119.0",
     "typeorm": "^0.3.29",
     "typeorm-aurora-data-api-driver": "^3.0.2",
-    "uuid": "^8.3.1"
+    "uuid": "^14.0.0"
   },
   "scripts": {
     "dev": "nodemon --watch \"src/**\" --ext \"ts,json\" --ignore \"src/**/*.test.ts\" --exec npm run start",
