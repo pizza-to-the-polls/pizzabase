@@ -25,7 +25,7 @@ describe("#create", () => {
     const response = http_mocks.createResponse();
     const body = await controller.create(
       http_mocks.createRequest({
-        ip: "[IP_ADDRESS]",
+        ip: "127.0.0.1",
         method: "POST",
         body: {},
       }),
@@ -45,7 +45,7 @@ describe("#create", () => {
     const response = http_mocks.createResponse();
     const body = await controller.create(
       http_mocks.createRequest({
-        ip: "[IP_ADDRESS]",
+        ip: "127.0.0.1",
         method: "POST",
         body: {
           address: "1234 Street City ST 12345",
@@ -65,7 +65,7 @@ describe("#create", () => {
 
   it("returns error if rate limited", async () => {
     const response = http_mocks.createResponse();
-    const ip = "[IP_ADDRESS]";
+    const ip = "127.0.0.1";
     const location = await Location.createFromAddress({
       latitude: 41.79907,
       longitude: -87.58413,
@@ -113,7 +113,7 @@ describe("#create", () => {
 
   it("returns original upload if uploaded", async () => {
     const response = http_mocks.createResponse();
-    const ip = "[IP_ADDRESS]";
+    const ip = "127.0.0.1";
     const location = await Location.createFromAddress({
       latitude: 41.79907,
       longitude: -87.58413,
@@ -166,7 +166,7 @@ describe("#create", () => {
     });
     const body = await controller.create(
       http_mocks.createRequest({
-        ip: "[IP_ADDRESS]",
+        ip: "127.0.0.1",
         method: "POST",
         body: {
           address,
@@ -193,7 +193,7 @@ describe("#create", () => {
   it("can create an upload on a new location", async () => {
     await controller.create(
       http_mocks.createRequest({
-        ip: "[IP_ADDRESS]",
+        ip: "127.0.0.1",
         method: "POST",
         body: {
           fileName: "thing.jpg",
@@ -226,7 +226,7 @@ describe("#create", () => {
       const response = http_mocks.createResponse();
       const body = await controller.create(
         http_mocks.createRequest({
-          ip: "[IP_ADDRESS]",
+          ip: "127.0.0.1",
           method: "POST",
           body: {
             fileName: "thing.jpg",
@@ -270,7 +270,7 @@ describe("#getExif", () => {
       zip: "97204",
     };
 
-    [upload] = await Upload.createOrReject("[IP_ADDRESS]", {
+    [upload] = await Upload.createOrReject("127.0.0.1", {
       fileExt: "jpg",
       fileHash: "somehash1",
       normalizedAddress: address,
@@ -453,7 +453,7 @@ describe("#getExif", () => {
       () => undefined
     )) as any;
 
-    expect(body.Image.Orientation).toBe(1);
+    expect(body.exif.Image.Orientation).toBe(1);
     expect(getObject).toHaveBeenCalledTimes(2);
     expect(getObject.mock.calls[1][0].Range).toMatch(/^bytes=7-\d+$/);
   });
@@ -523,8 +523,7 @@ describe("#getExif", () => {
       () => undefined
     )) as any;
 
-    expect(body.Image.Orientation).toBe(1);
-    expect(body.exif).toBeUndefined();
+    expect(body.exif.Image.Orientation).toBe(1);
     expect(body.review).toBeUndefined();
   });
 
@@ -538,7 +537,7 @@ describe("#getExif", () => {
       () => undefined
     );
 
-    expect(body).toBeNull();
+    expect(body).toEqual({ exif: null });
   });
 
   it("response includes disclaimer in review", async () => {
