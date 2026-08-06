@@ -9,6 +9,10 @@
  * ASCII signature "Exif\0\0". The TIFF payload follows immediately.
  *
  * PNG: EXIF lives in an optional "eXIf" chunk.
+ *
+ * XMP (for IPTC Digital Source Type) lives in:
+ *   - JPEG APP1 with signature "http://ns.adobe.com/xap/1.0/\0"
+ *   - PNG iTXt chunk with keyword "XML:com.adobe.xmp"
  */
 
 const JPEG_SOI = 0xffd8;
@@ -16,6 +20,7 @@ const JPEG_EOI = 0xffd9;
 const JPEG_SOS = 0xffda; // Start of Scan – entropy-coded data follows, no length
 const JPEG_APP1 = 0xffe1;
 const EXIF_SIG = "Exif\0\0";
+const XMP_SIG = "http://ns.adobe.com/xap/1.0/\0";
 
 const PNG_SIGNATURE = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
 
@@ -39,6 +44,15 @@ export interface PngExtractResult {
   /** True when an eXIf chunk was found but extends beyond the buffer. */
   truncated: boolean;
   /** Total bytes needed (from buffer start) to capture the full eXIf chunk. */
+  bytesNeeded: number;
+}
+
+export interface XmpExtractResult {
+  /** UTF-8 XMP XML string, or null if no XMP found. */
+  xmpXml: string | null;
+  /** True when XMP segment/chunk was found but extends beyond the buffer. */
+  truncated: boolean;
+  /** Total bytes needed (from buffer start) to capture the full XMP segment. */
   bytesNeeded: number;
 }
 
@@ -245,6 +259,246 @@ export function extractExif(buffer: Buffer): Buffer | null {
   // PNG detection: starts with 8-byte PNG signature
   if (buffer.length >= 8 && buffer.slice(0, 8).equals(PNG_SIGNATURE)) {
     return extractExifFromPng(buffer).tiff;
+  }
+
+  return null;
+}
+
+// ---------------------------------------------------------------------------
+// XMP extraction (JPEG APP1 and PNG iTXt)
+// ---------------------------------------------------------------------------
+
+/**
+ * Extract XMP XML payload from a JPEG buffer.
+ *
+ * Walks JPEG markers from SOI and looks for APP1 with the XMP signature
+ * "http://ns.adobe.com/xap/1.0/\0". Returns the XML text following the
+ * signature, up to the segment end.
+ *
+ * Only the first XMP APP1 segment is returned (the XMP spec permits exactly
+ * one "http://ns.adobe.com/xap/1.0/" APP1). ExtendedXMP (GContainer) is not
+ * parsed.
+ */
+export function extractXmpFromJpeg(buffer: Buffer): XmpExtractResult {
+  if (buffer.length < 4 || buffer.readUInt16BE(0) !== JPEG_SOI) {
+    return { xmpXml: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  let offset = 2;
+
+  while (offset + 1 < buffer.length) {
+    const markerHi = buffer[offset];
+
+    if (markerHi !== 0xff) {
+      break;
+    }
+
+    const markerLo = buffer[offset + 1];
+
+    if (markerLo === 0x00 || markerLo === 0xff) {
+      offset += 1;
+      continue;
+    }
+
+    const marker = markerHi * 256 + markerLo;
+
+    if (marker === JPEG_SOS) {
+      break;
+    }
+
+    if (marker === JPEG_EOI) {
+      break;
+    }
+
+    offset += 2;
+    if (offset + 2 > buffer.length) {
+      return {
+        xmpXml: null,
+        truncated: true,
+        bytesNeeded: offset + 2,
+      };
+    }
+
+    const length = buffer.readUInt16BE(offset);
+
+    if (length < 2) {
+      break;
+    }
+
+    const segmentDataStart = offset + 2;
+    const segmentEnd = offset + length;
+
+    if (segmentEnd > buffer.length) {
+      return {
+        xmpXml: null,
+        truncated: true,
+        bytesNeeded: segmentEnd,
+      };
+    }
+
+    if (marker === JPEG_APP1) {
+      // Check for XMP signature at the start of the complete segment.
+      const xmpSigLen = XMP_SIG.length;
+      if (
+        segmentEnd - segmentDataStart >= xmpSigLen &&
+        buffer.compare(
+          Buffer.from(XMP_SIG, "ascii"),
+          0,
+          xmpSigLen,
+          segmentDataStart,
+          segmentDataStart + xmpSigLen
+        ) === 0
+      ) {
+        // XMP XML payload starts after the signature.
+        const xml = buffer.toString(
+          "utf-8",
+          segmentDataStart + xmpSigLen,
+          segmentEnd
+        );
+        return {
+          xmpXml: xml.trimEnd(),
+          truncated: false,
+          bytesNeeded: 0,
+        };
+      }
+    }
+
+    offset = segmentEnd;
+  }
+
+  return { xmpXml: null, truncated: false, bytesNeeded: 0 };
+}
+
+/**
+ * Extract XMP XML payload from a PNG buffer.
+ *
+ * Walks PNG chunks looking for an iTXt chunk with keyword
+ * "XML:com.adobe.xmp". iTXt format:
+ *   - keyword (null-terminated ASCII)
+ *   - compression flag (1 byte, must be 0 for XMP per XMP spec)
+ *   - compression method (1 byte)
+ *   - language tag (null-terminated)
+ *   - translated keyword (null-terminated)
+ *   - text data (UTF-8)
+ */
+export function extractXmpFromPng(buffer: Buffer): XmpExtractResult {
+  if (buffer.length < 8 || !buffer.slice(0, 8).equals(PNG_SIGNATURE)) {
+    return { xmpXml: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  let offset = 8;
+
+  while (offset + 8 <= buffer.length) {
+    const chunkLength = buffer.readUInt32BE(offset);
+    const chunkType = buffer.toString("ascii", offset + 4, offset + 8);
+
+    const dataStart = offset + 8;
+    const dataEnd = dataStart + chunkLength;
+    const nextOffset = dataEnd + 4; // +4 for CRC
+
+    if (chunkLength > MAX_EXIF_BYTES) {
+      break;
+    }
+
+    if (chunkType === "iTXt") {
+      if (dataEnd <= buffer.length) {
+        const result = parsePngItxtXmp(buffer, dataStart, dataEnd);
+        if (result !== null) {
+          return {
+            xmpXml: result,
+            truncated: false,
+            bytesNeeded: 0,
+          };
+        }
+      } else {
+        return {
+          xmpXml: null,
+          truncated: true,
+          bytesNeeded: dataEnd,
+        };
+      }
+    }
+
+    if (chunkType === "IEND") {
+      break;
+    }
+
+    if (nextOffset <= offset) {
+      break;
+    }
+
+    offset = nextOffset;
+  }
+
+  return { xmpXml: null, truncated: false, bytesNeeded: 0 };
+}
+
+/**
+ * Parse an iTXt chunk data region and extract XMP if present.
+ *
+ * Returns the XMP XML string if the keyword matches "XML:com.adobe.xmp"
+ * and the compression flag is 0 (uncompressed). Returns null otherwise.
+ */
+function parsePngItxtXmp(
+  buffer: Buffer,
+  dataStart: number,
+  dataEnd: number
+): string | null {
+  let pos = dataStart;
+
+  // Read null-terminated keyword.
+  const keywordEnd = buffer.indexOf(0, pos);
+  if (keywordEnd === -1 || keywordEnd >= dataEnd) return null;
+
+  const keyword = buffer.toString("ascii", pos, keywordEnd);
+  pos = keywordEnd + 1;
+
+  if (keyword !== "XML:com.adobe.xmp") return null;
+
+  // compression flag (1 byte)
+  if (pos >= dataEnd) return null;
+  const compressionFlag = buffer[pos];
+  pos += 1;
+
+  // compression method (1 byte)
+  if (pos >= dataEnd) return null;
+  pos += 1;
+
+  // XMP spec: only uncompressed (flag=0) is valid for XMP data.
+  if (compressionFlag !== 0) return null;
+
+  // Skip null-terminated language tag.
+  const langEnd = buffer.indexOf(0, pos);
+  if (langEnd === -1 || langEnd >= dataEnd) return null;
+  pos = langEnd + 1;
+
+  // Skip null-terminated translated keyword.
+  const transEnd = buffer.indexOf(0, pos);
+  if (transEnd === -1 || transEnd >= dataEnd) return null;
+  pos = transEnd + 1;
+
+  // Remaining bytes are the UTF-8 text data.
+  if (pos >= dataEnd) return null;
+  return buffer.toString("utf-8", pos, dataEnd).trimEnd();
+}
+
+/**
+ * Detect container format from magic bytes and extract the XMP XML payload.
+ *
+ * Returns the XMP XML string, or `null` if no XMP data is found or the
+ * container is unrecognized.
+ */
+export function extractXmp(buffer: Buffer): string | null {
+  if (buffer.length < 2) {
+    return null;
+  }
+
+  if (buffer[0] === 0xff && buffer[1] === 0xd8) {
+    return extractXmpFromJpeg(buffer).xmpXml;
+  }
+
+  if (buffer.length >= 8 && buffer.slice(0, 8).equals(PNG_SIGNATURE)) {
+    return extractXmpFromPng(buffer).xmpXml;
   }
 
   return null;
