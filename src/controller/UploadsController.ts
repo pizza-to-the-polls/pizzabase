@@ -158,11 +158,8 @@ export class UploadsController {
           const review = reviewExif(parsed);
 
           return includeReview
-            ? {
-                exif: serialized,
-                review,
-              }
-            : serialized;
+            ? { exif: serialized, review }
+            : { exif: serialized };
         }
       }
     } catch (error) {
@@ -174,6 +171,8 @@ export class UploadsController {
       );
     }
 
-    return includeReview ? { exif: null, review: reviewExif(null) } : null;
+    return includeReview
+      ? { exif: null, review: reviewExif(null) }
+      : { exif: null };
   }
 }
