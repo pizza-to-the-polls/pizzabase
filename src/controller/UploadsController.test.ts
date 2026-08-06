@@ -5,9 +5,18 @@ import { Upload } from "../entity/Upload";
 import { Location } from "../entity/Location";
 import { FILE_TYPE_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
 
+import {
+  brooklynJpeg,
+  redondoJpeg,
+  losAngelesPng,
+  truncatedJpeg,
+} from "../tests/fixtures/exif";
+
+// exif-reader is NOT mocked – we exercise the real parser through actual
+// container bytes to prove the extraction and parsing pipeline works
+// end-to-end. The S3 client is mocked to serve fixture bytes.
 jest.mock("../lib/aws");
 jest.mock("../lib/validator/geocode");
-jest.mock("exif-reader");
 
 const controller = new UploadsController();
 
@@ -38,7 +47,10 @@ describe("#create", () => {
       http_mocks.createRequest({
         ip: "127.0.0.1",
         method: "POST",
-        body: { address: "1234 Street City ST 12345", fileName: "dumb.pdf" },
+        body: {
+          address: "1234 Street City ST 12345",
+          fileName: "dumb.pdf",
+        },
       }),
       response,
       () => undefined
@@ -156,12 +168,19 @@ describe("#create", () => {
       http_mocks.createRequest({
         ip: "127.0.0.1",
         method: "POST",
-        body: { address, fileName: "file.png", fileHash: "same-loc" },
+        body: {
+          address,
+          fileName: "file.png",
+          fileHash: "same-loc",
+        },
       }),
       http_mocks.createResponse(),
       () => undefined
     );
-    const upload = await Upload.findOne({ order: { id: "DESC" }, where: {} });
+    const upload = await Upload.findOne({
+      order: { id: "DESC" },
+      where: {},
+    });
 
     expect((body as any).isDuplicate).toEqual(false);
     expect((body as any).id).toEqual(upload.id);
@@ -185,7 +204,10 @@ describe("#create", () => {
       http_mocks.createResponse(),
       () => undefined
     );
-    const upload = await Upload.findOne({ order: { id: "DESC" }, where: {} });
+    const upload = await Upload.findOne({
+      order: { id: "DESC" },
+      where: {},
+    });
 
     expect(upload.fileHash).toEqual("new-loc");
     expect(upload.location.fullAddress).toEqual(
@@ -229,6 +251,10 @@ describe("#create", () => {
   });
 });
 
+// ---------------------------------------------------------------------------
+// #getExif – tests using real binary fixtures through the parsing pipeline
+// ---------------------------------------------------------------------------
+
 describe("#getExif", () => {
   let upload: Upload;
   let fileName: string;
@@ -253,68 +279,188 @@ describe("#getExif", () => {
     fileName = upload.filePath.split("/")[1];
   });
 
-  it("should return exif data for an upload that has it", async () => {
+  /**
+   * Helper: create a mock S3 client that returns the given Buffer as Body
+   * on the initial read (bytes=0-65535). The follow-up read is not needed
+   * for well-formed fixtures.
+   */
+  function mockS3WithBody(body: Buffer) {
     const mockAws = require("aws-sdk");
     mockAws.S3 = jest.fn().mockImplementation(() => ({
       getObject: jest.fn().mockReturnValue({
-        promise: jest.fn().mockResolvedValue({
-          Body: Buffer.from([0x45, 0x78]),
-        }),
+        promise: jest.fn().mockResolvedValue({ Body: body }),
       }),
     }));
+  }
 
-    const exifReader = require("exif-reader");
-    exifReader.mockReturnValueOnce({
-      Image: { Make: "Apple" },
-      bigEndian: true,
+  function authRequest(fName: string, includeReview = true) {
+    return http_mocks.createRequest({
+      method: "GET",
+      url: `/uploads/exif/${fName}`,
+      params: { fileName: fName },
+      query: includeReview ? { includeReview: "true" } : {},
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
     });
+  }
+
+  // ---------------------------------------------------------------------
+  // Core extraction tests
+  // ---------------------------------------------------------------------
+
+  it("parses Brooklyn JPEG EXIF and returns serialized tags with review", async () => {
+    mockS3WithBody(brooklynJpeg);
 
     const response = http_mocks.createResponse();
-    const body = await controller.getExif(
-      http_mocks.createRequest({
-        method: "GET",
-        url: `/uploads/exif/${fileName}`,
-        params: { fileName },
-        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
-      }),
+    const body = (await controller.getExif(
+      authRequest(fileName),
       response,
       () => undefined
-    );
+    )) as any;
 
     expect(response.statusCode).toEqual(200);
-    expect(body).toEqual({ Image: { Make: "Apple" }, bigEndian: true });
+    expect(body.exif).not.toBeNull();
+    expect(body.review).toBeDefined();
+
+    // Verify expected EXIF values
+    const exif = body.exif as any;
+    expect(exif.Image.Orientation).toBe(1);
+    expect(exif.Image.XResolution).toBe(216);
+    expect(exif.Image.YResolution).toBe(216);
+    expect(exif.Image.ResolutionUnit).toBe(2);
+    expect(exif.Photo.PixelXDimension).toBe(1206);
+    expect(exif.Photo.PixelYDimension).toBe(1562);
+    expect(exif.Photo.ColorSpace).toBe(1);
+
+    // Review should show limited evidence (sparse generic EXIF)
+    expect(body.review.assessment).toBe("limited-evidence");
+    expect(body.review.confidence).toBe("low");
+    expect(
+      body.review.positiveSignals.some((s: any) => s.code === "exif-dimensions")
+    ).toBe(true);
+    expect(body.review.missingSignals).toContain("camera-make-model");
   });
 
-  it("should return null for an upload that does not have exif data", async () => {
+  it("parses Redondo Beach screenshot JPEG and surfaces screenshot markers", async () => {
+    mockS3WithBody(redondoJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).not.toBeNull();
+    expect(body.review).toBeDefined();
+
+    // Screenshot markers in raw EXIF
+    const exif = body.exif as any;
+    expect(exif.Image.ImageDescription).toBe("Screenshot");
+
+    // UserComment is a Buffer from exif-reader; our serializer converts it
+    const userComment = exif.Photo.UserComment;
+    expect(userComment).toBeDefined();
+    if (userComment._bytes) {
+      expect(
+        Buffer.from(userComment._bytes, "base64").toString("ascii")
+      ).toContain("Screenshot");
+    }
+
+    // Review must identify screenshot and NOT promote weak positives
+    expect(body.review.assessment).toBe("likely-screen-or-software-generated");
+    expect(body.review.confidence).toBe("high");
+    expect(
+      body.review.cautionSignals.some(
+        (s: any) => s.code === "explicit-screenshot-marker"
+      )
+    ).toBe(true);
+  });
+
+  it("returns null exif and no-metadata review for PNG with no EXIF", async () => {
+    mockS3WithBody(losAngelesPng);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).toBeNull();
+    expect(body.review).toBeDefined();
+    expect(body.review.assessment).toBe("no-metadata");
+    expect(body.review.confidence).toBe("low");
+    expect(body.review.positiveSignals).toEqual([]);
+    expect(body.review.cautionSignals).toEqual([]);
+  });
+
+  it("returns null exif for truncated JPEG without throwing", async () => {
+    mockS3WithBody(truncatedJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).toBeNull();
+    expect(body.review.assessment).toBe("no-metadata");
+  });
+
+  it("returns null exif when S3 body is empty", async () => {
     const mockAws = require("aws-sdk");
     mockAws.S3 = jest.fn().mockImplementation(() => ({
       getObject: jest.fn().mockReturnValue({
-        promise: jest.fn().mockResolvedValue({
-          Body: Buffer.from([0x00, 0x00]),
-        }),
+        promise: jest.fn().mockResolvedValue({ Body: null }),
       }),
     }));
 
-    const exifReader = require("exif-reader");
-    exifReader.mockImplementationOnce(() => {
-      throw new Error("No EXIF data");
-    });
-
     const response = http_mocks.createResponse();
-    const body = await controller.getExif(
-      http_mocks.createRequest({
-        method: "GET",
-        url: `/uploads/exif/${fileName}`,
-        params: { fileName },
-        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
-      }),
+    const body = (await controller.getExif(
+      authRequest(fileName),
       response,
       () => undefined
-    );
+    )) as any;
 
     expect(response.statusCode).toEqual(200);
-    expect(body).toBe(null);
+    expect(body.exif).toBeNull();
+    expect(body.review.assessment).toBe("no-metadata");
   });
+
+  it("performs one bounded S3 follow-up when the initial range cuts off before the EXIF signature", async () => {
+    const initial = brooklynJpeg.slice(0, 7);
+    const getObject = jest
+      .fn()
+      .mockImplementation(({ Range }: { Range: string }) => ({
+        promise: jest.fn().mockResolvedValue({
+          Body:
+            Range === "bytes=0-65535"
+              ? initial
+              : brooklynJpeg.slice(initial.length),
+        }),
+      }));
+    const mockAws = require("aws-sdk");
+    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName, false),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(body.exif.Image.Orientation).toBe(1);
+    expect(getObject).toHaveBeenCalledTimes(2);
+    expect(getObject.mock.calls[1][0].Range).toMatch(/^bytes=7-\d+$/);
+  });
+
+  // ---------------------------------------------------------------------
+  // Authorization tests (unchanged behavior)
+  // ---------------------------------------------------------------------
 
   it("should return 401 for a request without an API key", async () => {
     const response = http_mocks.createResponse();
@@ -361,5 +507,68 @@ describe("#getExif", () => {
     );
 
     expect(response.statusCode).toEqual(404);
+  });
+
+  // ---------------------------------------------------------------------
+  // Response shape
+  // ---------------------------------------------------------------------
+
+  it("preserves the raw EXIF response unless review evidence is requested", async () => {
+    mockS3WithBody(brooklynJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName, false),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(body.exif.Image.Orientation).toBe(1);
+    expect(body.review).toBeUndefined();
+  });
+
+  it("preserves null for no EXIF unless review evidence is requested", async () => {
+    mockS3WithBody(losAngelesPng);
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getExif(
+      authRequest(fileName, false),
+      response,
+      () => undefined
+    );
+
+    expect(body).toEqual({ exif: null });
+  });
+
+  it("response includes disclaimer in review", async () => {
+    mockS3WithBody(brooklynJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(body.review.disclaimer).toBe(
+      "Metadata can be removed or modified. This is review guidance, not proof of authenticity."
+    );
+  });
+
+  it("response has no authenticity verdict fields", async () => {
+    mockS3WithBody(brooklynJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    const responseBody = body as any;
+    expect(responseBody.isGenuine).toBeUndefined();
+    expect(responseBody.isFake).toBeUndefined();
+    expect(responseBody.cameraTaken).toBeUndefined();
+    expect(responseBody.confidence_score).toBeUndefined();
   });
 });
