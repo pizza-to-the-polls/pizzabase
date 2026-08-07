@@ -10,6 +10,7 @@ import {
   serializeExif,
   reviewExif,
   parseDigitalSourceType,
+  detectC2pa,
   MAX_EXIF_BYTES,
   ExifData,
 } from "../exif";
@@ -40,6 +41,7 @@ export interface ExifServiceOptions {
 export interface ExifServiceResult {
   exif: any | null;
   review?: any;
+  c2pa?: { detected: boolean; label: string | null };
 }
 
 // ---------------------------------------------------------------------------
@@ -59,6 +61,9 @@ export async function extractExifAndReview(
 
   // IPTC Digital Source Type – populated from embedded XMP or sidecar.
   let dst: { uri: string; label: string } | null = null;
+
+  // C2PA manifest detection result – populated from container or sidecar.
+  let c2paResult: { detected: boolean; label: string | null } | undefined;
 
   // ---- 1. Fetch initial byte range ----------------------------------------
   const s3Object = await s3Client
@@ -98,6 +103,30 @@ export async function extractExifAndReview(
 
     // XMP is almost certainly in the initial range when EXIF was.
     combinedBuffer = initialBuffer;
+
+    // ---- C2PA detection on initial buffer ---------
+    c2paResult = detectC2pa(initialBuffer);
+  }
+
+  // ---- C2PA sidecar fallback ---------------------------
+  if (c2paResult && !c2paResult.detected) {
+    try {
+      const sidecarKey = filePath.replace(/\.(jpe?g|png)$/i, ".c2pa");
+      if (sidecarKey !== filePath) {
+        const sidecarObj = await s3Client
+          .getObject({ Bucket: bucket, Key: sidecarKey })
+          .promise();
+        if (sidecarObj.Body && (sidecarObj.Body as Buffer).length > 0) {
+          c2paResult = { detected: true, label: "c2pa-sidecar" };
+        }
+      }
+    } catch {
+      // Sidecar not found or inaccessible – not an error
+    }
+  } else if (c2paResult === undefined && combinedBuffer) {
+    // If we didn't scan C2PA in the initial-buffer path (no Body),
+    // try scanning the combined buffer.
+    c2paResult = detectC2pa(combinedBuffer);
   }
 
   // ---- 3. XMP extraction (embedded + sidecar) -----------------------------
@@ -145,12 +174,18 @@ export async function extractExifAndReview(
     const exifReader = require("exif-reader");
     const parsed: ExifData = exifReader(tiffPayload);
     const serialized = serializeExif(parsed);
-    const review = reviewExif(parsed, dst);
+    const review = reviewExif(parsed, dst, c2paResult);
 
-    return includeReview ? { exif: serialized, review } : { exif: serialized };
+    return includeReview
+      ? { exif: serialized, review, ...(c2paResult ? { c2pa: c2paResult } : {}) }
+      : { exif: serialized };
   }
 
   return includeReview
-    ? { exif: null, review: reviewExif(null, dst) }
+    ? {
+        exif: null,
+        review: reviewExif(null, dst, c2paResult),
+        ...(c2paResult ? { c2pa: c2paResult } : {}),
+      }
     : { exif: null };
 }
