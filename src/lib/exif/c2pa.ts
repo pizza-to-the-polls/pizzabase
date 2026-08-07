@@ -24,7 +24,10 @@ export function detectC2paFromJpeg(buffer: Buffer): C2paDetectionResult {
     const markerHi = buffer[offset];
     if (markerHi !== 0xff) break;
     const markerLo = buffer[offset + 1];
-    if (markerLo === 0x00 || markerLo === 0xff) { offset += 1; continue; }
+    if (markerLo === 0x00 || markerLo === 0xff) {
+      offset += 1;
+      continue;
+    }
     const marker = markerHi * 256 + markerLo;
     if (marker === 0xffda || marker === 0xffd9) break;
     offset += 2;
@@ -70,8 +73,10 @@ export function detectC2paFromPng(buffer: Buffer): C2paDetectionResult {
 }
 
 function detectC2paFromBuffer(buffer: Buffer): C2paDetectionResult {
-  if (buffer[0] === 0xff && buffer[1] === 0xd8) return detectC2paFromJpeg(buffer);
-  if (buffer.length >= 8 && buffer.slice(0, 8).equals(PNG_SIGNATURE)) return detectC2paFromPng(buffer);
+  if (buffer[0] === 0xff && buffer[1] === 0xd8)
+    return detectC2paFromJpeg(buffer);
+  if (buffer.length >= 8 && buffer.slice(0, 8).equals(PNG_SIGNATURE))
+    return detectC2paFromPng(buffer);
   for (const uuid of C2PA_SCAN_STRINGS) {
     if (buffer.indexOf(uuid, 0, "ascii") !== -1) {
       return { detected: true, label: C2PA_UUID_LABELS[uuid] };
@@ -92,7 +97,9 @@ export async function detectC2pa(
       if (sidecar && sidecar.length >= 2) {
         result = detectC2paFromBuffer(sidecar);
       }
-    } catch { /* non-fatal */ }
+    } catch {
+      /* non-fatal */
+    }
   }
   return result;
 }
