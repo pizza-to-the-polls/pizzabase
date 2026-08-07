@@ -5,6 +5,8 @@ import { presignUpload } from "../lib/aws";
 import { zapNewUpload } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { isAuthorized, findOr404 } from "./helper";
+import { checkGenai } from "../lib/sightengine/client";
+import { ReviewResult, assessSightengine } from "../lib/exif/review";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {
@@ -56,7 +58,50 @@ export class UploadsController {
         };
       } else {
         await zapNewUpload(upload);
-        return await presignUpload(upload);
+        const result = await presignUpload(upload);
+
+        if (request.query.includeReview === "true") {
+          const reviewResult: ReviewResult = {};
+
+          // SightEngine AI-generated image detection
+          const S3_BUCKET = process.env.UPLOAD_S3_BUCKET;
+          const REGION = process.env.AWS_REGION || "us-west-2";
+          const publicUrl = `https://${S3_BUCKET}.s3.${REGION}.amazonaws.com/${upload.filePath}`;
+
+          const sightengineResult = await checkGenai(publicUrl);
+          reviewResult.sightengine = sightengineResult;
+
+          if (sightengineResult) {
+            const assessment = assessSightengine(sightengineResult.score);
+            if (assessment) {
+              reviewResult.assessment = [assessment];
+            }
+          }
+
+          // EXIF extraction via bounded S3 read (first 64 KB)
+          try {
+            const awsSdk = require("aws-sdk");
+            const s3Client = new awsSdk.S3({ region: REGION });
+            const s3Object = await s3Client
+              .getObject({
+                Bucket: S3_BUCKET,
+                Key: upload.filePath,
+                Range: "bytes=0-65535",
+              })
+              .promise();
+
+            if (s3Object.Body) {
+              const exifReader = require("exif-reader");
+              reviewResult.exif = exifReader(s3Object.Body);
+            }
+          } catch (_exifError) {
+            reviewResult.exif = null;
+          }
+
+          return { ...result, review: reviewResult };
+        }
+
+        return result;
       }
     } catch (e) {
       // Only rate-limiting should return 429; everything else is caught by

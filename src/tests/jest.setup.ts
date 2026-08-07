@@ -2,7 +2,11 @@ import dbHelper from "./dbHelper";
 import { APIKey } from "../entity/APIKey";
 
 global.fetch = jest.fn(() =>
-  Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  Promise.resolve({
+    ok: true,
+    json: () => Promise.resolve({}),
+    headers: new Map(),
+  })
 ) as jest.Mock;
 
 beforeAll(async () => {
@@ -17,6 +21,9 @@ beforeAll(async () => {
     "https://hooks.example.com/skip-location-hook/";
 
   process.env.GOOD_API_KEY = (await APIKey.generate()).key;
+
+  process.env.SIGHTENGINE_API_USER = "test-user";
+  process.env.SIGHTENGINE_API_SECRET = "test-secret";
 });
 afterEach(async () => {
   await dbHelper.cleanAll();
