@@ -105,7 +105,7 @@ export async function extractExifAndReview(
     combinedBuffer = initialBuffer;
 
     // ---- C2PA detection on initial buffer ---------
-    c2paResult = detectC2pa(initialBuffer);
+    c2paResult = await detectC2pa(initialBuffer);
   }
 
   // ---- C2PA sidecar fallback ---------------------------
@@ -126,7 +126,7 @@ export async function extractExifAndReview(
   } else if (c2paResult === undefined && combinedBuffer) {
     // If we didn't scan C2PA in the initial-buffer path (no Body),
     // try scanning the combined buffer.
-    c2paResult = detectC2pa(combinedBuffer);
+    c2paResult = await detectC2pa(combinedBuffer);
   }
 
   // ---- 3. XMP extraction (embedded + sidecar) -----------------------------
@@ -177,7 +177,11 @@ export async function extractExifAndReview(
     const review = reviewExif(parsed, dst, c2paResult);
 
     return includeReview
-      ? { exif: serialized, review, ...(c2paResult ? { c2pa: c2paResult } : {}) }
+      ? {
+          exif: serialized,
+          review,
+          ...(c2paResult ? { c2pa: c2paResult } : {}),
+        }
       : { exif: serialized };
   }
 

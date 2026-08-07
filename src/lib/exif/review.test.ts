@@ -490,7 +490,7 @@ describe("reviewExif", () => {
       },
     };
 
-    const result = reviewExif(data, {
+    const result = reviewExif(data, undefined, {
       detected: true,
       label: "c2pa-manifest",
     });
@@ -519,7 +519,7 @@ describe("reviewExif", () => {
       },
     };
 
-    const result = reviewExif(data, {
+    const result = reviewExif(data, undefined, {
       detected: false,
       label: null,
     });
@@ -548,7 +548,7 @@ describe("reviewExif", () => {
   });
 
   it("surfaces c2pa with null EXIF (no-metadata assessment)", () => {
-    const result = reviewExif(null, {
+    const result = reviewExif(null, undefined, {
       detected: true,
       label: "c2pa-manifest",
     });
@@ -560,7 +560,7 @@ describe("reviewExif", () => {
   });
 
   it("surfaces c2pa with no EXIF but c2pa field present on no-metadata", () => {
-    const result = reviewExif(null, {
+    const result = reviewExif(null, undefined, {
       detected: false,
       label: null,
     });
