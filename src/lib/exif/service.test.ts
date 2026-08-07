@@ -6,7 +6,11 @@
  */
 
 import { extractExifAndReview } from "./service";
-import { brooklynJpeg, redondoJpeg, losAngelesPng } from "../../tests/fixtures/exif";
+import {
+  brooklynJpeg,
+  redondoJpeg,
+  losAngelesPng,
+} from "../../tests/fixtures/exif";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -18,13 +22,15 @@ function mockS3(
 ): {
   getObject: jest.Mock;
 } {
-  const getObject = jest.fn().mockImplementation(
-    (params: { Bucket: string; Key: string; Range?: string }) => ({
-      promise: jest.fn().mockResolvedValue({
-        Body: overrides[params.Key] ?? overrides["*"] ?? null,
-      }),
-    })
-  );
+  const getObject = jest
+    .fn()
+    .mockImplementation(
+      (params: { Bucket: string; Key: string; Range?: string }) => ({
+        promise: jest.fn().mockResolvedValue({
+          Body: overrides[params.Key] ?? overrides["*"] ?? null,
+        }),
+      })
+    );
   return { getObject };
 }
 
@@ -180,13 +186,15 @@ describe("extractExifAndReview", () => {
     // The initial read of 64 KiB will contain the full EXIF for Brooklyn,
     // so this tests that the follow-up callback is wired but not exercised
     // for non-truncated data.
-    const getObject = jest.fn().mockImplementation(
-      (params: { Bucket: string; Key: string; Range?: string }) => ({
-        promise: jest.fn().mockResolvedValue({
-          Body: params.Range?.startsWith("bytes=0-") ? brooklynJpeg : null,
-        }),
-      })
-    );
+    const getObject = jest
+      .fn()
+      .mockImplementation(
+        (params: { Bucket: string; Key: string; Range?: string }) => ({
+          promise: jest.fn().mockResolvedValue({
+            Body: params.Range?.startsWith("bytes=0-") ? brooklynJpeg : null,
+          }),
+        })
+      );
 
     const result = await extractExifAndReview(
       { s3Client: { getObject } as any, bucket: "test-bucket" },
@@ -307,9 +315,7 @@ describe("extractExifAndReview", () => {
         (params: { Bucket: string; Key: string; Range?: string }) => {
           if (params.Key === `${filePath}.xmp`) {
             return {
-              promise: jest
-                .fn()
-                .mockRejectedValue(new Error("NoSuchKey")),
+              promise: jest.fn().mockRejectedValue(new Error("NoSuchKey")),
             };
           }
           return {
