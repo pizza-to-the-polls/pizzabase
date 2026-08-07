@@ -95,12 +95,12 @@ export class UploadsController {
 
       return extractExifAndReview(
         { s3Client: s3Client as any, bucket },
-        { filePath: upload.filePath, includeReview },
+        { filePath: upload.filePath, includeReview }
       );
     } catch (error) {
       console.error(
         `Could not extract EXIF data for upload ${upload.filePath}:`,
-        error,
+        error
       );
       return includeReview
         ? { exif: null, review: { assessment: "error" } }

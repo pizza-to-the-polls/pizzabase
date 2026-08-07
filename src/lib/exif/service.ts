@@ -147,9 +147,7 @@ export async function extractExifAndReview(
     const serialized = serializeExif(parsed);
     const review = reviewExif(parsed, dst);
 
-    return includeReview
-      ? { exif: serialized, review }
-      : { exif: serialized };
+    return includeReview ? { exif: serialized, review } : { exif: serialized };
   }
 
   return includeReview
