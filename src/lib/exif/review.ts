@@ -39,6 +39,10 @@ export interface ReviewResult {
     uri: string;
     label: string;
   };
+  c2pa?: {
+    detected: boolean;
+    label: string | null;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -354,6 +358,20 @@ const DETECTORS: SignalDetector[] = [
       return false;
     },
   },
+
+  // ---- PROVENANCE (detected by the controller, not from EXIF) ----
+  {
+    code: "c2pa-manifest-present",
+    label: "C2PA provenance manifest detected",
+    category: "positive",
+    required: false,
+    detect: (_data: ExifData) => {
+      // C2PA detection runs separately from EXIF data analysis.
+      // This signal is injected by reviewExif when a c2paResult is
+      // provided by the controller.
+      return false;
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -531,7 +549,8 @@ export const DISCLAIMER =
  */
 export function reviewExif(
   data: ExifData,
-  digitalSourceType?: { uri: string; label: string } | null
+  digitalSourceType?: { uri: string; label: string } | null,
+  c2paResult?: { detected: boolean; label: string | null }
 ): ReviewResult {
   const noMetaResult = (): ReviewResult => {
     const res: ReviewResult = {
@@ -544,6 +563,9 @@ export function reviewExif(
     };
     if (digitalSourceType) {
       res.digitalSourceType = digitalSourceType;
+    }
+    if (c2paResult) {
+      res.c2pa = c2paResult;
     }
     return res;
   };
@@ -566,6 +588,14 @@ export function reviewExif(
     }
   }
 
+  // Inject C2PA signal when detected by the controller.
+  if (c2paResult?.detected) {
+    positive.push({
+      code: "c2pa-manifest-present",
+      label: "C2PA provenance manifest detected",
+    });
+  }
+
   // When no detectors matched, check if there is any IFD data at all.
   // An empty object or an object with only metadata keys (bigEndian etc.)
   // means no EXIF → no-metadata. Non-empty IFD groups with unrecognized
@@ -581,6 +611,7 @@ export function reviewExif(
       cautionSignals: [],
       missingSignals: missing,
       disclaimer: DISCLAIMER,
+      ...(c2paResult ? { c2pa: c2paResult } : {}),
     };
     if (digitalSourceType) {
       limitedResult.digitalSourceType = digitalSourceType;
@@ -602,6 +633,7 @@ export function reviewExif(
     cautionSignals: caution,
     missingSignals: missing,
     disclaimer: DISCLAIMER,
+    ...(c2paResult ? { c2pa: c2paResult } : {}),
   };
   if (digitalSourceType) {
     result.digitalSourceType = digitalSourceType;

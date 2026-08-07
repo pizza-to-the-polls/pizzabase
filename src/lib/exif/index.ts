@@ -29,3 +29,5 @@ export {
   DIGITAL_SOURCE_TYPE_LABELS,
 } from "./digitalSourceType";
 export type { DigitalSourceTypeResult } from "./digitalSourceType";
+export { detectC2pa, detectC2paFromJpeg, detectC2paFromPng } from "./c2pa";
+export type { C2paDetectionResult } from "./c2pa";
