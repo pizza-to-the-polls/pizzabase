@@ -202,7 +202,7 @@ describe("extractExifAndReview", () => {
     );
 
     expect(result.exif).not.toBeNull();
-    expect(getObject).toHaveBeenCalledTimes(2); // initial + XMP sidecar (404 ok)
+    expect(getObject).toHaveBeenCalledTimes(3); // initial + XMP sidecar (404 ok) + C2PA sidecar (404 ok)
   });
 
   it("issues a follow-up Range read when XMP segment overflows initial buffer", async () => {
@@ -268,7 +268,7 @@ describe("extractExifAndReview", () => {
     );
 
     // Should have issued the follow-up (at least 2 calls: initial + follow-up).
-    expect(getObject).toHaveBeenCalledTimes(2);
+    expect(getObject).toHaveBeenCalledTimes(3); // follow-up + C2PA sidecar (404 ok)
 
     // XMP follow-up was issued.
     expect(result.exif).toBeNull(); // no EXIF in this synthetic JPEG
@@ -301,7 +301,7 @@ describe("extractExifAndReview", () => {
       { filePath, includeReview: true }
     );
 
-    expect(getObject).toHaveBeenCalledTimes(2); // image + sidecar
+    expect(getObject).toHaveBeenCalledTimes(3); // image + XMP sidecar + C2PA sidecar
     expect((result.review as any)?.digitalSourceType).toEqual({
       uri: "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture",
       label: "screen capture",
