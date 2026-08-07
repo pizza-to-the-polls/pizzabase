@@ -454,7 +454,7 @@ describe("#getExif", () => {
     )) as any;
 
     expect(body.exif.Image.Orientation).toBe(1);
-    expect(getObject).toHaveBeenCalledTimes(2);
+    expect(getObject).toHaveBeenCalledTimes(4);
     expect(getObject.mock.calls[1][0].Range).toMatch(/^bytes=7-\d+$/);
   });
 
