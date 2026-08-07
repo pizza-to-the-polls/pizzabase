@@ -34,6 +34,11 @@ export interface ReviewResult {
   cautionSignals: Signal[];
   missingSignals: string[];
   disclaimer: string;
+  /** IPTC Digital Source Type if found in embedded XMP or sidecar. */
+  digitalSourceType?: {
+    uri: string;
+    label: string;
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -337,6 +342,18 @@ const DETECTORS: SignalDetector[] = [
       return !!getStr(img, "Software") || !!getStr(photo, "ProcessingSoftware");
     },
   },
+  {
+    code: "iptc-digital-source-type",
+    label: "IPTC Digital Source Type present",
+    category: "positive",
+    required: false,
+    detect: (_d) => {
+      // This detector is context-aware: it fires only when the caller passes
+      // a digitalSourceType to reviewExif. When no DST is present the signal
+      // is simply absent rather than missing.
+      return false;
+    },
+  },
 ];
 
 // ---------------------------------------------------------------------------
@@ -377,18 +394,22 @@ function detectSignals(
  * The rules are deterministic and ordered:
  *
  * 1. No signals at all, and no detectable EXIF IFD data → no-metadata
- * 2. Explicit screenshot markers → likely-screen-or-software-generated
- *    (this outweighs weak positives like orientation/resolution)
- * 3. Multiple positive categories including device identity AND optical/capture
+ * 2. IPTC digital source type overrides (highest priority within rules):
+ *    a. trainedAlgorithmicMedia → likely-screen-or-software-generated
+ *    b. screenCapture / screenRecording → likely-screen-or-software-generated
+ *    c. compositeSynthetic + camera evidence → conflicting-evidence
+ * 3. Explicit screenshot markers → likely-screen-or-software-generated
+ * 4. Multiple positive categories including device identity AND optical/capture
  *    evidence → likely-camera-capture
- * 4. Only weak generic metadata (orientation, resolution, dimensions alone) →
+ * 5. Only weak generic metadata (orientation, resolution, dimensions alone) →
  *    limited-evidence
- * 5. Otherwise → limited-evidence (fallback)
+ * 6. Otherwise → limited-evidence (fallback)
  */
 function computeAssessment(
   positive: Signal[],
   caution: Signal[],
-  _missing: string[]
+  _missing: string[],
+  dst?: { uri: string; label: string } | null
 ): { assessment: Assessment; confidence: Confidence } {
   const hasScreenshotMarker = caution.some(
     (s) => s.code === "explicit-screenshot-marker"
@@ -408,6 +429,40 @@ function computeAssessment(
 
   const strongCameraEvidence =
     hasDeviceIdentity && hasOpticalSettings && hasCaptureTimestamp;
+
+  // ---- IPTC Digital Source Type overrides ----
+  if (dst) {
+    const dstUri = dst.uri;
+
+    // trainedAlgorithmicMedia: AI-generated → synthetic override.
+    if (dstUri.endsWith("/trainedAlgorithmicMedia")) {
+      return {
+        assessment: "likely-screen-or-software-generated",
+        confidence: "high",
+      };
+    }
+
+    // screenCapture / screenRecording → screenshot override.
+    if (
+      dstUri.endsWith("/screenCapture") ||
+      dstUri.endsWith("/screenRecording")
+    ) {
+      return {
+        assessment: "likely-screen-or-software-generated",
+        confidence: "high",
+      };
+    }
+
+    // compositeSynthetic + camera evidence → conflicting.
+    if (dstUri.endsWith("/compositeSynthetic") && strongCameraEvidence) {
+      return { assessment: "conflicting-evidence", confidence: "high" };
+    }
+
+    // digitalCapture supports camera capture; if we already have strong
+    // camera evidence, bump confidence to high (no-op, already high).
+    // If evidence is medium or low, digitalCapture alone does not override.
+    // It is a supporting, not determining, signal.
+  }
 
   // Explicit screenshot metadata alongside a complete, coherent camera
   // fingerprint is contradictory. Surface both sides rather than hiding one.
@@ -461,6 +516,9 @@ export const DISCLAIMER =
  *
  * Pass `null` or `undefined` when no EXIF data was found.
  *
+ * An optional `digitalSourceType` (from XMP metadata or sidecar) is used
+ * to refine the assessment per IPTC provenance signals.
+ *
  * The returned `ReviewResult` is always JSON-safe and deterministic.
  *
  * Classification:
@@ -469,22 +527,44 @@ export const DISCLAIMER =
  *  - Weak generic EXIF (orientation, resolution, dimensions) → `limited-evidence`
  *  - Explicit screenshot markers → `likely-screen-or-software-generated`
  *  - Strong camera evidence → `likely-camera-capture`
+ *  - IPTC DST overrides can escalate to synthetic / conflicting
  */
-export function reviewExif(data: ExifData): ReviewResult {
-  const noMetaResult = (): ReviewResult => ({
-    assessment: "no-metadata",
-    confidence: "low",
-    positiveSignals: [],
-    cautionSignals: [],
-    missingSignals: DETECTORS.filter((d) => d.required).map((d) => d.code),
-    disclaimer: DISCLAIMER,
-  });
+export function reviewExif(
+  data: ExifData,
+  digitalSourceType?: { uri: string; label: string } | null
+): ReviewResult {
+  const noMetaResult = (): ReviewResult => {
+    const res: ReviewResult = {
+      assessment: "no-metadata",
+      confidence: "low",
+      positiveSignals: [],
+      cautionSignals: [],
+      missingSignals: DETECTORS.filter((d) => d.required).map((d) => d.code),
+      disclaimer: DISCLAIMER,
+    };
+    if (digitalSourceType) {
+      res.digitalSourceType = digitalSourceType;
+    }
+    return res;
+  };
 
   if (!data || typeof data !== "object") {
     return noMetaResult();
   }
 
   const { positive, caution, missing } = detectSignals(data);
+
+  // When a digitalSourceType is provided, inject the corresponding signal
+  // so the reviewer sees that IPTC metadata was factored in.
+  if (digitalSourceType && digitalSourceType.uri) {
+    const dstDetector = DETECTORS.find(
+      (d) => d.code === "iptc-digital-source-type"
+    );
+    if (dstDetector) {
+      const label = `IPTC Digital Source Type: ${digitalSourceType.label}`;
+      positive.push({ code: dstDetector.code, label });
+    }
+  }
 
   // When no detectors matched, check if there is any IFD data at all.
   // An empty object or an object with only metadata keys (bigEndian etc.)
@@ -494,7 +574,7 @@ export function reviewExif(data: ExifData): ReviewResult {
     if (!hasAnyIfdData(data)) {
       return noMetaResult();
     }
-    return {
+    const limitedResult: ReviewResult = {
       assessment: "limited-evidence",
       confidence: "low",
       positiveSignals: [],
@@ -502,15 +582,20 @@ export function reviewExif(data: ExifData): ReviewResult {
       missingSignals: missing,
       disclaimer: DISCLAIMER,
     };
+    if (digitalSourceType) {
+      limitedResult.digitalSourceType = digitalSourceType;
+    }
+    return limitedResult;
   }
 
   const { assessment, confidence } = computeAssessment(
     positive,
     caution,
-    missing
+    missing,
+    digitalSourceType
   );
 
-  return {
+  const result: ReviewResult = {
     assessment,
     confidence,
     positiveSignals: positive,
@@ -518,4 +603,8 @@ export function reviewExif(data: ExifData): ReviewResult {
     missingSignals: missing,
     disclaimer: DISCLAIMER,
   };
+  if (digitalSourceType) {
+    result.digitalSourceType = digitalSourceType;
+  }
+  return result;
 }
