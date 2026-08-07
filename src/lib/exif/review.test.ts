@@ -469,4 +469,102 @@ describe("reviewExif", () => {
     expect((result as any).cameraTaken).toBeUndefined();
     expect((result as any).confidence_score).toBeUndefined();
   });
+
+  // -----------------------------------------------------------------------
+  // C2PA integration
+  // -----------------------------------------------------------------------
+
+  it("adds c2pa-manifest-present positive signal when C2PA detected", () => {
+    const data: ExifData = {
+      Image: {
+        Make: "Canon",
+        Model: "EOS R5",
+        DateTime: new Date("2024-01-15T12:00:00Z"),
+      },
+      Photo: {
+        ExposureTime: 0.004,
+        FNumber: 5.6,
+        ISOSpeedRatings: 400,
+        FocalLength: 50,
+        DateTimeOriginal: new Date("2024-01-15T12:00:00Z"),
+      },
+    };
+
+    const result = reviewExif(data, {
+      detected: true,
+      label: "c2pa-manifest",
+    });
+    expect(result.c2pa).toEqual({
+      detected: true,
+      label: "c2pa-manifest",
+    });
+    expect(
+      result.positiveSignals.some((s) => s.code === "c2pa-manifest-present")
+    ).toBe(true);
+    // C2PA is additive – assessment still driven by EXIF evidence
+    expect(result.assessment).toBe("likely-camera-capture");
+  });
+
+  it("does not add c2pa signal when C2PA not detected", () => {
+    const data: ExifData = {
+      Image: {
+        Make: "Canon",
+        Model: "EOS R5",
+        DateTime: new Date("2024-01-15T12:00:00Z"),
+      },
+      Photo: {
+        ExposureTime: 0.004,
+        FNumber: 5.6,
+        DateTimeOriginal: new Date("2024-01-15T12:00:00Z"),
+      },
+    };
+
+    const result = reviewExif(data, {
+      detected: false,
+      label: null,
+    });
+    expect(result.c2pa).toEqual({ detected: false, label: null });
+    expect(
+      result.positiveSignals.some((s) => s.code === "c2pa-manifest-present")
+    ).toBe(false);
+  });
+
+  it("c2pa field absent when not provided (backward compat)", () => {
+    const data: ExifData = {
+      Image: {
+        Make: "Canon",
+        Model: "EOS R5",
+        DateTime: new Date("2024-01-15T12:00:00Z"),
+      },
+      Photo: {
+        ExposureTime: 0.004,
+        FNumber: 5.6,
+        DateTimeOriginal: new Date("2024-01-15T12:00:00Z"),
+      },
+    };
+
+    const result = reviewExif(data);
+    expect(result.c2pa).toBeUndefined();
+  });
+
+  it("surfaces c2pa with null EXIF (no-metadata assessment)", () => {
+    const result = reviewExif(null, {
+      detected: true,
+      label: "c2pa-manifest",
+    });
+    expect(result.assessment).toBe("no-metadata");
+    expect(result.c2pa).toEqual({
+      detected: true,
+      label: "c2pa-manifest",
+    });
+  });
+
+  it("surfaces c2pa with no EXIF but c2pa field present on no-metadata", () => {
+    const result = reviewExif(null, {
+      detected: false,
+      label: null,
+    });
+    expect(result.assessment).toBe("no-metadata");
+    expect(result.c2pa).toEqual({ detected: false, label: null });
+  });
 });

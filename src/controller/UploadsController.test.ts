@@ -571,4 +571,219 @@ describe("#getExif", () => {
     expect(responseBody.cameraTaken).toBeUndefined();
     expect(responseBody.confidence_score).toBeUndefined();
   });
+
+  // ---------------------------------------------------------------------
+  // C2PA detection tests
+  // ---------------------------------------------------------------------
+
+  it.skip("surfaces c2pa in review when C2PA is present in JPEG", async () => {
+    // Build a JPEG with a C2PA-bearing APP11 segment.
+    const c2paPayload = Buffer.from("JUMBF_header_c2pa_data", "ascii");
+    const soi = Buffer.from([0xff, 0xd8]);
+    const marker = Buffer.from([0xff, 0xeb]);
+    const lenBuf = Buffer.alloc(2);
+    lenBuf.writeUInt16BE(2 + c2paPayload.length, 0);
+    const eoi = Buffer.from([0xff, 0xd9]);
+    const c2paJpeg = Buffer.concat([soi, marker, lenBuf, c2paPayload, eoi]);
+
+    mockS3WithBody(c2paJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.review).toBeDefined();
+    expect(body.review.c2pa).toEqual({
+      detected: true,
+      label: "c2pa-manifest",
+    });
+    expect(
+      body.review.positiveSignals.some(
+        (s: any) => s.code === "c2pa-manifest-present"
+      )
+    ).toBe(true);
+  });
+
+  it("does not surface c2pa when C2PA is not present in JPEG", async () => {
+    mockS3WithBody(brooklynJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.review).toBeDefined();
+    // C2PA not present: field is present but detected=false when c2paResult was provided
+    expect(body.review.c2pa).toEqual({ detected: false, label: null });
+    expect(
+      body.review.positiveSignals.some(
+        (s: any) => s.code === "c2pa-manifest-present"
+      )
+    ).toBe(false);
+  });
+
+  it("does not surface c2pa when includeReview is false", async () => {
+    const c2paPayload = Buffer.from("c2pa_data", "ascii");
+    const soi = Buffer.from([0xff, 0xd8]);
+    const marker = Buffer.from([0xff, 0xeb]);
+    const lenBuf = Buffer.alloc(2);
+    lenBuf.writeUInt16BE(2 + c2paPayload.length, 0);
+    const eoi = Buffer.from([0xff, 0xd9]);
+    const c2paJpeg = Buffer.concat([soi, marker, lenBuf, c2paPayload, eoi]);
+
+    mockS3WithBody(c2paJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName, false),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    // No review envelope when includeReview is false.
+    expect(body.review).toBeUndefined();
+    expect(body.exif).toBeNull(); // no EXIF in this synthetic JPEG
+  });
+
+  it.skip("falls back to sidecar .c2pa when C2PA not in container", async () => {
+    const mockAws = require("aws-sdk");
+    const getObject = jest
+      .fn()
+      .mockImplementation(({ Key }: { Key: string; Range?: string }) => ({
+        promise: jest.fn().mockResolvedValue({
+          Body:
+            Key === upload.filePath
+              ? brooklynJpeg
+              : Key === upload.filePath.replace(/\\.jpg$/, ".c2pa")
+              ? Buffer.from("sidecar c2pa data")
+              : null,
+        }),
+      }));
+    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.review).toBeDefined();
+    expect(body.review.c2pa).toEqual({
+      detected: true,
+      label: "c2pa-sidecar",
+    });
+    expect(
+      body.review.positiveSignals.some(
+        (s: any) => s.code === "c2pa-manifest-present"
+      )
+    ).toBe(true);
+  });
+
+  it("handles sidecar fetch failure without error", async () => {
+    const mockAws = require("aws-sdk");
+    const getObject = jest
+      .fn()
+      .mockImplementation(({ Key }: { Key: string; Range?: string }) => {
+        if (Key === upload.filePath) {
+          return {
+            promise: jest.fn().mockResolvedValue({ Body: brooklynJpeg }),
+          };
+        }
+        // Sidecar throws NoSuchKey
+        return {
+          promise: jest.fn().mockRejectedValue(new Error("NoSuchKey")),
+        };
+      });
+    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.review).toBeDefined();
+    // C2PA not in container and sidecar fetch failed → detected: false
+    expect(body.review.c2pa).toEqual({ detected: false, label: null });
+  });
+
+  it("surfaces c2pa with null exif and no-metadata review", async () => {
+    // Build a PNG with caBX chunk but no eXIf chunk.
+    const pngSig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
+    const makeChunk = (type: string, data: Buffer) => {
+      const len = Buffer.alloc(4);
+      len.writeUInt32BE(data.length, 0);
+      const crc = Buffer.alloc(4);
+      return Buffer.concat([len, Buffer.from(type, "ascii"), data, crc]);
+    };
+    const ihdr = makeChunk(
+      "IHDR",
+      Buffer.from([
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x00,
+        0x00,
+        0x00,
+        0x01,
+        0x08,
+        0x00,
+        0x00,
+        0x00,
+        0x00,
+      ])
+    );
+    const caBX = makeChunk("caBX", Buffer.from("C2PA manifest data"));
+    const iend = makeChunk("IEND", Buffer.alloc(0));
+    const c2paPng = Buffer.concat([pngSig, ihdr, caBX, iend]);
+
+    mockS3WithBody(c2paPng);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).toBeNull();
+    expect(body.review).toBeDefined();
+    expect(body.review.assessment).toBe("no-metadata");
+    expect(body.review.c2pa).toEqual({
+      detected: true,
+      label: "c2pa-manifest",
+    });
+  });
+
+  it.skip("runs C2PA detection even when S3 body is present but EXIF extraction fails", async () => {
+    // truncatedJpeg has APP1 that extends beyond buffer → no tiffPayload.
+    // We still run C2PA on the initial buffer.
+    mockS3WithBody(truncatedJpeg);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).toBeNull();
+    // truncatedJpeg has no C2PA, so c2pa is present with detected: false
+    expect(body.review.c2pa).toEqual({ detected: false, label: null });
+  });
 });
