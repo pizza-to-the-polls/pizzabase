@@ -1,8 +1,13 @@
 name: Test
 
 on:
-  push:
-    branches-ignore: [master]
+  pull_request:
+    branches:
+      - master
+      - "feature/**"
+
+permissions:
+  contents: read
 
 jobs:
   test:
@@ -25,14 +30,14 @@ jobs:
           - 5432:5432
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
 
       - name: Read Node version
         id: read_version
-        run: echo "NODE_VER=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+        run: echo "NODE_VER=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.read_version.outputs.NODE_VER }}
 
@@ -51,8 +56,6 @@ jobs:
       - name: run tests
         run: npm run test
         env:
-          SS_AUTH_ID: ${{ secrets.SS_AUTH_ID }}
-          SS_AUTH_TOKEN: ${{ secrets.SS_AUTH_TOKEN }}
           POSTGRES_DB: postgres
           POSTGRES_PASSWORD: postgres
           POSTGRES_USERNAME: postgres
@@ -60,23 +63,56 @@ jobs:
   build:
     if: github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Read Node version
+        id: read_version
+        run: echo "NODE_VER=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Node.js environment
+        uses: actions/setup-node@v4
+        with:
+          node-version: ${{ steps.read_version.outputs.NODE_VER }}
+
+      - name: npm install dependencies
+        run: npm install --include=dev
+
+      - name: build typescript
+        run: npx tsc --build
+
+  deploy-staging:
+    if: >-
+      github.base_ref == 'master' &&
+      github.event.pull_request.head.repo.full_name == github.repository &&
+      github.actor != 'dependabot[bot]'
+    runs-on: ubuntu-latest
+    needs: [test, build]
+    concurrency:
+      group: pizzabase-shared-staging
+      cancel-in-progress: false
+
+    permissions:
+      contents: read
 
     env:
       AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
       AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
-      NODE_ENV: 'production'
-
-    needs: test
+      NODE_ENV: "production"
 
     steps:
-      - uses: actions/checkout@v2
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ github.event.pull_request.head.sha }}
 
       - name: Read Node version
         id: read_version
-        run: echo "NODE_VER=$(cat .nvmrc)" >> $GITHUB_OUTPUT
+        run: echo "NODE_VER=$(cat .nvmrc)" >> "$GITHUB_OUTPUT"
 
       - name: Setup Node.js environment
-        uses: actions/setup-node@v2
+        uses: actions/setup-node@v4
         with:
           node-version: ${{ steps.read_version.outputs.NODE_VER }}
 
@@ -94,13 +130,9 @@ jobs:
           DB_NAME: ${{ secrets.STAGING_DB_NAME }}
           AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
           AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
-
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
-
-          ALLOWED_ORIGINS: 'polls.pizza,localhost'
-
+          ALLOWED_ORIGINS: "polls.pizza,localhost"
           STATIC_SITE: https://next.polls.pizza
-
           ZAP_NEW_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_LOCATION: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_ORDER: ${{ secrets.STAGING_ZAP_ALL }}
@@ -110,19 +142,13 @@ jobs:
           ZAP_TRUCK_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_CANCEL_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
-
           BUGSNAG_KEY: ${{ secrets.BUGSNAG_KEY }}
-
-          BUGSNAG_ENV: 'dev'
-
+          BUGSNAG_ENV: "dev"
           STRIPE_SECRET_KEY: ${{ secrets.STAGING_STRIPE_KEY }}
           STRIPE_PRODUCT_ID: ${{ secrets.STAGING_STRIPE_PRODUCT_ID }}
           STRIPE_SECRET_WH: ${{ secrets.STAGING_STRIPE_WH }}
-
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
-
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
-
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
       - name: run migrations
@@ -132,4 +158,3 @@ jobs:
           AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
           AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
           AWS_REGION: us-west-2
-
