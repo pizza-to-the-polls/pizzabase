@@ -65,7 +65,7 @@ function iend(): Buffer {
 // ---------------------------------------------------------------------------
 
 describe("detectC2paFromJpeg", () => {
-  it("detects 'c2pa' in APP11 payload", () => {
+  it("detects 'c2pa' in APP11 payload", async () => {
     const payload = Buffer.from("JUMBF\0" + "c2pa" + "extra_data", "ascii");
     const jpeg = buildJpegWithApp11(payload);
     const result = detectC2paFromJpeg(jpeg);
@@ -73,7 +73,7 @@ describe("detectC2paFromJpeg", () => {
     expect(result.label).toBe("c2pa-manifest");
   });
 
-  it("detects 'c2pa.assertions' in APP11 payload", () => {
+  it("detects 'c2pa.assertions' in APP11 payload", async () => {
     const payload = Buffer.from(
       "JUMBF_header_here_c2pa.assertions_trailer",
       "ascii"
@@ -84,7 +84,7 @@ describe("detectC2paFromJpeg", () => {
     expect(result.label).toBeDefined();
   });
 
-  it("returns present:false for JPEG with no APP11 segment", () => {
+  it("returns present:false for JPEG with no APP11 segment", async () => {
     const result = detectC2paFromJpeg(brooklynJpeg);
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
@@ -92,20 +92,20 @@ describe("detectC2paFromJpeg", () => {
 
   // Best-effort detection: raw buffer scan may find "c2pa" in non-C2PA APP11 data.
   // This is acceptable for a detection-only heuristic; stricter JUMBF parsing is a future enhancement.
-  it("returns present:false for JPEG with APP11 but no C2PA UUID (best-effort)", () => {
+  it("returns present:false for JPEG with APP11 but no C2PA UUID (best-effort)", async () => {
     const jpeg = buildJpegWithApp11(Buffer.from("unrelated data"));
     const result = detectC2paFromJpeg(jpeg);
     // Detection-only heuristic: false positives are acceptable.
     expect(typeof result.detected).toBe("boolean");
   });
 
-  it("returns present:false for JPEG with no APP11 at all (jpegNoExif)", () => {
+  it("returns present:false for JPEG with no APP11 at all (jpegNoExif)", async () => {
     const result = detectC2paFromJpeg(jpegNoExif);
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("handles truncated APP11 segment gracefully", () => {
+  it("handles truncated APP11 segment gracefully", async () => {
     // Declare a segment length that extends beyond the buffer.
     const soi = Buffer.from([0xff, 0xd8]);
     const marker = Buffer.from([0xff, 0xeb]);
@@ -122,7 +122,7 @@ describe("detectC2paFromJpeg", () => {
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for truncated marker-length cut-off", () => {
+  it("returns present:false for truncated marker-length cut-off", async () => {
     // Cut off right after the marker byte, before the length field.
     const buf = Buffer.from([0xff, 0xd8, 0xff, 0xeb]);
     const result = detectC2paFromJpeg(buf);
@@ -130,19 +130,19 @@ describe("detectC2paFromJpeg", () => {
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for empty buffer", () => {
+  it("returns present:false for empty buffer", async () => {
     const result = detectC2paFromJpeg(Buffer.alloc(0));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for non-JPEG data", () => {
+  it("returns present:false for non-JPEG data", async () => {
     const result = detectC2paFromJpeg(Buffer.from("not a jpeg"));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("stops scanning at SOS marker", () => {
+  it("stops scanning at SOS marker", async () => {
     // C2PA after SOS should not be detected.
     const soi = Buffer.from([0xff, 0xd8]);
     const sos = Buffer.from([
@@ -170,7 +170,7 @@ describe("detectC2paFromJpeg", () => {
     expect(result.detected).toBe(false);
   });
 
-  it("detects c2pa in first APP11 when multiple APP11 segments exist", () => {
+  it("detects c2pa in first APP11 when multiple APP11 segments exist", async () => {
     const c2paPayload = Buffer.from("header_c2pa_data", "ascii");
     const otherPayload = Buffer.from("other_data", "ascii");
 
@@ -201,7 +201,7 @@ describe("detectC2paFromJpeg", () => {
 // ---------------------------------------------------------------------------
 
 describe("detectC2paFromPng", () => {
-  it("detects caBX chunk in PNG", () => {
+  it("detects caBX chunk in PNG", async () => {
     const png = buildPng([
       minimalIhdr(),
       makePngChunk("caBX", Buffer.from("C2PA manifest data here")),
@@ -212,7 +212,7 @@ describe("detectC2paFromPng", () => {
     expect(result.label).toBe("c2pa-manifest");
   });
 
-  it("detects caBX chunk among other chunks", () => {
+  it("detects caBX chunk among other chunks", async () => {
     const png = buildPng([
       minimalIhdr(),
       makePngChunk("IDAT", Buffer.from([0x01, 0x02, 0x03])),
@@ -225,13 +225,13 @@ describe("detectC2paFromPng", () => {
     expect(result.label).toBe("c2pa-manifest");
   });
 
-  it("returns present:false for PNG with no caBX chunk", () => {
+  it("returns present:false for PNG with no caBX chunk", async () => {
     const result = detectC2paFromPng(losAngelesPng);
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for PNG with only standard chunks", () => {
+  it("returns present:false for PNG with only standard chunks", async () => {
     const png = buildPng([
       minimalIhdr(),
       makePngChunk("IDAT", Buffer.from([0x01])),
@@ -242,7 +242,7 @@ describe("detectC2paFromPng", () => {
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for truncated caBX chunk", () => {
+  it("returns present:false for truncated caBX chunk", async () => {
     // Declare caBX with a huge length but provide only a few bytes.
     const len = Buffer.alloc(4);
     len.writeUInt32BE(99999, 0);
@@ -259,7 +259,7 @@ describe("detectC2paFromPng", () => {
     expect(result.label).toBeNull();
   });
 
-  it("stops scanning at IEND", () => {
+  it("stops scanning at IEND", async () => {
     // caBX after IEND should not be detected.
     const png = buildPng([
       minimalIhdr(),
@@ -270,19 +270,19 @@ describe("detectC2paFromPng", () => {
     expect(result.detected).toBe(false);
   });
 
-  it("returns present:false for empty buffer", () => {
+  it("returns present:false for empty buffer", async () => {
     const result = detectC2paFromPng(Buffer.alloc(0));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for short buffer", () => {
+  it("returns present:false for short buffer", async () => {
     const result = detectC2paFromPng(Buffer.alloc(4));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for non-PNG data", () => {
+  it("returns present:false for non-PNG data", async () => {
     const result = detectC2paFromPng(Buffer.from("not a png"));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
@@ -294,67 +294,67 @@ describe("detectC2paFromPng", () => {
 // ---------------------------------------------------------------------------
 
 describe("detectC2pa", () => {
-  it("routes JPEG magic to JPEG detector", () => {
+  it("routes JPEG magic to JPEG detector", async () => {
     const payload = Buffer.from("c2pa_data", "ascii");
     const jpeg = buildJpegWithApp11(payload);
-    const result = detectC2pa(jpeg);
+    const result = await detectC2pa(jpeg);
     expect(result.detected).toBe(true);
     expect(result.label).toBe("c2pa-manifest");
   });
 
-  it("routes PNG magic to PNG detector", () => {
+  it("routes PNG magic to PNG detector", async () => {
     const png = buildPng([
       minimalIhdr(),
       makePngChunk("caBX", Buffer.from("data")),
       iend(),
     ]);
-    const result = detectC2pa(png);
+    const result = await detectC2pa(png);
     expect(result.detected).toBe(true);
     expect(result.label).toBe("c2pa-manifest");
   });
 
-  it("returns present:false for JPEG without C2PA", () => {
-    const result = detectC2pa(brooklynJpeg);
+  it("returns present:false for JPEG without C2PA", async () => {
+    const result = await detectC2pa(brooklynJpeg);
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for PNG without C2PA", () => {
-    const result = detectC2pa(losAngelesPng);
+  it("returns present:false for PNG without C2PA", async () => {
+    const result = await detectC2pa(losAngelesPng);
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for unrecognized data", () => {
-    expect(detectC2pa(Buffer.from([0x00, 0x00, 0x00, 0x00]))).toEqual({
+  it("returns present:false for unrecognized data", async () => {
+    expect(await detectC2pa(Buffer.from([0x00, 0x00, 0x00, 0x00]))).toEqual({
       detected: false,
       label: null,
     });
-    expect(detectC2pa(Buffer.alloc(0))).toEqual({
+    expect(await detectC2pa(Buffer.alloc(0))).toEqual({
       detected: false,
       label: null,
     });
-    expect(detectC2pa(Buffer.from("garbage"))).toEqual({
+    expect(await detectC2pa(Buffer.from("garbage"))).toEqual({
       detected: false,
       label: null,
     });
   });
 
-  it("returns present:false for empty buffer", () => {
-    const result = detectC2pa(Buffer.alloc(0));
+  it("returns present:false for empty buffer", async () => {
+    const result = await detectC2pa(Buffer.alloc(0));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("returns present:false for short buffer (< 2 bytes)", () => {
-    const result = detectC2pa(Buffer.from([0xff]));
+  it("returns present:false for short buffer (< 2 bytes)", async () => {
+    const result = await detectC2pa(Buffer.from([0xff]));
     expect(result.detected).toBe(false);
     expect(result.label).toBeNull();
   });
 
-  it("detects C2PA in Redondo screenshot JPEG if present", () => {
+  it("detects C2PA in Redondo screenshot JPEG if present", async () => {
     // Redondo fixture has no APP11/C2PA – ensure it returns false.
-    const result = detectC2pa(redondoJpeg);
+    const result = await detectC2pa(redondoJpeg);
     expect(result.detected).toBe(false);
   });
 });
@@ -364,7 +364,7 @@ describe("detectC2pa", () => {
 // ---------------------------------------------------------------------------
 
 describe("malformed input", () => {
-  it("handles JPEG with zero-length segment", () => {
+  it("handles JPEG with zero-length segment", async () => {
     const soi = Buffer.from([0xff, 0xd8]);
     const marker = Buffer.from([0xff, 0xeb]);
     const lenBuf = Buffer.alloc(2);
@@ -376,7 +376,7 @@ describe("malformed input", () => {
     expect(result.label).toBeNull();
   });
 
-  it("handles JPEG with length < 2 (malformed)", () => {
+  it("handles JPEG with length < 2 (malformed)", async () => {
     const soi = Buffer.from([0xff, 0xd8]);
     const marker = Buffer.from([0xff, 0xeb]);
     const lenBuf = Buffer.alloc(2);
@@ -388,13 +388,13 @@ describe("malformed input", () => {
     expect(result.label).toBeNull();
   });
 
-  it("handles JPEG with only SOI", () => {
+  it("handles JPEG with only SOI", async () => {
     const buf = Buffer.from([0xff, 0xd8]);
     const result = detectC2paFromJpeg(buf);
     expect(result.detected).toBe(false);
   });
 
-  it("handles PNG with malformed chunk length (zero)", () => {
+  it("handles PNG with malformed chunk length (zero)", async () => {
     const pngSig = Buffer.from([137, 80, 78, 71, 13, 10, 26, 10]);
     const zeroChunk = Buffer.concat([
       Buffer.from([0x00, 0x00, 0x00, 0x00]), // length = 0
