@@ -599,3 +599,79 @@ export async function extractExifWithRetry(
 
   return result.tiff;
 }
+
+/**
+ * Extract XMP with one bounded follow-up read.
+ *
+ * Same strategy as `extractExifWithRetry` but for XMP payloads.
+ * Uses the same `initialOffset` / `fetchMore` pattern so callers can reuse
+ * the combined buffer from the EXIF follow-up without a second S3 fetch.
+ *
+ * Returns the XMP XML string or null. Never throws on parse errors.
+ */
+export async function extractXmpWithRetry(
+  initialBuffer: Buffer,
+  initialOffset: number,
+  fetchMore: FetchMoreBytes
+): Promise<string | null> {
+  if (initialBuffer.length < 2) {
+    return null;
+  }
+
+  const isJpeg = initialBuffer[0] === 0xff && initialBuffer[1] === 0xd8;
+  const isPng =
+    initialBuffer.length >= 8 &&
+    initialBuffer.slice(0, 8).equals(PNG_SIGNATURE);
+
+  if (!isJpeg && !isPng) {
+    return null;
+  }
+
+  let result: XmpExtractResult;
+  if (isJpeg) {
+    result = extractXmpFromJpeg(initialBuffer);
+  } else {
+    result = extractXmpFromPng(initialBuffer);
+  }
+
+  if (result.xmpXml) {
+    return result.xmpXml;
+  }
+
+  if (!result.truncated || result.bytesNeeded <= 0) {
+    return null;
+  }
+
+  const totalNeeded = initialOffset + result.bytesNeeded;
+  if (totalNeeded > MAX_EXIF_BYTES) {
+    return null;
+  }
+
+  const followStart = initialOffset + initialBuffer.length;
+  const followEnd = MAX_EXIF_BYTES - 1;
+
+  if (followStart > followEnd) {
+    return null;
+  }
+
+  let followBytes: Buffer | null;
+  try {
+    followBytes = await fetchMore(followStart, followEnd);
+  } catch {
+    return null;
+  }
+
+  if (!followBytes || followBytes.length === 0) {
+    return null;
+  }
+
+  const combined = Buffer.concat([initialBuffer, followBytes]);
+
+  if (isJpeg) {
+    result = extractXmpFromJpeg(combined);
+  } else {
+    result = extractXmpFromPng(combined);
+  }
+
+  return result.xmpXml;
+}
