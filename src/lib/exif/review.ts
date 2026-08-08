@@ -595,7 +595,7 @@ export function reviewExif(
     digitalSourceType
   );
 
-  const result: ReviewResult = {
+  const reviewResult: ReviewResult = {
     assessment,
     confidence,
     positiveSignals: positive,
@@ -604,7 +604,7 @@ export function reviewExif(
     disclaimer: DISCLAIMER,
   };
   if (digitalSourceType) {
-    result.digitalSourceType = digitalSourceType;
+    reviewResult.digitalSourceType = digitalSourceType;
   }
-  return result;
+  return reviewResult;
 }
