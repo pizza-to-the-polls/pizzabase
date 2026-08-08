@@ -571,7 +571,30 @@ export function reviewExif(
   };
 
   if (!data || typeof data !== "object") {
-    return noMetaResult();
+    const result = noMetaResult();
+
+    // Inject C2PA signal when detected — even without EXIF data.
+    if (c2paResult?.detected) {
+      result.positiveSignals.push({
+        code: "c2pa-manifest-present",
+        label: "C2PA provenance manifest detected",
+      });
+    }
+
+    // Inject IPTC Digital Source Type signal when available.
+    if (digitalSourceType && digitalSourceType.uri) {
+      const dstDetector = DETECTORS.find(
+        (d) => d.code === "iptc-digital-source-type"
+      );
+      if (dstDetector) {
+        result.positiveSignals.push({
+          code: dstDetector.code,
+          label: `IPTC Digital Source Type: ${digitalSourceType.label}`,
+        });
+      }
+    }
+
+    return result;
   }
 
   const { positive, caution, missing } = detectSignals(data);
