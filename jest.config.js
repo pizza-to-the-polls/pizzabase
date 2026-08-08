@@ -18,7 +18,19 @@ module.exports = {
         tsconfig: "<rootDir>/tsconfig.json",
       },
     ],
+    // Transform uuid ESM .js files through ts-jest to convert export → module.exports
+    "^.+\\.js$": [
+      "ts-jest",
+      {
+        tsconfig: {
+          ...require("./tsconfig.json"),
+          allowJs: true,
+        },
+      },
+    ],
   },
+  // Don't ignore uuid in node_modules — it's ESM-only and needs transformation
+  transformIgnorePatterns: ["node_modules/(?!(uuid)/)"],
   setupFilesAfterEnv: ["<rootDir>/src/tests/jest.setup.ts"],
   preset: "ts-jest",
   testEnvironment: "node",
