@@ -287,16 +287,18 @@ describe("#getExif", () => {
   function mockS3WithBody(body: Buffer) {
     const mockAws = require("aws-sdk");
     mockAws.S3 = jest.fn().mockImplementation(() => ({
-      getObject: jest.fn().mockImplementation(
-        (params: { Bucket: string; Key: string; Range?: string }) => ({
-          promise: jest.fn().mockResolvedValue({
-            // Only return the body for the main image key, not sidecar keys
-            // like .xmp or .c2pa — those should return null Body so they
-            // don't falsely trigger sidecar detection.
-            Body: params.Key === `uploads/${fileName}` ? body : null,
-          }),
-        })
-      ),
+      getObject: jest
+        .fn()
+        .mockImplementation(
+          (params: { Bucket: string; Key: string; Range?: string }) => ({
+            promise: jest.fn().mockResolvedValue({
+              // Only return the body for the main image key, not sidecar keys
+              // like .xmp or .c2pa — those should return null Body so they
+              // don't falsely trigger sidecar detection.
+              Body: params.Key === `uploads/${fileName}` ? body : null,
+            }),
+          })
+        ),
     }));
   }
 
