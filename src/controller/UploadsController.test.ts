@@ -287,9 +287,16 @@ describe("#getExif", () => {
   function mockS3WithBody(body: Buffer) {
     const mockAws = require("aws-sdk");
     mockAws.S3 = jest.fn().mockImplementation(() => ({
-      getObject: jest.fn().mockReturnValue({
-        promise: jest.fn().mockResolvedValue({ Body: body }),
-      }),
+      getObject: jest.fn().mockImplementation(
+        (params: { Bucket: string; Key: string; Range?: string }) => ({
+          promise: jest.fn().mockResolvedValue({
+            // Only return the body for the main image key, not sidecar keys
+            // like .xmp or .c2pa — those should return null Body so they
+            // don't falsely trigger sidecar detection.
+            Body: params.Key === `uploads/${fileName}` ? body : null,
+          }),
+        })
+      ),
     }));
   }
 
@@ -435,16 +442,22 @@ describe("#getExif", () => {
     const initial = brooklynJpeg.slice(0, 7);
     const getObject = jest
       .fn()
-      .mockImplementation(({ Range }: { Range: string }) => ({
-        promise: jest.fn().mockResolvedValue({
-          Body:
-            Range === "bytes=0-65535"
-              ? initial
-              : brooklynJpeg.slice(initial.length),
-        }),
-      }));
+      .mockImplementation(({ Key, Range }: { Key: string; Range?: string }) => {
+        // C2PA / XMP sidecar keys should return null Body.
+        if (Key !== `uploads/${fileName}`) {
+          return { promise: jest.fn().mockResolvedValue({ Body: null }) };
+        }
+        return {
+          promise: jest.fn().mockResolvedValue({
+            Body:
+              Range === "bytes=0-65535"
+                ? initial
+                : brooklynJpeg.slice(initial.length),
+          }),
+        };
+      });
     const mockAws = require("aws-sdk");
-    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
+    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject: getObject }));
 
     const response = http_mocks.createResponse();
     const body = (await controller.getExif(
@@ -454,7 +467,7 @@ describe("#getExif", () => {
     )) as any;
 
     expect(body.exif.Image.Orientation).toBe(1);
-    expect(getObject).toHaveBeenCalledTimes(4);
+    expect(getObject).toHaveBeenCalledTimes(5); // initial + follow-up + XMP sidecar + C2PA sidecar + null
     expect(getObject.mock.calls[1][0].Range).toMatch(/^bytes=7-\d+$/);
   });
 
@@ -576,7 +589,7 @@ describe("#getExif", () => {
   // C2PA detection tests
   // ---------------------------------------------------------------------
 
-  it.skip("surfaces c2pa in review when C2PA is present in JPEG", async () => {
+  it("surfaces c2pa in review when C2PA is present in JPEG", async () => {
     // Build a JPEG with a C2PA-bearing APP11 segment.
     const c2paPayload = Buffer.from("JUMBF_header_c2pa_data", "ascii");
     const soi = Buffer.from([0xff, 0xd8]);
@@ -653,20 +666,20 @@ describe("#getExif", () => {
     expect(body.exif).toBeNull(); // no EXIF in this synthetic JPEG
   });
 
-  it.skip("falls back to sidecar .c2pa when C2PA not in container", async () => {
+  it("falls back to sidecar .c2pa when C2PA not in container", async () => {
     const mockAws = require("aws-sdk");
     const getObject = jest
       .fn()
-      .mockImplementation(({ Key }: { Key: string; Range?: string }) => ({
-        promise: jest.fn().mockResolvedValue({
-          Body:
-            Key === upload.filePath
-              ? brooklynJpeg
-              : Key === upload.filePath.replace(/\\.jpg$/, ".c2pa")
-              ? Buffer.from("sidecar c2pa data")
-              : null,
-        }),
-      }));
+      .mockImplementation(({ Key }: { Key: string; Range?: string }) => {
+        const sidecarKey = upload.filePath.replace(/\.(jpe?g|png)$/i, ".c2pa");
+        const body =
+          Key === upload.filePath
+            ? brooklynJpeg
+            : Key === sidecarKey
+            ? Buffer.from("sidecar c2pa data")
+            : null;
+        return { promise: jest.fn().mockResolvedValue({ Body: body }) };
+      });
     mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
 
     const response = http_mocks.createResponse();
@@ -769,7 +782,7 @@ describe("#getExif", () => {
     });
   });
 
-  it.skip("runs C2PA detection even when S3 body is present but EXIF extraction fails", async () => {
+  it("runs C2PA detection even when S3 body is present but EXIF extraction fails", async () => {
     // truncatedJpeg has APP1 that extends beyond buffer → no tiffPayload.
     // We still run C2PA on the initial buffer.
     mockS3WithBody(truncatedJpeg);
