@@ -12,7 +12,7 @@ import {
 } from "typeorm";
 import { Location } from "./Location";
 import { NormalAddress } from "../lib/validator";
-import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
+import { UPLOAD_DECAY, UPLOAD_MAX, MEDIA_STATUS } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
 @Entity({ name: "uploads" })
@@ -43,6 +43,44 @@ export class Upload extends BaseEntity {
 
   @Column({ name: "file_hash", unique: true, nullable: true })
   fileHash: string;
+
+  @Column({ name: "raw_file_path", nullable: true })
+  rawFilePath: string;
+
+  @Column({
+    name: "media_status",
+    type: "enum",
+    enum: ["none", "processing", "ready", "failed"],
+    default: "none",
+  })
+  mediaStatus: "none" | "processing" | "ready" | "failed";
+
+  @Column({ name: "processed_file_path", type: "jsonb", nullable: true })
+  processedFilePath: Record<string, string | null> | null;
+
+  @Column({ name: "exif_extracted", default: false })
+  exifExtracted: boolean;
+
+  @Column({ name: "exif_scrubbed", default: false })
+  exifScrubbed: boolean;
+
+  @Column({ name: "exif_data", type: "jsonb", nullable: true })
+  exifData: Record<string, any> | null;
+
+  @Column({
+    name: "moderation_status",
+    type: "enum",
+    enum: ["pending", "clean", "flagged", "rejected"],
+    default: "pending",
+  })
+  moderationStatus: "pending" | "clean" | "flagged" | "rejected";
+
+  @Column({
+    name: "moderation_score",
+    type: "float",
+    nullable: true,
+  })
+  moderationScore: number | null;
 
   static async createOrReject(
     ipAddress: string,
@@ -82,6 +120,8 @@ export class Upload extends BaseEntity {
     }.${fileExt}`
       .toLowerCase()
       .replace(/\s/g, "-");
+    upload.rawFilePath = upload.filePath;
+    upload.mediaStatus = MEDIA_STATUS.PROCESSING;
 
     await upload.save();
 

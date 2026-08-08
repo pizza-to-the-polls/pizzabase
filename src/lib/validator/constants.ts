@@ -17,16 +17,22 @@ export const COST_ERROR =
 export const FILE_HASH_ERROR =
   "Whoops! Something didn't work with your upload. Try the upload again";
 export const FILE_TYPE_ERROR =
-  "Whoops! That's not a valid file. Try sending us an image";
+  "Whoops! That's not a valid file. Try sending us an image or video (mp4, mov, webm)";
 export const ORDER_TYPE_ERROR =
   "Whoops! That's not a valid order type. Try sending pizzas or donuts or something else";
 export const AMOUNT_ERROR =
   "Whoops! That's not a valid donation amount - send a number";
 export const EMAIL_ERROR = "Whoops! That's not a valid email";
 
-export const UPLOAD_CONTENT_TYPES = {
+export const UPLOAD_CONTENT_TYPES: Record<string, string> = {
   gif: "image/gif",
   png: "image/png",
-  jpg: "image/jpg",
-  jpeg: "image/jpg",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  heic: "image/heic",
+  heif: "image/heif",
+  webp: "image/webp",
+  mp4: "video/mp4",
+  mov: "video/quicktime",
+  webm: "video/webm",
 };

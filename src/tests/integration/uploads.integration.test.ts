@@ -47,4 +47,32 @@ describe("Uploads API (via Lambda handler)", () => {
     const body = JSON.parse(response.body);
     expect(body.errors.fileName).toBeDefined();
   });
+
+  test("POST /upload with .mp4 video file type is accepted", async () => {
+    const response = await lambdaPost("/upload", {
+      fileHash: "video-hash-mp4",
+      fileName: "video.mp4",
+      address: "5335 S Kimbark Ave Chicago IL 60615",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.errors).not.toBeDefined();
+    expect(body.filePath).toBeDefined();
+    expect(body.filePath).toContain(".mp4");
+  });
+
+  test("POST /upload with .mov video file type is accepted", async () => {
+    const response = await lambdaPost("/upload", {
+      fileHash: "video-hash-mov",
+      fileName: "video.mov",
+      address: "5335 S Kimbark Ave Chicago IL 60615",
+    });
+
+    expect(response.statusCode).toBe(200);
+    const body = JSON.parse(response.body);
+    expect(body.errors).not.toBeDefined();
+    expect(body.filePath).toBeDefined();
+    expect(body.filePath).toContain(".mov");
+  });
 });

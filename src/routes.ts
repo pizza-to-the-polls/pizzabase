@@ -131,6 +131,12 @@ export const Routes = [
   },
   {
     method: "post",
+    route: "/api/uploads/media-format-callback",
+    controller: UploadsController,
+    action: "mediaFormatCallback",
+  },
+  {
+    method: "post",
     route: "/session",
     controller: SessionController,
     action: "create",
