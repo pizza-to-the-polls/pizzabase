@@ -4,6 +4,7 @@ import { UploadsController } from "./UploadsController";
 import { Upload } from "../entity/Upload";
 import { Location } from "../entity/Location";
 import { FILE_TYPE_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
+import { SIGHTENGINE_OVERRIDE_THRESHOLD } from "../lib/exif/review";
 
 jest.mock("../lib/aws");
 jest.mock("../lib/validator/geocode");
@@ -226,6 +227,197 @@ describe("#create", () => {
     } finally {
       mockModule.geocode = originalGeocode;
     }
+  });
+});
+
+describe("#create with includeReview=true", () => {
+  const mockSightengineResponse = (score: number) => ({
+    ok: true,
+    json: () => Promise.resolve({ type: { ai_generated: score } }),
+    headers: new Map([["X-RateLimit-Remaining", "100"]]),
+  });
+
+  const mockSightengineError = () => ({
+    ok: false,
+    status: 500,
+    json: () => Promise.resolve({}),
+    headers: new Map(),
+  });
+
+  beforeEach(() => {
+    // Mock aws-sdk for EXIF S3 read
+    const mockAws = require("aws-sdk");
+    mockAws.S3 = jest.fn().mockImplementation(() => ({
+      getObject: jest.fn().mockReturnValue({
+        promise: jest.fn().mockResolvedValue({
+          Body: Buffer.from([0x45, 0x78]),
+        }),
+      }),
+    }));
+
+    const exifReader = require("exif-reader");
+    exifReader.mockReturnValue({
+      Image: { Make: "Apple" },
+      bigEndian: true,
+    });
+  });
+
+  it("returns sightengine score and exif when API responds", async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(mockSightengineResponse(0.001))
+    );
+
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-1" },
+        query: { includeReview: "true" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(body).toHaveProperty("review");
+    expect((body as any).review.sightengine).toEqual({ score: 0.001 });
+    expect((body as any).review.exif).toBeDefined();
+    expect((body as any).review.exif.Image).toEqual({ Make: "Apple" });
+    expect((body as any).review.assessment).toBeUndefined();
+  });
+
+  it("returns null sightengine when API errors", async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(mockSightengineError())
+    );
+
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-2" },
+        query: { includeReview: "true" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect((body as any).review.sightengine).toBeNull();
+    expect((body as any).review.exif).toBeDefined();
+  });
+
+  it("returns null sightengine on network timeout", async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.reject(new DOMException("Aborted", "AbortError"))
+    );
+
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-3" },
+        query: { includeReview: "true" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect((body as any).review.sightengine).toBeNull();
+  });
+
+  it("adds assessment when AI score exceeds threshold", async () => {
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(
+        mockSightengineResponse(SIGHTENGINE_OVERRIDE_THRESHOLD + 0.01)
+      )
+    );
+
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-4" },
+        query: { includeReview: "true" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect((body as any).review.sightengine).toEqual({
+      score: SIGHTENGINE_OVERRIDE_THRESHOLD + 0.01,
+    });
+    expect((body as any).review.assessment).toEqual([
+      "likely-screen-or-software-generated",
+    ]);
+  });
+
+  it("does not include review when includeReview is not true", async () => {
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-5" },
+        query: { includeReview: "false" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect((body as any).review).toBeUndefined();
+  });
+
+  it("does not include review when includeReview is missing", async () => {
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-6" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect((body as any).review).toBeUndefined();
+  });
+
+  it("returns null exif when S3 read fails", async () => {
+    const mockAws = require("aws-sdk");
+    mockAws.S3 = jest.fn().mockImplementation(() => ({
+      getObject: jest.fn().mockReturnValue({
+        promise: jest.fn().mockRejectedValue(new Error("S3 error")),
+      }),
+    }));
+
+    (global.fetch as jest.Mock).mockImplementationOnce(() =>
+      Promise.resolve(mockSightengineResponse(0.001))
+    );
+
+    const response = http_mocks.createResponse();
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip: "127.0.0.1",
+        method: "POST",
+        body: { address, fileName: "file.png", fileHash: "se-test-7" },
+        query: { includeReview: "true" },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect((body as any).review.sightengine).toEqual({ score: 0.001 });
+    expect((body as any).review.exif).toBeNull();
   });
 });
 

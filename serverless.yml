@@ -39,6 +39,9 @@ provider:
     STRIPE_SECRET_WH: ${env:STRIPE_SECRET_WH}
     STRIPE_PRODUCT_ID: ${env:STRIPE_PRODUCT_ID}
 
+    SIGHTENGINE_API_USER: ${env:SIGHTENGINE_API_USER}
+    SIGHTENGINE_API_SECRET: ${env:SIGHTENGINE_API_SECRET}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:
