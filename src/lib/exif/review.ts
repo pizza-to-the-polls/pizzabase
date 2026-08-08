@@ -571,11 +571,11 @@ export function reviewExif(
   };
 
   if (!data || typeof data !== "object") {
-    const result = noMetaResult();
+    const noMeta = noMetaResult();
 
     // Inject C2PA signal when detected — even without EXIF data.
     if (c2paResult?.detected) {
-      result.positiveSignals.push({
+      noMeta.positiveSignals.push({
         code: "c2pa-manifest-present",
         label: "C2PA provenance manifest detected",
       });
@@ -587,14 +587,14 @@ export function reviewExif(
         (d) => d.code === "iptc-digital-source-type"
       );
       if (dstDetector) {
-        result.positiveSignals.push({
+        noMeta.positiveSignals.push({
           code: dstDetector.code,
           label: `IPTC Digital Source Type: ${digitalSourceType.label}`,
         });
       }
     }
 
-    return result;
+    return noMeta;
   }
 
   const { positive, caution, missing } = detectSignals(data);
