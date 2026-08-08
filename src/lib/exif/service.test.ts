@@ -334,6 +334,38 @@ describe("extractExifAndReview", () => {
     expect((result.review as any)?.digitalSourceType).toBeUndefined();
   });
 
+  // ---- C2PA sidecar -------------------------------------------------------
+
+  it("falls back to .c2pa sidecar when C2PA not in container", async () => {
+    const c2paSidecarKey = `${filePath}.c2pa`;
+    const getObject = jest
+      .fn()
+      .mockImplementation(
+        (params: { Bucket: string; Key: string; Range?: string }) => {
+          if (params.Key === c2paSidecarKey) {
+            // Minimal C2PA manifest bytes — just needs to be non-empty.
+            return {
+              promise: jest
+                .fn()
+                .mockResolvedValue({ Body: Buffer.from("c2pa-manifest") }),
+            };
+          }
+          return {
+            promise: jest.fn().mockResolvedValue({ Body: brooklynJpeg }),
+          };
+        }
+      );
+
+    const result = await extractExifAndReview(
+      { s3Client: { getObject } as any, bucket: "test-bucket" },
+      { filePath, includeReview: true }
+    );
+
+    expect(getObject).toHaveBeenCalledTimes(3); // initial + XMP sidecar (404) + C2PA sidecar
+    expect(result.c2pa).toEqual({ detected: true, label: "c2pa-sidecar" });
+    expect(result.exif).not.toBeNull();
+  });
+
   // ---- Serialization safety ----------------------------------------------
 
   it("returns JSON-serializable EXIF data", () => {
