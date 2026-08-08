@@ -2,16 +2,19 @@ export {
   extractExif,
   extractExifFromJpeg,
   extractExifFromPng,
+  extractExifFromHeif,
   extractExifWithRetry,
   extractXmp,
   extractXmpFromJpeg,
   extractXmpFromPng,
   extractXmpWithRetry,
+  isHeif,
   MAX_EXIF_BYTES,
 } from "./extract";
 export type {
   JpegExtractResult,
   PngExtractResult,
+  HeifExtractResult,
   XmpExtractResult,
   FetchMoreBytes,
 } from "./extract";
