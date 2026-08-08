@@ -570,7 +570,9 @@ describe("malformed / truncated EXIF within valid container", () => {
  * Returns the complete Buffer and the absolute offset of the TIFF data
  * within mdat (for verifying extraction correctness).
  */
-function buildMinimalHeif(exifTiff: Buffer): {
+function buildMinimalHeif(
+  exifTiff: Buffer
+): {
   buffer: Buffer;
   tiffOffset: number;
 } {

@@ -523,15 +523,7 @@ export function extractXmp(buffer: Buffer): string | null {
 
 // HEIF files start with an ftyp box containing a brand like "heic", "mif1",
 // "heix", "heim", "heis", "hevc", "avif", etc.
-const HEIF_BRANDS = [
-  "heic",
-  "mif1",
-  "heix",
-  "heim",
-  "heis",
-  "hevc",
-  "avif",
-];
+const HEIF_BRANDS = ["heic", "mif1", "heix", "heim", "heis", "hevc", "avif"];
 
 const HEIF_FTYP_BOX = "ftyp";
 const HEIF_META_BOX = "meta";
@@ -560,10 +552,7 @@ interface BoxHeader {
  *
  * Returns null if the header can't be read.
  */
-function readBoxHeader(
-  buffer: Buffer,
-  offset: number
-): BoxHeader | null {
+function readBoxHeader(buffer: Buffer, offset: number): BoxHeader | null {
   if (offset + 8 > buffer.length) return null;
 
   let size = buffer.readUInt32BE(offset);
@@ -614,7 +603,7 @@ export function isHeif(buffer: Buffer): boolean {
   if (buffer.length < 12) return false;
   // First 4 bytes: box size (or 1 for extended)
   let off = 0;
-  let boxSize = buffer.readUInt32BE(0);
+  const boxSize = buffer.readUInt32BE(0);
   if (boxSize === 1) {
     if (buffer.length < 16) return false;
     off = 8;
@@ -723,8 +712,11 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
       off += 4;
 
       // version 0/1/2 differ in field widths.
+      // tslint:disable-next-line:no-bitwise
       const offsetSize = (buffer[off] >> 4) & 0x0f;
+      // tslint:disable-next-line:no-bitwise
       const lengthSize = buffer[off] & 0x0f;
+      // tslint:disable-next-line:no-bitwise
       const baseOffsetSize = (buffer[off + 1] >> 4) & 0x0f;
       off += 2;
 
@@ -757,6 +749,7 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
         let constructionMethod = 0;
         if (version >= 1) {
           if (off + 2 > h.end) return null;
+          // tslint:disable-next-line:no-bitwise
           constructionMethod = buffer.readUInt16BE(off) & 0x000f;
           off += 2;
         }
@@ -918,7 +911,7 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
   }
 
   // ---- 6. Extract TIFF payload ----
-  let dataStart = entry.offset;
+  const dataStart = entry.offset;
 
   // The Exif item often starts with a 4-byte zero prefix + "Exif" + 1 zero byte
   // (6 bytes total), but this is embedded in mdat and the exact format varies.
@@ -926,7 +919,8 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
   // Exif header prefix.
   if (
     dataStart + 6 <= payloadEnd &&
-    buffer.toString("ascii", dataStart, dataStart + 6) === "\x00\x00\x00\x00Exif"
+    buffer.toString("ascii", dataStart, dataStart + 6) ===
+      "\x00\x00\x00\x00Exif"
   ) {
     // Skip the 6-byte prefix: 4 zero bytes + "Exif" (but we already have the 'f'
     // from the "Exif" string — wait, that's 4 zeros + 'E' 'x' 'i' 'f' = 8 bytes.
@@ -958,11 +952,7 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
  * Scan for a TIFF byte-order marker ("II" or "MM" followed by 0x2A 0x00).
  * Returns the offset of the marker, or -1 if not found.
  */
-function findTiffStart(
-  buffer: Buffer,
-  start: number,
-  end: number
-): number {
+function findTiffStart(buffer: Buffer, start: number, end: number): number {
   for (let i = start; i + 4 <= end; i++) {
     if (
       (buffer[i] === 0x49 && buffer[i + 1] === 0x49) || // "II" little-endian
