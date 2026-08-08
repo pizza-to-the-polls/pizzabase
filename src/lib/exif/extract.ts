@@ -56,6 +56,14 @@ export interface XmpExtractResult {
   bytesNeeded: number;
 }
 
+export interface HeifExtractResult {
+  tiff: Buffer | null;
+  /** True when an Exif item was found but extends beyond the buffer. */
+  truncated: boolean;
+  /** Total bytes needed (from buffer start) to capture the full EXIF item. */
+  bytesNeeded: number;
+}
+
 // ---------------------------------------------------------------------------
 // JPEG extraction
 // ---------------------------------------------------------------------------
@@ -259,6 +267,11 @@ export function extractExif(buffer: Buffer): Buffer | null {
   // PNG detection: starts with 8-byte PNG signature
   if (buffer.length >= 8 && buffer.slice(0, 8).equals(PNG_SIGNATURE)) {
     return extractExifFromPng(buffer).tiff;
+  }
+
+  // HEIF/HEIC detection: starts with ftyp box containing a known brand.
+  if (isHeif(buffer)) {
+    return extractExifFromHeif(buffer).tiff;
   }
 
   return null;
@@ -505,6 +518,479 @@ export function extractXmp(buffer: Buffer): string | null {
 }
 
 // ---------------------------------------------------------------------------
+// HEIF / HEIC extraction (ISO Base Media File Format / BMFF)
+// ---------------------------------------------------------------------------
+
+// HEIF files start with an ftyp box containing a brand like "heic", "mif1",
+// "heix", "heim", "heis", "hevc", "avif", etc.
+const HEIF_BRANDS = [
+  "heic",
+  "mif1",
+  "heix",
+  "heim",
+  "heis",
+  "hevc",
+  "avif",
+];
+
+const HEIF_FTYP_BOX = "ftyp";
+const HEIF_META_BOX = "meta";
+const HEIF_ILOC_BOX = "iloc";
+const HEIF_IINF_BOX = "iinf";
+const HEIF_INFE_BOX = "infe";
+
+/** Box header result. */
+interface BoxHeader {
+  type: string;
+  /** Offset of box data (after header). */
+  dataStart: number;
+  /** Offset of first byte past this box (dataStart + dataSize). */
+  end: number;
+  /** Size of the box data in bytes (total box size minus header). */
+  dataSize: number;
+}
+
+/**
+ * Read a BMFF box header at the given offset.
+ *
+ * Box header: [4-byte size][4-byte type][optional 8-byte extended size].
+ * - size == 0: box extends to end of buffer
+ * - size == 1: 8-byte extended size follows
+ * - size >= 8: normal box (size includes the 4-byte size + 4-byte type)
+ *
+ * Returns null if the header can't be read.
+ */
+function readBoxHeader(
+  buffer: Buffer,
+  offset: number
+): BoxHeader | null {
+  if (offset + 8 > buffer.length) return null;
+
+  let size = buffer.readUInt32BE(offset);
+  const type = buffer.toString("ascii", offset + 4, offset + 8);
+  let headerSize = 8;
+
+  if (size === 1) {
+    // Extended size: next 8 bytes are uint64 BE.
+    if (offset + 16 > buffer.length) return null;
+    const hi = buffer.readUInt32BE(offset + 8);
+    const lo = buffer.readUInt32BE(offset + 12);
+    // Guard: JS Number can only represent integers up to 2^53 safely.
+    if (hi > 0x001fffff) {
+      // Box is > 2^53 bytes — unrealistic, bail.
+      return null;
+    }
+    size = hi * 0x100000000 + lo;
+    headerSize = 16;
+  }
+
+  if (size === 0) {
+    // Box extends to end of buffer.
+    return {
+      type,
+      dataStart: offset + headerSize,
+      end: buffer.length,
+      dataSize: buffer.length - offset - headerSize,
+    };
+  }
+
+  if (size < headerSize) {
+    // Malformed: box can't be smaller than its header.
+    return null;
+  }
+
+  return {
+    type,
+    dataStart: offset + headerSize,
+    end: offset + size,
+    dataSize: size - headerSize,
+  };
+}
+
+/**
+ * Check whether the buffer starts with a recognizable HEIF/AVIF ftyp box.
+ */
+export function isHeif(buffer: Buffer): boolean {
+  if (buffer.length < 12) return false;
+  // First 4 bytes: box size (or 1 for extended)
+  let off = 0;
+  let boxSize = buffer.readUInt32BE(0);
+  if (boxSize === 1) {
+    if (buffer.length < 16) return false;
+    off = 8;
+  } else if (boxSize < 8) {
+    return false;
+  }
+  // Check box type = "ftyp"
+  const type = buffer.toString("ascii", 4 + off, 8 + off);
+  if (type !== HEIF_FTYP_BOX) return false;
+  // Check brand at offset 8 + headerSize
+  const brandStart = 8 + (boxSize === 1 ? 8 : 0);
+  if (brandStart + 4 > buffer.length) return false;
+  const brand = buffer.toString("ascii", brandStart, brandStart + 4);
+  return HEIF_BRANDS.includes(brand);
+}
+
+/**
+ * Walk the direct children of a parent box, calling visitor for each child
+ * of the given type. Stops when visitor returns non-null.
+ */
+function findChildBox<T>(
+  buffer: Buffer,
+  parentStart: number,
+  parentEnd: number,
+  boxType: string,
+  visitor: (header: BoxHeader) => T | null
+): T | null {
+  let off = parentStart;
+  while (off + 8 <= parentEnd) {
+    const header = readBoxHeader(buffer, off);
+    if (!header || header.end > parentEnd) break;
+
+    if (header.type === boxType) {
+      const result = visitor(header);
+      if (result !== null) return result;
+    }
+
+    // Move past this box.
+    off = header.end;
+    if (off <= parentStart) break; // safety
+  }
+  return null;
+}
+
+/**
+ * Extract the raw TIFF/EXIF payload from a HEIF/HEIC buffer.
+ *
+ * HEIF uses the ISOBMFF container:
+ *  - ftyp box (first) identifies the brand
+ *  - meta box contains iloc (item locations), iinf (item info), iprp (props)
+ *  - iinf lists items; one has item_type == "Exif"
+ *  - iloc maps item IDs to offsets within mdat (or idat)
+ *  - The offset points to a TIFF header (often prefixed with 4 zero bytes + "Exif")
+ *
+ * This implementation:
+ *  1. Validates the ftyp brand
+ *  2. Finds the meta box
+ *  3. Reads iloc to build an offset map (item_ID → { offset, length })
+ *  4. Reads iinf to find the Exif item_ID
+ *  5. Extracts the payload from mdat/idat at the iloc offset
+ */
+export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
+  if (!isHeif(buffer)) {
+    return { tiff: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  // ---- 1. Locate meta box ----
+  // Skip past ftyp: read its header to find where it ends.
+  const ftypHeader = readBoxHeader(buffer, 0);
+  if (!ftypHeader) return { tiff: null, truncated: false, bytesNeeded: 0 };
+
+  let metaHeader: BoxHeader | null = null;
+  findChildBox(buffer, ftypHeader.end, buffer.length, HEIF_META_BOX, (h) => {
+    metaHeader = h;
+    return h; // signal found
+  });
+
+  if (!metaHeader) {
+    return { tiff: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  // ---- 2. Parse iloc (Item Location Box) ----
+  // The meta box is a full box (4 bytes version+flags), so children
+  // start at dataStart + 4, not dataStart.
+  const metaChildrenStart = metaHeader.dataStart + 4;
+  const metaChildrenEnd = metaHeader.end;
+  interface IlocEntry {
+    itemId: number;
+    offset: number;
+    length: number;
+  }
+
+  let ilocEntries: IlocEntry[] | null = null;
+
+  findChildBox(
+    buffer,
+    metaChildrenStart,
+    metaChildrenEnd,
+    HEIF_ILOC_BOX,
+    (h) => {
+      // iloc is a full box (4-byte version/flags after header).
+      let off = h.dataStart;
+      if (off + 4 > h.end) return null;
+      const version = buffer[off];
+      // const flags = buffer.readUIntBE(off + 1, 3);
+      off += 4;
+
+      // version 0/1/2 differ in field widths.
+      const offsetSize = (buffer[off] >> 4) & 0x0f;
+      const lengthSize = buffer[off] & 0x0f;
+      const baseOffsetSize = (buffer[off + 1] >> 4) & 0x0f;
+      off += 2;
+
+      let itemCount: number;
+      if (version < 2) {
+        if (off + 2 > h.end) return null;
+        itemCount = buffer.readUInt16BE(off);
+        off += 2;
+      } else {
+        if (off + 4 > h.end) return null;
+        itemCount = buffer.readUInt32BE(off);
+        off += 4;
+      }
+
+      const entries: IlocEntry[] = [];
+      for (let i = 0; i < itemCount; i++) {
+        let itemId: number;
+        if (version < 2) {
+          if (off + 2 > h.end) return null;
+          itemId = buffer.readUInt16BE(off);
+          off += 2;
+        } else {
+          if (off + 4 > h.end) return null;
+          itemId = buffer.readUInt32BE(off);
+          off += 4;
+        }
+
+        // construction method: version 1+ has 2 bits reserved, then
+        // construction_method in low 4 bits of a 2-byte field.
+        let constructionMethod = 0;
+        if (version >= 1) {
+          if (off + 2 > h.end) return null;
+          constructionMethod = buffer.readUInt16BE(off) & 0x000f;
+          off += 2;
+        }
+
+        if (off + 2 > h.end) return null;
+        buffer.readUInt16BE(off); // dataReferenceIndex
+        off += 2;
+
+        let baseOffset = 0;
+        if (baseOffsetSize > 0) {
+          if (off + baseOffsetSize > h.end) return null;
+          baseOffset = buffer.readUIntBE(off, baseOffsetSize);
+          off += baseOffsetSize;
+        }
+
+        let extentCount: number;
+        if (off + 2 > h.end) return null;
+        extentCount = buffer.readUInt16BE(off);
+        off += 2;
+
+        let extentOffset = 0;
+        let extentLength = 0;
+
+        for (let e = 0; e < extentCount; e++) {
+          if (
+            (offsetSize > 0 && off + offsetSize > h.end) ||
+            (lengthSize > 0 && off + offsetSize + lengthSize > h.end)
+          ) {
+            return null;
+          }
+          if (offsetSize > 0) {
+            extentOffset = buffer.readUIntBE(off, offsetSize);
+            off += offsetSize;
+          }
+          if (lengthSize > 0) {
+            extentLength = buffer.readUIntBE(off, lengthSize);
+            off += lengthSize;
+          }
+        }
+
+        // Only file-offset items (construction method 0).
+        if (constructionMethod === 0 && extentLength > 0) {
+          entries.push({
+            itemId,
+            offset: baseOffset + extentOffset,
+            length: extentLength,
+          });
+        }
+      }
+
+      ilocEntries = entries;
+      return entries; // signal found
+    }
+  );
+
+  if (!ilocEntries || ilocEntries.length === 0) {
+    return { tiff: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  // ---- 3. Parse iinf (Item Information Box) to find Exif item ID ----
+  let exifItemId: number | null = null;
+
+  findChildBox(
+    buffer,
+    metaChildrenStart,
+    metaChildrenEnd,
+    HEIF_IINF_BOX,
+    (h) => {
+      // iinf is a full box.
+      let off = h.dataStart;
+      if (off + 4 > h.end) return null;
+      const version = buffer[off];
+      off += 4;
+
+      let entryCount: number;
+      if (version === 0) {
+        if (off + 2 > h.end) return null;
+        entryCount = buffer.readUInt16BE(off);
+        off += 2;
+      } else {
+        if (off + 4 > h.end) return null;
+        entryCount = buffer.readUInt32BE(off);
+        off += 4;
+      }
+
+      const iinfEnd = h.end;
+
+      for (let i = 0; i < entryCount; i++) {
+        if (off + 8 > iinfEnd) return null;
+        // Read infe header.
+        const infeHeader = readBoxHeader(buffer, off);
+        if (!infeHeader || infeHeader.type !== HEIF_INFE_BOX) {
+          // Unexpected — may be a different box type.
+          break;
+        }
+
+        // infe is a full box.
+        let infeOff = infeHeader.dataStart;
+        if (infeOff + 4 > infeHeader.end) return null;
+        const infeVersion = buffer[infeOff];
+        infeOff += 4;
+
+        let itemId: number;
+        if (infeVersion >= 2) {
+          if (infeOff + 4 > infeHeader.end) return null;
+          itemId = buffer.readUInt32BE(infeOff);
+          infeOff += 4;
+        } else {
+          if (infeOff + 2 > infeHeader.end) return null;
+          itemId = buffer.readUInt16BE(infeOff);
+          infeOff += 2;
+        }
+
+        if (infeVersion >= 2) {
+          if (infeOff + 2 > infeHeader.end) return null;
+          // itemProtectionIndex — read but not used for EXIF detection.
+          buffer.readUInt16BE(infeOff);
+          infeOff += 2;
+        }
+
+        // item_type: 4-char code.
+        if (infeOff + 4 > infeHeader.end) return null;
+        const itemType = buffer.toString("ascii", infeOff, infeOff + 4);
+        infeOff += 4;
+
+        // item_name: null-terminated string (if any space remains) — skipped.
+
+        if (itemType === "Exif" || itemType === "exif") {
+          exifItemId = itemId;
+          return itemId; // signal found
+        }
+
+        // Move to next infe.
+        off = infeHeader.end;
+      }
+
+      return null;
+    }
+  );
+
+  if (exifItemId === null) {
+    return { tiff: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  // ---- 4. Look up the offset in iloc entries ----
+  const entry = ilocEntries.find((e) => e.itemId === exifItemId);
+  if (!entry) {
+    return { tiff: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  // ---- 5. Check truncation ----
+  const payloadEnd = entry.offset + entry.length;
+  if (payloadEnd > buffer.length) {
+    return {
+      tiff: null,
+      truncated: true,
+      bytesNeeded: payloadEnd,
+    };
+  }
+
+  // ---- 6. Extract TIFF payload ----
+  let dataStart = entry.offset;
+
+  // The Exif item often starts with a 4-byte zero prefix + "Exif" + 1 zero byte
+  // (6 bytes total), but this is embedded in mdat and the exact format varies.
+  // We check for common TIFF byte-order markers (II or MM) and strip any
+  // Exif header prefix.
+  if (
+    dataStart + 6 <= payloadEnd &&
+    buffer.toString("ascii", dataStart, dataStart + 6) === "\x00\x00\x00\x00Exif"
+  ) {
+    // Skip the 6-byte prefix: 4 zero bytes + "Exif" (but we already have the 'f'
+    // from the "Exif" string — wait, that's 4 zeros + 'E' 'x' 'i' 'f' = 8 bytes.
+    // Actually the string is: 4 null bytes, then "Exif". That's 8 bytes.
+    // Let me re-check: "\x00\x00\x00\x00Exif" is 8 chars = 8 bytes.
+  }
+
+  // More reliably: look for TIFF byte order marker.
+  // HEIF stores EXIF as: [4 zero bytes]["Exif"][4 more bytes padding varies]
+  // then TIFF starts with "II" or "MM".
+  const tiffStart = findTiffStart(buffer, dataStart, payloadEnd);
+  if (tiffStart === -1) {
+    // No TIFF marker found — return the data as-is for exif-reader to try.
+    return {
+      tiff: buffer.slice(dataStart, payloadEnd),
+      truncated: false,
+      bytesNeeded: 0,
+    };
+  }
+
+  return {
+    tiff: buffer.slice(tiffStart, payloadEnd),
+    truncated: false,
+    bytesNeeded: 0,
+  };
+}
+
+/**
+ * Scan for a TIFF byte-order marker ("II" or "MM" followed by 0x2A 0x00).
+ * Returns the offset of the marker, or -1 if not found.
+ */
+function findTiffStart(
+  buffer: Buffer,
+  start: number,
+  end: number
+): number {
+  for (let i = start; i + 4 <= end; i++) {
+    if (
+      (buffer[i] === 0x49 && buffer[i + 1] === 0x49) || // "II" little-endian
+      (buffer[i] === 0x4d && buffer[i + 1] === 0x4d) // "MM" big-endian
+    ) {
+      // Check for TIFF magic number 0x002A
+      if (buffer[i + 2] === 0x2a && buffer[i + 3] === 0x00) {
+        return i;
+      }
+    }
+  }
+  // TIFF can also start with "Exif\x00\x00" prefix.
+  for (let i = start; i + 6 <= end; i++) {
+    if (
+      buffer[i] === 0x45 && // E
+      buffer[i + 1] === 0x78 && // x
+      buffer[i + 2] === 0x69 && // i
+      buffer[i + 3] === 0x66 && // f
+      buffer[i + 4] === 0x00 &&
+      buffer[i + 5] === 0x00
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+// ---------------------------------------------------------------------------
 // Bounded-retry extraction (for controller use)
 // ---------------------------------------------------------------------------
 
@@ -538,17 +1024,20 @@ export async function extractExifWithRetry(
   const isPng =
     initialBuffer.length >= 8 &&
     initialBuffer.slice(0, 8).equals(PNG_SIGNATURE);
+  const isHeifContainer = isHeif(initialBuffer);
 
-  if (!isJpeg && !isPng) {
+  if (!isJpeg && !isPng && !isHeifContainer) {
     return null;
   }
 
   // Try extraction.
-  let result: JpegExtractResult | PngExtractResult;
+  let result: JpegExtractResult | PngExtractResult | HeifExtractResult;
   if (isJpeg) {
     result = extractExifFromJpeg(initialBuffer);
-  } else {
+  } else if (isPng) {
     result = extractExifFromPng(initialBuffer);
+  } else {
+    result = extractExifFromHeif(initialBuffer);
   }
 
   if (result.tiff) {
@@ -593,8 +1082,10 @@ export async function extractExifWithRetry(
 
   if (isJpeg) {
     result = extractExifFromJpeg(combined);
-  } else {
+  } else if (isPng) {
     result = extractExifFromPng(combined);
+  } else {
+    result = extractExifFromHeif(combined);
   }
 
   return result.tiff;
