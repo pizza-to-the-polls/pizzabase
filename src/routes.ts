@@ -5,6 +5,7 @@ import { RootController } from "./controller/RootController";
 import { TotalsController } from "./controller/TotalsController";
 import { OrdersController } from "./controller/OrdersController";
 import { UploadsController } from "./controller/UploadsController";
+import { SightEngineController } from "./controller/SightEngineController";
 import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
 
@@ -128,6 +129,12 @@ export const Routes = [
     route: "/uploads/exif/:fileName",
     controller: UploadsController,
     action: "getExif",
+  },
+  {
+    method: "get",
+    route: "/uploads/:fileName/sightengine",
+    controller: SightEngineController,
+    action: "getSightEngineScore",
   },
   {
     method: "post",
