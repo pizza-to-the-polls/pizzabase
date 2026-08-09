@@ -17,6 +17,13 @@ beforeAll(async () => {
     "https://hooks.example.com/skip-location-hook/";
 
   process.env.GOOD_API_KEY = (await APIKey.generate()).key;
+
+  process.env.TWITTER_API_KEY = "test-twitter-api-key";
+  process.env.TWITTER_API_SECRET = "test-twitter-api-secret";
+  process.env.TWITTER_ACCESS_TOKEN = "test-twitter-access-token";
+  process.env.TWITTER_ACCESS_SECRET = "test-twitter-access-secret";
+  process.env.STATIC_SITE = "https://polls.pizza";
+  process.env.UPLOAD_S3_BUCKET = "reports.polls.pizza";
 });
 afterEach(async () => {
   await dbHelper.cleanAll();
