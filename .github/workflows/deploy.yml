@@ -82,6 +82,11 @@ jobs:
       - name: build typescript
         run: npx tsc --build
 
+      - name: Pre-deploy health check
+        id: pre_health
+        run: bash scripts/health-check.sh https://base.polls.pizza/health
+        continue-on-error: true
+
       - name: deploy to aws
         uses: serverless/github-action@v4.0.0
         with:
@@ -126,3 +131,18 @@ jobs:
           AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
           AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
           AWS_REGION: us-west-2
+
+      - name: Post-deploy health check
+        id: post_health
+        run: bash scripts/health-check.sh https://base.polls.pizza/health
+        timeout-minutes: 3
+
+      - name: Rollback on health failure
+        if: steps.post_health.outcome == 'failure' && steps.pre_health.outcome == 'success'
+        uses: serverless/github-action@v4.0.0
+        with:
+          args: rollback --stage prod
+        env:
+          SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
+          AWS_ACCESS_KEY_ID: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          AWS_SECRET_ACCESS_KEY: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
