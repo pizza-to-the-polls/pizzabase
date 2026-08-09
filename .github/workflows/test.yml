@@ -127,9 +127,6 @@ jobs:
         run: bash scripts/health-check.sh https://base-next.polls.pizza/health
         continue-on-error: true
 
-      - name: Warm up Aurora
-        run: bash scripts/health-check.sh --quick https://base-next.polls.pizza/health
-
       - name: deploy to aws
         uses: serverless/github-action@v4.0.0
         with:
