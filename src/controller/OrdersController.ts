@@ -3,6 +3,7 @@ import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
 import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
+import { twitterPost } from "../lib/twitter";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -20,6 +21,11 @@ export class OrdersController {
     const order = await Order.placeOrderForAddress(rawOrder, normalizedAddress);
 
     await zapNewOrder(order);
+
+    // Fire-and-forget — Twitter posting never blocks the response
+    twitterPost(order).catch((err) =>
+      console.error("Twitter post failed:", err)
+    );
 
     return { address: order.location.fullAddress };
   }

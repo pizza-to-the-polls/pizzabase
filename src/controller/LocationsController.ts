@@ -10,6 +10,7 @@ import {
   zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
+import { twitterPost } from "../lib/twitter";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -163,7 +164,13 @@ export class LocationsController {
       return { errors };
     }
 
-    await zapNewOrder(await Order.placeOrder(order, location));
+    const placedOrder = await Order.placeOrder(order, location);
+    await zapNewOrder(placedOrder);
+
+    // Fire-and-forget — Twitter posting never blocks the response
+    twitterPost(placedOrder).catch((err) =>
+      console.error("Twitter post failed:", err)
+    );
 
     return { success: true };
   }
