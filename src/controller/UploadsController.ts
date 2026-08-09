@@ -5,6 +5,7 @@ import { presignUpload } from "../lib/aws";
 import { zapNewUpload } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { isAuthorized, findOr404 } from "./helper";
+import { extractExifAndReview } from "../lib/exif/service";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {
@@ -84,32 +85,26 @@ export class UploadsController {
     });
     if (!findOr404(upload, response, next)) return null;
 
+    const includeReview = request.query.includeReview === "true";
+
     try {
       const s3Client = new (require("aws-sdk").S3)({
         region: process.env.AWS_REGION || "us-west-2",
       });
-      const S3_BUCKET = process.env.UPLOAD_S3_BUCKET;
+      const bucket = process.env.UPLOAD_S3_BUCKET!;
 
-      const s3Object = await s3Client
-        .getObject({
-          Bucket: S3_BUCKET,
-          Key: upload.filePath,
-          Range: "bytes=0-65535", // Read the first 64KB where EXIF lives
-        })
-        .promise();
-
-      if (s3Object.Body) {
-        const exifReader = require("exif-reader");
-        return exifReader(s3Object.Body);
-      }
+      return extractExifAndReview(
+        { s3Client: s3Client as any, bucket },
+        { filePath: upload.filePath, includeReview }
+      );
     } catch (error) {
-      // Log the error, but don't block the main flow
       console.error(
         `Could not extract EXIF data for upload ${upload.filePath}:`,
         error
       );
+      return includeReview
+        ? { exif: null, review: { assessment: "error" } }
+        : { exif: null };
     }
-
-    return null;
   }
 }
