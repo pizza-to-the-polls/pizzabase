@@ -44,6 +44,9 @@ export class Upload extends BaseEntity {
   @Column({ name: "file_hash", unique: true, nullable: true })
   fileHash: string;
 
+  @Column({ name: "sightengine_score", type: "float", nullable: true })
+  sightengineScore: number | null;
+
   static async createOrReject(
     ipAddress: string,
     {

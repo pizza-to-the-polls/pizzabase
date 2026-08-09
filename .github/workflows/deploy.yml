@@ -122,6 +122,9 @@ jobs:
 
           JWT_SECRET: ${{ secrets.JWT_SECRET }}
 
+          SIGHTENGINE_API_USER: ${{ secrets.SIGHTENGINE_API_USER }}
+          SIGHTENGINE_API_SECRET: ${{ secrets.SIGHTENGINE_API_SECRET }}
+
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
       - name: run migrations
