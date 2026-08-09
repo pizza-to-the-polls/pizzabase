@@ -7,23 +7,23 @@ export interface SightEngineResult {
 }
 
 interface SightEngineApiResponse {
-  nudity?: { none?: number };
-  weapon?: { none?: number };
-  alcohol?: { none?: number };
-  type?: { ai_generated?: number };
+  type?: { ai_generated?: number; deepfake?: number };
 }
 
 /**
- * Check an image from S3 against SightEngine's moderation API.
+ * Check an image from S3 against SightEngine's AI-detection APIs.
  *
  * Generates a presigned S3 URL for the image and passes it to SightEngine
  * for remote analysis, avoiding the overhead of downloading and re-uploading.
  *
  * Returns a combined score (0–1) where higher values indicate more concern.
  *
- * The score is computed from the "safe" probabilities of nudity, weapon, and
- * alcohol models combined with the genai detection probability:
- * max(1 - min(nudity.none, weapon.none, alcohol.none), type.ai_generated).
+ * Uses SightEngine's genai and deepfake detection models:
+ *   https://sightengine.com/docs/ai-generated-image-detection
+ *   https://sightengine.com/docs/deepfake-detection
+ *
+ * The score is the max of the two model probabilities:
+ *   max(type.ai_generated, type.deepfake).
  *
  * @param bucket - S3 bucket name
  * @param key - S3 object key (file path)
@@ -45,7 +45,7 @@ export async function checkImage(
   // Ask SightEngine to check the image at the presigned URL
   const params = new URLSearchParams({
     url: imageUrl,
-    models: "nudity-2.0,weapon,alcohol,genai",
+    models: "genai,deepfake",
     api_user: process.env.SIGHTENGINE_API_USER!,
     api_secret: process.env.SIGHTENGINE_API_SECRET!,
   });
@@ -61,17 +61,12 @@ export async function checkImage(
   const data: SightEngineApiResponse = await response.json();
 
   // Compute combined score (0–1)
-  // SightEngine returns "none" = probability the content is safe.
-  // Invert: lower safe score → higher concern score.
-  const nudity = data.nudity?.none ?? 0;
-  const weapons = data.weapon?.none ?? 0;
-  const alcohol = data.alcohol?.none ?? 0;
-  const moderationScore = 1 - Math.min(nudity, weapons, alcohol);
-
-  // genai returns type.ai_generated = probability the image is AI-generated
-  // (higher = more concerning), so take the max of both scores.
+  // Both genai and deepfake return probabilities that the image is
+  // AI-generated / deepfaked (higher = more concerning).
+  // Take the max as the overall concern score.
   const genaiScore = data.type?.ai_generated ?? 0;
-  const score = Math.max(moderationScore, genaiScore);
+  const deepfakeScore = data.type?.deepfake ?? 0;
+  const score = Math.max(genaiScore, deepfakeScore);
 
   return { score };
 }
