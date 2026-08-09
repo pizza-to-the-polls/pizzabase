@@ -154,6 +154,8 @@ jobs:
           STRIPE_SECRET_WH: ${{ secrets.STAGING_STRIPE_WH }}
           MAILGUN_API_KEY: ${{ secrets.MAILGUN_API_KEY }}
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
+          SIGHTENGINE_API_USER: ${{ secrets.SIGHTENGINE_API_USER }}
+          SIGHTENGINE_API_SECRET: ${{ secrets.SIGHTENGINE_API_SECRET }}
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
       - name: run migrations
