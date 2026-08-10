@@ -6,6 +6,7 @@ import { AuroraPostgresConnectionOptions } from "typeorm/driver/aurora-postgres/
 import { APIKey } from "./entity/APIKey";
 import { Action } from "./entity/Action";
 import { Donation } from "./entity/Donation";
+import { IntegrationSession } from "./entity/IntegrationSession";
 import { Location } from "./entity/Location";
 import { Order } from "./entity/Order";
 import { Report } from "./entity/Report";
@@ -16,6 +17,7 @@ const entities = [
   Action,
   APIKey,
   Donation,
+  IntegrationSession,
   Location,
   Order,
   Report,

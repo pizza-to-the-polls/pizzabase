@@ -47,6 +47,10 @@ provider:
     SIGHTENGINE_API_USER: ${env:SIGHTENGINE_API_USER}
     SIGHTENGINE_API_SECRET: ${env:SIGHTENGINE_API_SECRET}
 
+    BSKY_PDS_URL: ${env:BSKY_PDS_URL}
+    BSKY_HANDLE: ${env:BSKY_HANDLE}
+    BSKY_APP_PASSWORD: ${env:BSKY_APP_PASSWORD}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:
