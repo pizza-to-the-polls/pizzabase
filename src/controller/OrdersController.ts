@@ -3,8 +3,7 @@ import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
 import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
-import { blueskyPost } from "../lib/bluesky";
-import { twitterPost } from "../lib/twitter";
+import { socialPost } from "../lib/social";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -23,17 +22,8 @@ export class OrdersController {
 
     await zapNewOrder(order);
 
-    // Fire-and-forget: BlueSky posting must never block the order response
-    setImmediate(() => {
-      blueskyPost(order).catch((err: unknown) => {
-        console.error("Unhandled BlueSky post failure:", err);
-      });
-    });
-
-    // Fire-and-forget — Twitter posting never blocks the response
-    twitterPost(order).catch((err) =>
-      console.error("Twitter post failed:", err)
-    );
+    // Fire-and-forget: social posting never blocks the response
+    socialPost(order);
 
     return { address: order.location.fullAddress };
   }

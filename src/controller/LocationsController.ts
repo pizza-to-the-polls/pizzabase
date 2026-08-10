@@ -10,7 +10,7 @@ import {
   zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
-import { twitterPost } from "../lib/twitter";
+import { socialPost } from "../lib/social";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -167,10 +167,8 @@ export class LocationsController {
     const placedOrder = await Order.placeOrder(order, location);
     await zapNewOrder(placedOrder);
 
-    // Fire-and-forget — Twitter posting never blocks the response
-    twitterPost(placedOrder).catch((err) =>
-      console.error("Twitter post failed:", err)
-    );
+    // Fire-and-forget: social posting never blocks the response
+    socialPost(placedOrder);
 
     return { success: true };
   }
