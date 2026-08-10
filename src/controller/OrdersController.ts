@@ -1,91 +1,31 @@
-import { NextFunction, Request, Response } from "express";
-import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
+import { Location } from "../entity/Location";
+import { addOrderToReport } from "./ReportsController";
 import { validateOrder } from "../lib/validator";
-import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
+import { zapNewOrder } from "../lib/zap";
+import { blueskyPost } from "../lib/bluesky";
 import { twitterPost } from "../lib/twitter";
 
+import { Controller, Route, Post, BodyProp, Tags } from "./helper";
+
+@Controller("/api/orders") @Tags("Orders")
 export class OrdersController {
-  async create(request: Request, response: Response, next: NextFunction) {
-    if (!(await isAuthorized(request, response, next))) return null;
-
-    const { errors, normalizedAddress, ...rawOrder } = await validateOrder({
-      ...request.body,
-      address: request.body?.address || "bad-address",
-    });
-
-    if (Object.keys(errors).length > 0) {
-      response.status(422);
-      return { errors };
-    }
-    const order = await Order.placeOrderForAddress(rawOrder, normalizedAddress);
-
+  @Post("/")
+  public async create(
+    @BodyProp("locationId") locationId: string,
+    @BodyProp("quantity") quantity: number,
+    @BodyProp("orderType") orderType: string,
+    @BodyProp("cost") cost: number,
+    @BodyProp("restaurant") restaurant: string,
+  ): Promise<{ order: Order }> {
+    validateOrder({ quantity, orderType, cost });
+    const location = await Location.findOneOrFail({ where: { id: locationId } });
+    const order = await Order.placeOrder({ quantity, orderType, cost, restaurant }, location);
+    await Promise.all(order.reports.map((report) => addOrderToReport(report, order)));
     await zapNewOrder(order);
-
-    // Fire-and-forget — Twitter posting never blocks the response
-    twitterPost(order).catch((err) =>
-      console.error("Twitter post failed:", err)
-    );
-
-    return { address: order.location.fullAddress };
-  }
-
-  async show(request: Request, response: Response, next: NextFunction) {
-    const order: Order = await findOr404(
-      await Order.findOne({ where: { id: Number(request.params.id || "") } }),
-      response,
-      next
-    );
-    if (!order) return;
-
-    return {
-      ...order.asJSON(),
-      location: await order.location.asJSON(),
-      reports: (await order.reports).map((report) => report.asJSON()),
-    };
-  }
-
-  async delete(request: Request, response: Response, next: NextFunction) {
-    if (!(await isAuthorized(request, response, next))) return null;
-
-    const order: Order = await findOr404(
-      await Order.findOne({ where: { id: Number(request.params.id || "") } }),
-      response,
-      next
-    );
-
-    if (!order) return;
-
-    const reports = await order.cancelAndZero(request.body?.user);
-
-    for (const report of reports) {
-      await zapCancelOrderReport(report);
-    }
-
-    return { success: true };
-  }
-
-  async index(request: Request, _response: Response, _next: NextFunction) {
-    const limit = Number(request.query.limit || 100);
-    const take = limit < 100 ? limit : 100;
-
-    const skip = Number(request.query.page || 0) * take;
-
-    const [orders, count] = await Order.findAndCount({
-      where: { cancelledAt: null },
-      relations: ["reports", "location"],
-      order: { createdAt: "DESC" },
-      take,
-      skip,
-    });
-
-    const results = await Promise.all(
-      orders.map(async (order) => ({
-        ...order.asJSON(),
-        location: await order.location.asJSON(),
-        reports: (await order.reports).map((report) => report.asJSON()),
-      }))
-    );
-    return { results, count };
+    // Fire-and-forget social posting — never blocks the response.
+    blueskyPost(order).catch((err) => console.error("BlueSky post failed:", err));
+    twitterPost(order).catch((err) => console.error("Twitter post failed:", err));
+    return { order };
   }
 }
