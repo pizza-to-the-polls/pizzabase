@@ -16,11 +16,7 @@ import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
 export type MediaStatus = "none" | "processing" | "ready" | "failed";
-export type ModerationStatus =
-  | "pending"
-  | "clean"
-  | "flagged"
-  | "rejected";
+export type ModerationStatus = "pending" | "clean" | "flagged" | "rejected";
 
 @Entity({ name: "uploads" })
 export class Upload extends BaseEntity {

@@ -48,18 +48,14 @@ export class AddMediaPipeline1766200000000 implements MigrationInterface {
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
-    await queryRunner.query(
-      `ALTER TABLE "uploads" DROP COLUMN "raw_bucket"`
-    );
+    await queryRunner.query(`ALTER TABLE "uploads" DROP COLUMN "raw_bucket"`);
     await queryRunner.query(
       `ALTER TABLE "uploads" DROP COLUMN "moderation_score"`
     );
     await queryRunner.query(
       `ALTER TABLE "uploads" DROP COLUMN "moderation_status"`
     );
-    await queryRunner.query(
-      `ALTER TABLE "uploads" DROP COLUMN "exif_data"`
-    );
+    await queryRunner.query(`ALTER TABLE "uploads" DROP COLUMN "exif_data"`);
     await queryRunner.query(
       `ALTER TABLE "uploads" DROP COLUMN "exif_scrubbed"`
     );
@@ -69,9 +65,7 @@ export class AddMediaPipeline1766200000000 implements MigrationInterface {
     await queryRunner.query(
       `ALTER TABLE "uploads" DROP COLUMN "processed_file_path"`
     );
-    await queryRunner.query(
-      `ALTER TABLE "uploads" DROP COLUMN "media_status"`
-    );
+    await queryRunner.query(`ALTER TABLE "uploads" DROP COLUMN "media_status"`);
     await queryRunner.query(
       `ALTER TABLE "uploads" DROP COLUMN "raw_file_path"`
     );

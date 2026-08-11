@@ -108,9 +108,7 @@ export class UploadsController {
       const s3Client = new S3Client({
         region: process.env.AWS_REGION || "us-west-2",
       });
-      const bucket =
-        upload.rawBucket ||
-        process.env.UPLOAD_S3_BUCKET!;
+      const bucket = upload.rawBucket || process.env.UPLOAD_S3_BUCKET!;
 
       return extractExifAndReview(
         { s3Client: s3Client as any, bucket },

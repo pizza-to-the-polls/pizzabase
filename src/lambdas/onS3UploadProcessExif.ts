@@ -52,9 +52,7 @@ export async function handler(event: S3Event): Promise<void> {
       const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
       const bucket = record.s3.bucket.name;
 
-      console.log(
-        `Processing EXIF for s3://${bucket}/${key}`
-      );
+      console.log(`Processing EXIF for s3://${bucket}/${key}`);
 
       // 1. Read first 64KB from S3
       let initialBuffer: Buffer;
@@ -136,10 +134,7 @@ export async function handler(event: S3Event): Promise<void> {
             .promise();
           console.log(`Wrote scrubbed copy to ${SCRUBBED_BUCKET}/${key}`);
         } catch (err) {
-          console.error(
-            `Failed to write scrubbed copy for ${key}:`,
-            err
-          );
+          console.error(`Failed to write scrubbed copy for ${key}:`, err);
         }
       }
 
@@ -160,9 +155,7 @@ export async function handler(event: S3Event): Promise<void> {
           );
 
           if (result.rowCount > 0) {
-            console.log(
-              `Stored EXIF data for upload id=${result.rows[0].id}`
-            );
+            console.log(`Stored EXIF data for upload id=${result.rows[0].id}`);
           } else {
             console.log(
               `No upload found for key=${key} – may be a new upload pending form submission`

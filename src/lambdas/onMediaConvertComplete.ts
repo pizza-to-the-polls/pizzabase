@@ -82,9 +82,7 @@ async function callPizzabaseCallback(
 export async function handler(event: MediaConvertEvent): Promise<void> {
   const { detail } = event;
 
-  console.log(
-    `MediaConvert job ${detail.jobId} status: ${detail.status}`
-  );
+  console.log(`MediaConvert job ${detail.jobId} status: ${detail.status}`);
 
   if (detail.status !== "COMPLETE") {
     if (detail.status === "ERROR") {
@@ -125,9 +123,7 @@ export async function handler(event: MediaConvertEvent): Promise<void> {
     );
 
     if (result.rowCount === 0) {
-      console.log(
-        `No upload found for MediaConvert job ${detail.jobId}`
-      );
+      console.log(`No upload found for MediaConvert job ${detail.jobId}`);
       return;
     }
 
@@ -178,9 +174,7 @@ export async function handler(event: MediaConvertEvent): Promise<void> {
       );
       await callPizzabaseCallback(uploadId, processedPath, "ready");
     } else {
-      console.error(
-        `No output files found for job ${detail.jobId}`
-      );
+      console.error(`No output files found for job ${detail.jobId}`);
     }
   } catch (err) {
     console.error(`Error processing MediaConvert completion:`, err);
