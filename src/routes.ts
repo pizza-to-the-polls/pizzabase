@@ -133,6 +133,12 @@ export const Routes = [
     action: "getExif",
   },
   {
+    method: "post",
+    route: "/uploads/media-format-callback",
+    controller: UploadsController,
+    action: "mediaFormatCallback",
+  },
+  {
     method: "get",
     route: "/uploads/:fileName/sightengine",
     controller: SightEngineController,
