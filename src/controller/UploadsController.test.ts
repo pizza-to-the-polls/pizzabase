@@ -305,7 +305,7 @@ describe("#getExif", () => {
   function authRequest(fName: string, includeReview = true) {
     return http_mocks.createRequest({
       method: "GET",
-      url: `/uploads/exif/${fName}`,
+      url: `/uploads/${fName}/exif`,
       params: { fileName: fName },
       query: includeReview ? { includeReview: "true" } : {},
       headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
@@ -482,7 +482,7 @@ describe("#getExif", () => {
     await controller.getExif(
       http_mocks.createRequest({
         method: "GET",
-        url: `/uploads/exif/${fileName}`,
+        url: `/uploads/${fileName}/exif`,
         params: { fileName },
       }),
       response,
@@ -497,7 +497,7 @@ describe("#getExif", () => {
     await controller.getExif(
       http_mocks.createRequest({
         method: "GET",
-        url: `/uploads/exif/${fileName}`,
+        url: `/uploads/${fileName}/exif`,
         params: { fileName },
         headers: { Authorization: "Basic badkey" },
       }),
@@ -513,7 +513,7 @@ describe("#getExif", () => {
     await controller.getExif(
       http_mocks.createRequest({
         method: "GET",
-        url: `/uploads/exif/not-real.jpg`,
+        url: `/uploads/not-real.jpg/exif`,
         params: { fileName: "not-real.jpg" },
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
