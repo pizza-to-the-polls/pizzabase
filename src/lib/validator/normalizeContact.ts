@@ -5,8 +5,12 @@ export const isValidEmail = (email?: string): boolean =>
 
 const PHONE_REGEX = /^[+]?(1\-|1\s|1|\d{3}\-|\d{3}\s|)?((\(\d{3}\))|\d{3})(\-|\s)?(\d{3})(\-|\s)?(\d{4})$/;
 
-const isValidPhone = (phone?: string): boolean =>
+export const isValidPhone = (phone?: string): boolean =>
   (phone || "").match(PHONE_REGEX) !== null;
+
+export const normalizePhone = (phone: string): string => {
+  return phone.replace(/[^\d+]/g, "");
+};
 
 const isValidContact = (contact?: string): boolean =>
   isValidPhone(contact) || isValidEmail(contact);
