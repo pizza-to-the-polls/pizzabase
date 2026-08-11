@@ -89,12 +89,7 @@ async function processImage(
   const longestEdge = Math.max(
     metadata.width || 0,
     metadata.height || 0,
-    metadata.pages
-      ? Math.max(
-          metadata.pageHeight || 0,
-          metadata.width || 0
-        )
-      : 0
+    metadata.pages ? Math.max(metadata.pageHeight || 0, metadata.width || 0) : 0
   );
 
   const needsResize = longestEdge > IMAGE_MAX_DIMENSION;
@@ -292,9 +287,7 @@ export async function handler(event: S3Event): Promise<void> {
       const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
       const bucket = record.s3.bucket.name;
 
-      console.log(
-        `Processing media format for s3://${bucket}/${key}`
-      );
+      console.log(`Processing media format for s3://${bucket}/${key}`);
 
       // Determine content type from S3 metadata or extension
       let contentType: string | undefined;

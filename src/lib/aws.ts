@@ -4,8 +4,7 @@ import { UPLOAD_CONTENT_TYPES } from "./validator";
 
 const s3 = new aws.S3({ region: "us-west-2" });
 
-const RAW_UPLOADS_BUCKET =
-  process.env.RAW_UPLOADS_BUCKET || "raw-uploads";
+const RAW_UPLOADS_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw-uploads";
 const MAX_FILE_BYTES = 52_428_800; // 50 MB
 
 interface Presigned {

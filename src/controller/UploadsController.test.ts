@@ -904,7 +904,10 @@ describe("#getExif", () => {
         body: {
           id: upload.id,
           status: "ready",
-          processed_file_path: { webp: "processed/test.webp", jpeg: "processed/test.jpg" },
+          processed_file_path: {
+            webp: "processed/test.webp",
+            jpeg: "processed/test.jpg",
+          },
         },
       }),
       response,

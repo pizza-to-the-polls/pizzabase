@@ -612,10 +612,7 @@ export function isHeif(buffer: Buffer): boolean {
  * Check whether the buffer starts with an ISO BMFF container with one of the
  * given compatible brands.
  */
-export function isIsoBmff(
-  buffer: Buffer,
-  brands: string[]
-): boolean {
+export function isIsoBmff(buffer: Buffer, brands: string[]): boolean {
   if (buffer.length < 12) return false;
   // First 4 bytes: box size (or 1 for extended)
   let off = 0;
