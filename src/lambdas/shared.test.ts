@@ -1,4 +1,4 @@
-import { scrubExifData } from "../../lambdas/shared";
+import { scrubExifData } from "./shared";
 
 describe("scrubExifData", () => {
   it("removes GPSInfo group entirely", () => {
@@ -50,9 +50,8 @@ describe("scrubExifData", () => {
     };
 
     const cleaned = scrubExifData(data);
-    const photo = cleaned.Photo as any;
-    expect(photo.CameraSerialNumber).toBeUndefined();
-    expect(photo.InternalSerialNumber).toBeUndefined();
+    // When all properties in a group are stripped, the group itself is removed.
+    expect(cleaned.Photo).toBeUndefined();
   });
 
   it("removes timestamp tags", () => {
