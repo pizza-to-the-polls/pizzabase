@@ -11,10 +11,12 @@ import { Order } from "./entity/Order";
 import { Report } from "./entity/Report";
 import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
+import { BannedPhoneNumber } from "./entity/BannedPhoneNumber";
 
 const entities = [
   Action,
   APIKey,
+  BannedPhoneNumber,
   Donation,
   Location,
   Order,
