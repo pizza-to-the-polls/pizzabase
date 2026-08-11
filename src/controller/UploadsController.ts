@@ -87,11 +87,29 @@ export class UploadsController {
 
     const includeReview = request.query.includeReview === "true";
 
+    // Prefer EXIF stored in DB (faster, idempotent). Fall back to S3 read
+    // for backward compatibility with uploads that have no `exif_data`.
+    if (upload.exifData && !includeReview) {
+      return { exif: upload.exifData };
+    }
+
+    if (upload.exifData && includeReview) {
+      const { reviewExif } = require("../lib/exif/review");
+      // When returning exif_data from DB alongside a review, we pass the
+      // stored data. The review runs with no digitalSourceType (not stored)
+      // and no c2pa (not stored). This is a best-effort review from DB.
+      const review = reviewExif(upload.exifData, undefined, undefined);
+      return { exif: upload.exifData, review };
+    }
+
+    // Fallback: read from S3 (backward compat).
     try {
       const s3Client = new (require("aws-sdk").S3)({
         region: process.env.AWS_REGION || "us-west-2",
       });
-      const bucket = process.env.UPLOAD_S3_BUCKET!;
+      const bucket =
+        upload.rawBucket ||
+        process.env.UPLOAD_S3_BUCKET!;
 
       return extractExifAndReview(
         { s3Client: s3Client as any, bucket },
@@ -106,5 +124,38 @@ export class UploadsController {
         ? { exif: null, review: { assessment: "error" } }
         : { exif: null };
     }
+  }
+
+  /**
+   * Callback from the formatting Lambda when media processing completes.
+   * POST /api/uploads/media-format-callback
+   */
+  async mediaFormatCallback(
+    request: Request,
+    response: Response,
+    _next: NextFunction
+  ) {
+    const { id, processed_file_path, status } = request.body || {};
+
+    if (!id || !status) {
+      response.status(400);
+      return { errors: ["Missing required fields: id, status"] };
+    }
+
+    const upload = await Upload.findOne({ where: { id } });
+    if (!upload) {
+      response.status(404);
+      return { errors: ["Upload not found"] };
+    }
+
+    upload.mediaStatus = status === "ready" ? "ready" : "failed";
+
+    if (processed_file_path) {
+      upload.processedFilePath = processed_file_path;
+    }
+
+    await upload.save();
+
+    return { status: "ok" };
   }
 }

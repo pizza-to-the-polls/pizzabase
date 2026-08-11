@@ -852,3 +852,172 @@ describe("extractExifWithRetry (HEIF)", () => {
     expect(fetchMore).toHaveBeenCalledTimes(1);
   });
 });
+
+// ---------------------------------------------------------------------------
+// Video container (MP4/MOV) EXIF extraction via ISO BMFF
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal MP4/MOV file containing EXIF data.
+ *
+ * Uses the same ISO BMFF structure as HEIF but with a video ftyp brand
+ * ("mp42" for MP4, "qt  " for MOV). The meta/mdat structure is identical.
+ */
+function buildMinimalMp4(
+  exifTiff: Buffer,
+  brand: string = "mp42"
+): { buffer: Buffer; tiffOffset: number } {
+  // ---- ftyp box (24 bytes) ----
+  const ftypBrand = Buffer.from(brand, "ascii");
+  const ftypCompat = Buffer.from("isom", "ascii");
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftypBrand.copy(ftyp, 8);
+  ftyp.writeUInt32BE(0, 12);
+  ftypCompat.copy(ftyp, 16);
+
+  // hdlr
+  const hdlr = Buffer.alloc(33);
+  hdlr.writeUInt32BE(33, 0);
+  hdlr.write("hdlr", 4, 4, "ascii");
+  hdlr.writeUInt32BE(0, 8);
+  hdlr.writeUInt32BE(0, 12);
+  hdlr.write("pict", 16, 4, "ascii");
+  hdlr.writeUInt32BE(0, 20);
+  hdlr.writeUInt32BE(0, 24);
+  hdlr.writeUInt32BE(0, 28);
+  hdlr[32] = 0;
+
+  // iloc
+  const iloc = Buffer.alloc(30);
+  iloc.writeUInt32BE(30, 0);
+  iloc.write("iloc", 4, 4, "ascii");
+  iloc.writeUInt32BE(0, 8);
+  iloc[12] = 0x44;
+  iloc[13] = 0x00;
+  iloc.writeUInt16BE(1, 14);
+  iloc.writeUInt16BE(1, 16);
+  iloc.writeUInt16BE(0, 18);
+  iloc.writeUInt16BE(1, 20);
+  iloc.writeUInt32BE(exifTiff.length, 26);
+
+  // infe
+  const infe = Buffer.alloc(27);
+  infe.writeUInt32BE(27, 0);
+  infe.write("infe", 4, 4, "ascii");
+  infe.writeUInt32BE(0x02000000, 8);
+  infe.writeUInt32BE(1, 12);
+  infe.writeUInt16BE(0, 16);
+  infe.write("Exif", 18, 4, "ascii");
+  infe.write("Exif\0", 22, 5, "ascii");
+
+  // iinf
+  const iinf = Buffer.alloc(41);
+  iinf.writeUInt32BE(41, 0);
+  iinf.write("iinf", 4, 4, "ascii");
+  iinf.writeUInt32BE(0, 8);
+  iinf.writeUInt16BE(1, 12);
+  infe.copy(iinf, 14);
+
+  // meta
+  const meta = Buffer.alloc(116);
+  meta.writeUInt32BE(116, 0);
+  meta.write("meta", 4, 4, "ascii");
+  meta.writeUInt32BE(0, 8);
+  hdlr.copy(meta, 12);
+  iloc.copy(meta, 45);
+  iinf.copy(meta, 75);
+
+  // mdat
+  const mdatSize = 8 + exifTiff.length;
+  const mdat = Buffer.alloc(mdatSize);
+  mdat.writeUInt32BE(mdatSize, 0);
+  mdat.write("mdat", 4, 4, "ascii");
+  exifTiff.copy(mdat, 8);
+
+  const buffer = Buffer.concat([ftyp, meta, mdat]);
+  const tiffOffset = 24 + 116 + 8;
+  buffer.writeUInt32BE(tiffOffset, 91);
+
+  return { buffer, tiffOffset };
+}
+
+describe("extractExifFromHeif (video containers)", () => {
+  const brooklynTiff = extractExifFromJpeg(brooklynJpeg).tiff!;
+  const { buffer: validMp4 } = buildMinimalMp4(brooklynTiff, "mp42");
+  const { buffer: validMov } = buildMinimalMp4(brooklynTiff, "qt  ");
+
+  it("extracts TIFF from an MP4 container (mp42 brand)", () => {
+    const result = extractExifFromHeif(validMp4);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed).toBeDefined();
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("extracts TIFF from a MOV container (qt brand)", () => {
+    const result = extractExifFromHeif(validMov);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed).toBeDefined();
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("routes MP4 through extractExif", () => {
+    const result = extractExif(validMp4);
+    expect(result).not.toBeNull();
+    expect(Buffer.isBuffer(result!)).toBe(true);
+  });
+
+  it("routes MOV through extractExif", () => {
+    const result = extractExif(validMov);
+    expect(result).not.toBeNull();
+    expect(Buffer.isBuffer(result!)).toBe(true);
+  });
+
+  it("extractExifWithRetry works for MP4 containers", async () => {
+    const fetchMore = jest.fn<Promise<Buffer | null>, [number, number]>();
+    const result = await extractExifWithRetry(validMp4, 0, fetchMore);
+    expect(result).not.toBeNull();
+    expect(fetchMore).not.toHaveBeenCalled();
+  });
+
+  it("extractExifWithRetry works for MOV containers", async () => {
+    const fetchMore = jest.fn<Promise<Buffer | null>, [number, number]>();
+    const result = await extractExifWithRetry(validMov, 0, fetchMore);
+    expect(result).not.toBeNull();
+    expect(fetchMore).not.toHaveBeenCalled();
+  });
+
+  it("returns null for an MP4 with no EXIF item", () => {
+    const noExif = Buffer.from(validMp4);
+    // Replace "Exif" item_type in infe with "xxxx"
+    // infe at: ftyp(24)+metaFullBox(12)+hdlr(33)+iloc(30)+iinfFullBox(12)+entryCount(2) = 113
+    // item_type at 113 + 12 + 4 + 2 = 131
+    noExif.write("xxxx", 131, 4, "ascii");
+
+    const result = extractExifFromHeif(noExif);
+    expect(result.tiff).toBeNull();
+  });
+
+  it("isAnyIsoBmff returns true for mp42, qt, isom brands", () => {
+    const { isAnyIsoBmff } = require("./extract");
+    expect(isAnyIsoBmff(validMp4)).toBe(true);
+    expect(isAnyIsoBmff(validMov)).toBe(true);
+
+    const { buffer: isomBuf } = buildMinimalMp4(brooklynTiff, "isom");
+    expect(isAnyIsoBmff(isomBuf)).toBe(true);
+  });
+
+  it("isAnyIsoBmff returns false for non-ISO BMFF data", () => {
+    const { isAnyIsoBmff } = require("./extract");
+    expect(isAnyIsoBmff(brooklynJpeg)).toBe(false);
+    expect(isAnyIsoBmff(losAngelesPng)).toBe(false);
+    expect(isAnyIsoBmff(Buffer.from("garbage"))).toBe(false);
+  });
+});

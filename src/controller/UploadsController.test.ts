@@ -801,4 +801,175 @@ describe("#getExif", () => {
     // truncatedJpeg has no C2PA, so c2pa is present with detected: false
     expect(body.review.c2pa).toEqual({ detected: false, label: null });
   });
+
+  // -----------------------------------------------------------------------
+  // getExif reads from exif_data JSONB (DB pathway)
+  // -----------------------------------------------------------------------
+
+  it("reads EXIF from exif_data JSONB column when available (no review)", async () => {
+    const storedExif = {
+      Image: { Make: "Fuji", Model: "X-T5", Orientation: 1 },
+      Photo: {
+        ExposureTime: 0.002,
+        FNumber: 4,
+        DateTimeOriginal: "2024:06:01 08:00:00",
+      },
+    };
+
+    // Store exif_data on the upload directly via the repository.
+    const repo = require("typeorm").getRepository(Upload);
+    await repo.update(upload.id, { exifData: storedExif });
+
+    // Refresh the upload from DB.
+    const uploadWithExif = await Upload.findOne({
+      where: { id: upload.id },
+    });
+    expect(uploadWithExif!.exifData).toEqual(storedExif);
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName, false),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).toEqual(storedExif);
+    expect(body.review).toBeUndefined();
+  });
+
+  it("reads EXIF from exif_data JSONB column with review", async () => {
+    const storedExif = {
+      Image: {
+        Make: "Apple",
+        Model: "iPhone 15 Pro",
+        DateTime: "2024:06:01 08:00:00",
+      },
+      Photo: {
+        ExposureTime: 0.001,
+        FNumber: 1.8,
+        DateTimeOriginal: "2024:06:01 08:00:00",
+        FocalLength: 6,
+        PixelXDimension: 4032,
+        PixelYDimension: 3024,
+      },
+    };
+
+    const repo = require("typeorm").getRepository(Upload);
+    await repo.update(upload.id, { exifData: storedExif });
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).toEqual(storedExif);
+    expect(body.review).toBeDefined();
+    expect(body.review.assessment).toBe("likely-camera-capture");
+    expect(body.review.disclaimer).toBeDefined();
+  });
+
+  it("falls back to S3 when exif_data is null (backward compat)", async () => {
+    mockS3WithBody(brooklynJpeg);
+
+    // Upload has null exif_data by default → S3 fallback.
+    const uploadCheck = await Upload.findOne({ where: { id: upload.id } });
+    expect(uploadCheck!.exifData).toBeNull();
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName),
+      response,
+      () => undefined
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.exif).not.toBeNull();
+    expect(body.exif.Image.Orientation).toBe(1);
+    expect(body.review).toBeDefined();
+  });
+
+  // -----------------------------------------------------------------------
+  // mediaFormatCallback
+  // -----------------------------------------------------------------------
+
+  it("mediaFormatCallback sets media_status to ready and stores processed_file_path", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.mediaFormatCallback(
+      http_mocks.createRequest({
+        method: "POST",
+        body: {
+          id: upload.id,
+          status: "ready",
+          processed_file_path: { webp: "processed/test.webp", jpeg: "processed/test.jpg" },
+        },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toEqual({ status: "ok" });
+
+    const updated = await Upload.findOne({ where: { id: upload.id } });
+    expect(updated!.mediaStatus).toBe("ready");
+    expect(updated!.processedFilePath).toEqual({
+      webp: "processed/test.webp",
+      jpeg: "processed/test.jpg",
+    });
+  });
+
+  it("mediaFormatCallback sets media_status to failed", async () => {
+    const response = http_mocks.createResponse();
+    await controller.mediaFormatCallback(
+      http_mocks.createRequest({
+        method: "POST",
+        body: {
+          id: upload.id,
+          status: "failed",
+        },
+      }),
+      response,
+      () => undefined
+    );
+
+    const updated = await Upload.findOne({ where: { id: upload.id } });
+    expect(updated!.mediaStatus).toBe("failed");
+  });
+
+  it("mediaFormatCallback returns 400 when missing fields", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.mediaFormatCallback(
+      http_mocks.createRequest({
+        method: "POST",
+        body: {},
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(400);
+    expect(body).toEqual({ errors: ["Missing required fields: id, status"] });
+  });
+
+  it("mediaFormatCallback returns 404 for non-existent upload", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.mediaFormatCallback(
+      http_mocks.createRequest({
+        method: "POST",
+        body: {
+          id: 99999,
+          status: "ready",
+        },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toEqual({ errors: ["Upload not found"] });
+  });
 });

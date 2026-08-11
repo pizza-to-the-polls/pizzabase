@@ -9,6 +9,8 @@ export {
   extractXmpFromPng,
   extractXmpWithRetry,
   isHeif,
+  isIsoBmff,
+  isAnyIsoBmff,
   MAX_EXIF_BYTES,
 } from "./extract";
 export type {

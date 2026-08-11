@@ -269,8 +269,8 @@ export function extractExif(buffer: Buffer): Buffer | null {
     return extractExifFromPng(buffer).tiff;
   }
 
-  // HEIF/HEIC detection: starts with ftyp box containing a known brand.
-  if (isHeif(buffer)) {
+  // HEIF/HEIC/MP4/MOV detection: ISO BMFF container with ftyp box.
+  if (isAnyIsoBmff(buffer)) {
     return extractExifFromHeif(buffer).tiff;
   }
 
@@ -523,7 +523,11 @@ export function extractXmp(buffer: Buffer): string | null {
 
 // HEIF files start with an ftyp box containing a brand like "heic", "mif1",
 // "heix", "heim", "heis", "hevc", "avif", etc.
+// Video containers (MP4, MOV) use the same ISO BMFF container format with
+// different ftyp brands.
 const HEIF_BRANDS = ["heic", "mif1", "heix", "heim", "heis", "hevc", "avif"];
+const VIDEO_BMFF_BRANDS = ["mp42", "mp41", "isom", "qt  ", "MSNV", "avc1"];
+const ALL_ISO_BMFF_BRANDS = [...HEIF_BRANDS, ...VIDEO_BMFF_BRANDS];
 
 const HEIF_FTYP_BOX = "ftyp";
 const HEIF_META_BOX = "meta";
@@ -597,9 +601,21 @@ function readBoxHeader(buffer: Buffer, offset: number): BoxHeader | null {
 }
 
 /**
- * Check whether the buffer starts with a recognizable HEIF/AVIF ftyp box.
+ * Check whether the buffer starts with a recognizable ISO BMFF ftyp box
+ * (HEIF/HEIC/AVIF or MP4/MOV video).
  */
 export function isHeif(buffer: Buffer): boolean {
+  return isIsoBmff(buffer, HEIF_BRANDS);
+}
+
+/**
+ * Check whether the buffer starts with an ISO BMFF container with one of the
+ * given compatible brands.
+ */
+export function isIsoBmff(
+  buffer: Buffer,
+  brands: string[]
+): boolean {
   if (buffer.length < 12) return false;
   // First 4 bytes: box size (or 1 for extended)
   let off = 0;
@@ -617,7 +633,15 @@ export function isHeif(buffer: Buffer): boolean {
   const brandStart = 8 + (boxSize === 1 ? 8 : 0);
   if (brandStart + 4 > buffer.length) return false;
   const brand = buffer.toString("ascii", brandStart, brandStart + 4);
-  return HEIF_BRANDS.includes(brand);
+  return brands.includes(brand);
+}
+
+/**
+ * Check whether the buffer starts with an ISO BMFF container
+ * (HEIF/HEIC/AVIF or MP4/MOV video).
+ */
+export function isAnyIsoBmff(buffer: Buffer): boolean {
+  return isIsoBmff(buffer, ALL_ISO_BMFF_BRANDS);
 }
 
 /**
@@ -1014,7 +1038,7 @@ export async function extractExifWithRetry(
   const isPng =
     initialBuffer.length >= 8 &&
     initialBuffer.slice(0, 8).equals(PNG_SIGNATURE);
-  const isHeifContainer = isHeif(initialBuffer);
+  const isHeifContainer = isAnyIsoBmff(initialBuffer);
 
   if (!isJpeg && !isPng && !isHeifContainer) {
     return null;
