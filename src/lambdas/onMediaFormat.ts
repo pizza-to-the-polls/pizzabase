@@ -67,7 +67,7 @@ function isVideoContentType(contentType: string | undefined): boolean {
 async function processImage(
   key: string,
   body: Buffer,
-  contentType: string
+  _contentType: string
 ): Promise<Record<string, string>> {
   // Dynamic import of sharp (available in Lambda layer)
   // eslint-disable-next-line @typescript-eslint/no-var-requires
@@ -158,7 +158,7 @@ async function processImage(
 
 async function kickOffMediaConvert(
   key: string,
-  contentType: string
+  _contentType: string
 ): Promise<Record<string, string>> {
   const mediaconvert = new MediaConvert({
     region: process.env.AWS_REGION || "us-west-2",

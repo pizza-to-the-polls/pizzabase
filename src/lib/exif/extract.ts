@@ -690,7 +690,7 @@ function findChildBox<T>(
  *  5. Extracts the payload from mdat/idat at the iloc offset
  */
 export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
-  if (!isHeif(buffer)) {
+  if (!isAnyIsoBmff(buffer)) {
     return { tiff: null, truncated: false, bytesNeeded: 0 };
   }
 

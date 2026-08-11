@@ -14,11 +14,9 @@
 import { S3 } from "aws-sdk";
 import { Pool } from "pg";
 import { extractExif } from "../lib/exif/extract";
-import { scrubExifData } from "./shared";
 
 const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
 
-const RAW_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw-uploads";
 const SCRUBBED_BUCKET =
   process.env.SCRUBBED_UPLOADS_BUCKET || "scrubbed-uploads";
 

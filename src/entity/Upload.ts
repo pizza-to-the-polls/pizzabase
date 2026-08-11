@@ -132,6 +132,7 @@ export class Upload extends BaseEntity {
     upload.filePath = generatedPath;
     upload.rawFilePath = generatedPath;
     upload.rawBucket = process.env.RAW_UPLOADS_BUCKET || "raw-uploads";
+    upload.mediaStatus = "processing";
 
     await upload.save();
 
