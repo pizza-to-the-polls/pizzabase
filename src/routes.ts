@@ -126,7 +126,7 @@ export const Routes = [
   },
   {
     method: "get",
-    route: "/uploads/exif/:fileName",
+    route: "/uploads/:fileName/exif",
     controller: UploadsController,
     action: "getExif",
   },
