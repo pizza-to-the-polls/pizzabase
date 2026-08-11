@@ -4,6 +4,7 @@ import { UploadsController } from "./UploadsController";
 import { Upload } from "../entity/Upload";
 import { Location } from "../entity/Location";
 import { FILE_TYPE_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
+import { AppDataSource } from "../data-source";
 
 import {
   brooklynJpeg,
@@ -817,7 +818,7 @@ describe("#getExif", () => {
     };
 
     // Store exif_data on the upload directly via the repository.
-    const repo = require("typeorm").getRepository(Upload);
+    const repo = AppDataSource.getRepository(Upload);
     await repo.update(upload.id, { exifData: storedExif });
 
     // Refresh the upload from DB.
@@ -855,8 +856,8 @@ describe("#getExif", () => {
       },
     };
 
-    const repo = require("typeorm").getRepository(Upload);
-    await repo.update(upload.id, { exifData: storedExif });
+    const repo2 = AppDataSource.getRepository(Upload);
+    await repo2.update(upload.id, { exifData: storedExif });
 
     const response = http_mocks.createResponse();
     const body = (await controller.getExif(
