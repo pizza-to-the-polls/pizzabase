@@ -29,6 +29,10 @@ beforeAll(async () => {
   process.env.TWITTER_ACCESS_TOKEN = "test-twitter-access-token";
   process.env.TWITTER_ACCESS_SECRET = "test-twitter-access-secret";
 
+  // Threads / Meta
+  process.env.THREADS_ACCESS_TOKEN = "test-threads-access-token";
+  process.env.THREADS_USER_ID = "test-threads-user-id";
+
   process.env.STATIC_SITE = "https://polls.pizza";
   process.env.UPLOAD_S3_BUCKET = "reports.polls.pizza";
 });

@@ -1,6 +1,7 @@
 import type { Order } from "../entity/Order";
 import { blueskyPost } from "./bluesky";
 import { twitterPost } from "./twitter";
+import { threadsPost } from "./threads";
 import { renderMessage } from "./message-templates";
 import { collectMedia } from "./media";
 
@@ -29,5 +30,8 @@ export async function socialPost(order: Order): Promise<void> {
   );
   twitterPost(order, text, mediaUrls).catch((err) =>
     console.error("Twitter post failed:", err)
+  );
+  threadsPost(order, text, mediaUrls).catch((err) =>
+    console.error("Threads post failed:", err)
   );
 }

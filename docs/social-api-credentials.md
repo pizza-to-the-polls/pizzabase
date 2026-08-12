@@ -16,11 +16,11 @@ token that can be revoked independently.
 
 ### 2. Environment variables
 
-| Variable | Value |
-|----------|-------|
-| `BSKY_PDS_URL` | `https://bsky.social` (default PDS — only change if using a custom PDS) |
-| `BSKY_HANDLE` | Your full handle, e.g. `polls.pizza` (without the `@`) |
-| `BSKY_APP_PASSWORD` | The app password from step 5 (format: `xxxx-xxxx-xxxx-xxxx`) |
+| Variable            | Value                                                                   |
+| ------------------- | ----------------------------------------------------------------------- |
+| `BSKY_PDS_URL`      | `https://bsky.social` (default PDS — only change if using a custom PDS) |
+| `BSKY_HANDLE`       | Your full handle, e.g. `polls.pizza` (without the `@`)                  |
+| `BSKY_APP_PASSWORD` | The app password from step 5 (format: `xxxx-xxxx-xxxx-xxxx`)            |
 
 ### 3. Test it
 
@@ -80,12 +80,12 @@ These four values are long-lived and do not expire unless revoked.
 
 ### 4. Environment variables
 
-| Variable | Description | Source |
-|----------|-------------|--------|
-| `TWITTER_API_KEY` | Consumer key / API key | From app's Keys and Tokens |
-| `TWITTER_API_SECRET` | Consumer secret / API key secret | From app's Keys and Tokens |
-| `TWITTER_ACCESS_TOKEN` | OAuth 1.0a access token | From app's Access Token section |
-| `TWITTER_ACCESS_SECRET` | OAuth 1.0a token secret | From app's Access Token section |
+| Variable                | Description                      | Source                          |
+| ----------------------- | -------------------------------- | ------------------------------- |
+| `TWITTER_API_KEY`       | Consumer key / API key           | From app's Keys and Tokens      |
+| `TWITTER_API_SECRET`    | Consumer secret / API key secret | From app's Keys and Tokens      |
+| `TWITTER_ACCESS_TOKEN`  | OAuth 1.0a access token          | From app's Access Token section |
+| `TWITTER_ACCESS_SECRET` | OAuth 1.0a token secret          | From app's Access Token section |
 
 ### 5. Test it
 
@@ -155,10 +155,10 @@ Note the `id` field — this is your `THREADS_USER_ID`.
 
 ### 4. Environment variables
 
-| Variable | Description | Source |
-|----------|-------------|--------|
+| Variable               | Description             | Source      |
+| ---------------------- | ----------------------- | ----------- |
 | `THREADS_ACCESS_TOKEN` | Long-lived access token | From step 2 |
-| `THREADS_USER_ID` | Your Threads user ID | From step 3 |
+| `THREADS_USER_ID`      | Your Threads user ID    | From step 3 |
 
 ### 5. Test it
 
