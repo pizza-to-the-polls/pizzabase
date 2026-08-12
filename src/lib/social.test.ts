@@ -10,8 +10,23 @@ jest.mock("./twitter", () => ({
   twitterPost: jest.fn(),
 }));
 
+jest.mock("./message-templates", () => ({
+  renderMessage: jest.fn().mockReturnValue("Shared post text"),
+}));
+
+jest.mock("./media", () => ({
+  collectMedia: jest.fn().mockResolvedValue({
+    images: ["https://polls.pizza/uploads/test.jpg"],
+    videos: [],
+    alt: "Long line at 123 Main St",
+  }),
+}));
+
+import { renderMessage } from "./message-templates";
+import { collectMedia } from "./media";
+
 describe("socialPost", () => {
-  const mockOrder = { id: 123 } as any;
+  const mockOrder = { id: 123, location: { address: "123 Main St" } } as any;
 
   beforeEach(() => {
     jest.clearAllMocks();
@@ -22,35 +37,95 @@ describe("socialPost", () => {
     jest.restoreAllMocks();
   });
 
-  it("calls both blueskyPost and twitterPost with the order", () => {
+  it("calls renderMessage once with the order", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
 
-    socialPost(mockOrder);
+    await socialPost(mockOrder);
 
-    expect(blueskyPost).toHaveBeenCalledWith(mockOrder);
-    expect(twitterPost).toHaveBeenCalledWith(mockOrder);
+    expect(renderMessage).toHaveBeenCalledTimes(1);
+    expect(renderMessage).toHaveBeenCalledWith(mockOrder);
   });
 
-  it("does not throw when blueskyPost rejects", () => {
+  it("calls collectMedia once with the order", async () => {
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder);
+
+    expect(collectMedia).toHaveBeenCalledTimes(1);
+    expect(collectMedia).toHaveBeenCalledWith(mockOrder);
+  });
+
+  it("calls both blueskyPost and twitterPost with shared text and media", async () => {
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder);
+
+    const expectedMedia = {
+      images: ["https://polls.pizza/uploads/test.jpg"],
+      videos: [],
+      alt: "Long line at 123 Main St",
+    };
+
+    expect(blueskyPost).toHaveBeenCalledWith(
+      mockOrder,
+      "Shared post text",
+      expectedMedia
+    );
+    expect(twitterPost).toHaveBeenCalledWith(
+      mockOrder,
+      "Shared post text",
+      expectedMedia
+    );
+  });
+
+  it("does not throw when collectMedia rejects", async () => {
+    (collectMedia as jest.Mock).mockRejectedValue(new Error("Media error"));
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder);
+
+    // Should still call platform posts with default empty media
+    expect(blueskyPost).toHaveBeenCalledWith(mockOrder, "Shared post text", {
+      images: [],
+      videos: [],
+      alt: "",
+    });
+    expect(twitterPost).toHaveBeenCalledWith(mockOrder, "Shared post text", {
+      images: [],
+      videos: [],
+      alt: "",
+    });
+  });
+
+  it("does not throw when blueskyPost rejects", async () => {
     (blueskyPost as jest.Mock).mockRejectedValue(new Error("BlueSky down"));
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
 
-    expect(() => socialPost(mockOrder)).not.toThrow();
+    await socialPost(mockOrder);
+
+    // Should not throw — fire-and-forget semantics
   });
 
-  it("does not throw when twitterPost rejects", () => {
+  it("does not throw when twitterPost rejects", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockRejectedValue(new Error("Twitter down"));
 
-    expect(() => socialPost(mockOrder)).not.toThrow();
+    await socialPost(mockOrder);
+
+    // Should not throw — fire-and-forget semantics
   });
 
-  it("does not throw when both reject", () => {
+  it("does not throw when both reject", async () => {
     (blueskyPost as jest.Mock).mockRejectedValue(new Error("BlueSky down"));
     (twitterPost as jest.Mock).mockRejectedValue(new Error("Twitter down"));
 
-    expect(() => socialPost(mockOrder)).not.toThrow();
+    await socialPost(mockOrder);
+
+    // Should not throw — fire-and-forget semantics
   });
 
   it("logs errors when blueskyPost rejects", async () => {
@@ -58,7 +133,7 @@ describe("socialPost", () => {
     (blueskyPost as jest.Mock).mockRejectedValue(error);
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
 
-    socialPost(mockOrder);
+    await socialPost(mockOrder);
 
     // Wait for microtask to flush the .catch handler
     await new Promise(setImmediate);
@@ -71,7 +146,7 @@ describe("socialPost", () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockRejectedValue(error);
 
-    socialPost(mockOrder);
+    await socialPost(mockOrder);
 
     await new Promise(setImmediate);
 
