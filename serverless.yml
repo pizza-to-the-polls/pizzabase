@@ -51,6 +51,9 @@ provider:
     BSKY_HANDLE: ${env:BSKY_HANDLE}
     BSKY_APP_PASSWORD: ${env:BSKY_APP_PASSWORD}
 
+    THREADS_ACCESS_TOKEN: ${env:THREADS_ACCESS_TOKEN}
+    THREADS_USER_ID: ${env:THREADS_USER_ID}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:

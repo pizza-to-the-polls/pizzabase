@@ -1,6 +1,7 @@
 import { socialPost } from "./social";
 import { blueskyPost } from "./bluesky";
 import { twitterPost } from "./twitter";
+import { threadsPost } from "./threads";
 
 jest.mock("./bluesky", () => ({
   blueskyPost: jest.fn(),
@@ -8,6 +9,10 @@ jest.mock("./bluesky", () => ({
 
 jest.mock("./twitter", () => ({
   twitterPost: jest.fn(),
+}));
+
+jest.mock("./threads", () => ({
+  threadsPost: jest.fn(),
 }));
 
 jest.mock("./message-templates", () => ({
@@ -40,6 +45,7 @@ describe("socialPost", () => {
   it("calls renderMessage once with the order", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
@@ -50,6 +56,7 @@ describe("socialPost", () => {
   it("calls collectMedia once with the order", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
@@ -57,9 +64,10 @@ describe("socialPost", () => {
     expect(collectMedia).toHaveBeenCalledWith(mockOrder);
   });
 
-  it("calls both blueskyPost and twitterPost with shared text and media", async () => {
+  it("calls blueskyPost, twitterPost, and threadsPost with shared text and media", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
@@ -79,12 +87,18 @@ describe("socialPost", () => {
       "Shared post text",
       expectedMedia
     );
+    expect(threadsPost).toHaveBeenCalledWith(
+      mockOrder,
+      "Shared post text",
+      expectedMedia
+    );
   });
 
   it("does not throw when collectMedia rejects", async () => {
     (collectMedia as jest.Mock).mockRejectedValue(new Error("Media error"));
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
@@ -99,11 +113,17 @@ describe("socialPost", () => {
       videos: [],
       alt: "",
     });
+    expect(threadsPost).toHaveBeenCalledWith(mockOrder, "Shared post text", {
+      images: [],
+      videos: [],
+      alt: "",
+    });
   });
 
   it("does not throw when blueskyPost rejects", async () => {
     (blueskyPost as jest.Mock).mockRejectedValue(new Error("BlueSky down"));
     (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
@@ -113,15 +133,27 @@ describe("socialPost", () => {
   it("does not throw when twitterPost rejects", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockRejectedValue(new Error("Twitter down"));
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
     // Should not throw — fire-and-forget semantics
   });
 
-  it("does not throw when both reject", async () => {
+  it("does not throw when threadsPost rejects", async () => {
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockRejectedValue(new Error("Threads down"));
+
+    await socialPost(mockOrder);
+
+    // Should not throw — fire-and-forget semantics
+  });
+
+  it("does not throw when all three reject", async () => {
     (blueskyPost as jest.Mock).mockRejectedValue(new Error("BlueSky down"));
     (twitterPost as jest.Mock).mockRejectedValue(new Error("Twitter down"));
+    (threadsPost as jest.Mock).mockRejectedValue(new Error("Threads down"));
 
     await socialPost(mockOrder);
 
@@ -145,11 +177,25 @@ describe("socialPost", () => {
     const error = new Error("Twitter error");
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockRejectedValue(error);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
 
     await socialPost(mockOrder);
 
     await new Promise(setImmediate);
 
     expect(console.error).toHaveBeenCalledWith("Twitter post failed:", error);
+  });
+
+  it("logs errors when threadsPost rejects", async () => {
+    const error = new Error("Threads error");
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockRejectedValue(error);
+
+    await socialPost(mockOrder);
+
+    await new Promise(setImmediate);
+
+    expect(console.error).toHaveBeenCalledWith("Threads post failed:", error);
   });
 });
