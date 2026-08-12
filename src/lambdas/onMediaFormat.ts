@@ -1,25 +1,26 @@
 /**
  * Lambda: on-media-format
  *
- * Triggered by S3 ObjectCreated:* on the scrubbed-uploads bucket.
+ * Triggered by S3 ObjectCreated:* on the raw.polls.pizza bucket.
  *
  * Routes based on content type:
- *   Image path: resizes with sharp, outputs WebP + JPEG, strips metadata.
+ *   Image path: resizes with sharp, outputs WebP + JPEG to reports.polls.pizza.
  *   Video path: kicks off AWS MediaConvert job (H.264/AAC MP4, max 1080p).
  *
- * Then calls pizzabase callback: POST /api/uploads/media-format-callback
+ * Updates DB: media_status = 'ready' (or 'failed'), processed_file_path.
+ * All metadata is stripped by sharp during re-encode.
  */
 
 import { S3, MediaConvert } from "aws-sdk";
-import { Pool } from "pg";
+import { initializeDataSource } from "../data-source";
+import { Upload } from "../entity/Upload";
 import * as path from "path";
 
 const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
 
-const SCRUBBED_BUCKET =
-  process.env.SCRUBBED_UPLOADS_BUCKET || "scrubbed-uploads";
 const PROCESSED_BUCKET =
-  process.env.PROCESSED_UPLOADS_BUCKET || "processed-uploads";
+  process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
+const RAW_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
 
 const IMAGE_MAX_DIMENSION = parseInt(
   process.env.IMAGE_MAX_DIMENSION || "1920",
@@ -27,15 +28,12 @@ const IMAGE_MAX_DIMENSION = parseInt(
 );
 const IMAGE_QUALITY = parseInt(process.env.IMAGE_QUALITY || "85", 10);
 
-const PIZZABASE_API_URL =
-  process.env.PIZZABASE_API_URL || "https://base.polls.pizza";
-
-const VIDEO_MIME_TYPES = new Set([
-  "video/mp4",
-  "video/quicktime",
-  "video/webm",
-  "video/x-msvideo",
+const IMAGE_EXTENSIONS = new Set([
+  "jpg", "jpeg", "png", "gif", "webp", "heic", "heif",
 ]);
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm"]);
+
+let mediaConvertEndpoint: string | null = null;
 
 interface S3EventRecord {
   s3: {
@@ -48,67 +46,144 @@ interface S3Event {
   Records: S3EventRecord[];
 }
 
-function getDbPool(): Pool {
-  return new Pool({
-    host: process.env.DB_HOST || "localhost",
-    port: parseInt(process.env.DB_PORT || "5432", 10),
-    database: process.env.DB_NAME || "pizzabase",
-    user: process.env.DB_USER || "postgres",
-    password: process.env.DB_PASSWORD,
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
-  });
+export async function handler(event: S3Event): Promise<void> {
+  await initializeDataSource();
+
+  for (const record of event.Records) {
+    const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
+
+    console.log(`[on-media-format] s3://${record.s3.bucket.name}/${key}`);
+
+    const fileExt = key.split(".").pop()?.toLowerCase() || "";
+
+    // Find the upload by raw_file_path
+    const upload = await Upload.findOne({ where: { rawFilePath: key } as any });
+    if (!upload) {
+      console.log(`[on-media-format] No upload record for ${key} — may not be submitted yet`);
+      continue;
+    }
+
+    try {
+      upload.mediaStatus = "processing";
+      await upload.save();
+
+      if (IMAGE_EXTENSIONS.has(fileExt)) {
+        const result = await processImage(key, upload.id);
+        upload.processedFilePath = result;
+        // file_path → primary processed output (webp for images)
+        if (result.webp) {
+          upload.filePath = result.webp.replace(
+            `https://${PROCESSED_BUCKET}.s3.amazonaws.com/`,
+            ""
+          );
+        }
+        upload.mediaStatus = "ready";
+        await upload.save();
+        console.log(
+          `[on-media-format] Image ${key} processed:`,
+          JSON.stringify(result)
+        );
+      } else if (VIDEO_EXTENSIONS.has(fileExt)) {
+        await transcodeVideo(key, upload.id);
+        // MediaConvert is async — on-mediaconvert-complete will update status
+        console.log(`[on-media-format] MediaConvert job started for ${key}`);
+      } else {
+        console.warn(`[on-media-format] Unknown extension: ${fileExt} for ${key}`);
+        upload.mediaStatus = "failed";
+        await upload.save();
+      }
+    } catch (err) {
+      console.error(`[on-media-format] Failed for ${key}:`, err);
+      try {
+        upload.mediaStatus = "failed";
+        await upload.save();
+      } catch {
+        // DB update failed too — nothing we can do
+      }
+    }
+  }
 }
 
-function isVideoContentType(contentType: string | undefined): boolean {
-  if (!contentType) return false;
-  return VIDEO_MIME_TYPES.has(contentType);
-}
+// ── Image processing (sharp) ──────────────────────────────
 
 async function processImage(
   key: string,
-  body: Buffer,
-  _contentType: string
+  uploadId: number
 ): Promise<Record<string, string>> {
-  // Dynamic import of sharp (available in Lambda layer)
+  // sharp is provided via Lambda layer
   // eslint-disable-next-line @typescript-eslint/no-var-requires
   const sharp = require("sharp");
 
-  const ext = path.extname(key).toLowerCase();
-  const baseName = path.basename(key, ext);
-  const dirName = path.dirname(key);
+  const s3Object = await s3
+    .getObject({ Bucket: RAW_BUCKET, Key: key })
+    .promise();
 
-  const image = sharp(body, {
+  if (!s3Object.Body) {
+    throw new Error(`Empty body for ${key}`);
+  }
+
+  const buffer = Buffer.isBuffer(s3Object.Body)
+    ? s3Object.Body
+    : Buffer.from(s3Object.Body as ArrayBuffer);
+
+  const ext = path.extname(key).toLowerCase();
+  const image = sharp(buffer, {
     failOnError: false,
     animated: ext === ".gif",
   });
 
   const metadata = await image.metadata();
-  const processedPath: Record<string, string> = {};
-
-  // Determine if resize is needed
-  const longestEdge = Math.max(
-    metadata.width || 0,
-    metadata.height || 0,
-    metadata.pages ? Math.max(metadata.pageHeight || 0, metadata.width || 0) : 0
-  );
-
+  const longestEdge = Math.max(metadata.width || 0, metadata.height || 0);
   const needsResize = longestEdge > IMAGE_MAX_DIMENSION;
 
-  // WebP output
-  const webpKey = `${dirName}/${baseName}.webp`;
-  let webpPipeline = image.clone();
-  if (needsResize) {
-    webpPipeline = webpPipeline.resize({
-      width: IMAGE_MAX_DIMENSION,
-      height: IMAGE_MAX_DIMENSION,
-      fit: "inside",
-      withoutEnlargement: true,
-    });
+  const prefix = `uploads/${uploadId}`;
+  const processedPath: Record<string, string> = {};
+
+  if (metadata.format === "gif") {
+    // Animated GIF: preserve animation, resize if needed
+    const resized = needsResize
+      ? await sharp(buffer, { animated: true })
+          .resize({
+            width: IMAGE_MAX_DIMENSION,
+            height: IMAGE_MAX_DIMENSION,
+            fit: "inside",
+            withoutEnlargement: true,
+          })
+          .toBuffer()
+      : buffer;
+
+    const gifKey = `${prefix}.gif`;
+    await s3
+      .putObject({
+        Bucket: PROCESSED_BUCKET,
+        Key: gifKey,
+        Body: resized,
+        ContentType: "image/gif",
+        ACL: "public-read",
+      })
+      .promise();
+
+    processedPath.gif = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${gifKey}`;
+    return processedPath;
   }
-  const webpBuffer = await webpPipeline
+
+  // Build resize pipeline if needed
+  const resizePipeline = needsResize
+    ? image.resize({
+        width: IMAGE_MAX_DIMENSION,
+        height: IMAGE_MAX_DIMENSION,
+        fit: "inside",
+        withoutEnlargement: true,
+      })
+    : image;
+
+  // WebP (primary)
+  const webpBuffer = await resizePipeline
+    .clone()
     .webp({ quality: IMAGE_QUALITY })
     .toBuffer();
 
+  const webpKey = `${prefix}.webp`;
   await s3
     .putObject({
       Bucket: PROCESSED_BUCKET,
@@ -119,23 +194,15 @@ async function processImage(
     })
     .promise();
 
-  processedPath.webp = `${PROCESSED_BUCKET}/${webpKey}`;
+  processedPath.webp = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${webpKey}`;
 
-  // JPEG fallback
-  const jpegKey = `${dirName}/${baseName}.jpg`;
-  let jpegPipeline = image.clone();
-  if (needsResize) {
-    jpegPipeline = jpegPipeline.resize({
-      width: IMAGE_MAX_DIMENSION,
-      height: IMAGE_MAX_DIMENSION,
-      fit: "inside",
-      withoutEnlargement: true,
-    });
-  }
-  const jpegBuffer = await jpegPipeline
+  // JPEG (fallback)
+  const jpegBuffer = await resizePipeline
+    .clone()
     .jpeg({ quality: IMAGE_QUALITY })
     .toBuffer();
 
+  const jpegKey = `${prefix}.jpeg`;
   await s3
     .putObject({
       Bucket: PROCESSED_BUCKET,
@@ -146,32 +213,42 @@ async function processImage(
     })
     .promise();
 
-  processedPath.jpeg = `${PROCESSED_BUCKET}/${jpegKey}`;
+  processedPath.jpeg = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${jpegKey}`;
 
   return processedPath;
 }
 
-async function kickOffMediaConvert(
-  key: string,
-  _contentType: string
-): Promise<Record<string, string>> {
-  const mediaconvert = new MediaConvert({
+// ── Video transcoding (AWS MediaConvert) ──────────────────
+
+async function transcodeVideo(key: string, uploadId: number): Promise<void> {
+  if (!mediaConvertEndpoint) {
+    const mc = new MediaConvert({
+      region: process.env.AWS_REGION || "us-west-2",
+    });
+    const data = await mc.describeEndpoints().promise();
+    mediaConvertEndpoint = data.Endpoints?.[0]?.Url || "";
+    if (!mediaConvertEndpoint) {
+      throw new Error("MediaConvert: no endpoints available");
+    }
+  }
+
+  const mediaConvert = new MediaConvert({
     region: process.env.AWS_REGION || "us-west-2",
-    endpoint: process.env.MEDIACONVERT_ENDPOINT,
+    endpoint: mediaConvertEndpoint,
   });
 
-  const ext = path.extname(key).toLowerCase();
-  const baseName = path.basename(key, ext);
-  const dirName = path.dirname(key);
+  const outputPrefix = `uploads/${uploadId}`;
 
-  const outputKey = `${dirName}/${baseName}.mp4`;
+  // Store job ID on the upload so on-mediaconvert-complete can find it
+  const upload = await Upload.findOne({ where: { id: uploadId } as any });
+  if (!upload) return;
 
-  const jobParams: MediaConvert.CreateJobRequest = {
-    Role: process.env.MEDIACONVERT_ROLE_ARN!,
+  const jobParams: MediaConvert.Types.CreateJobRequest = {
+    Role: process.env.MEDIACONVERT_ROLE_ARN || "",
     Settings: {
       Inputs: [
         {
-          FileInput: `s3://${SCRUBBED_BUCKET}/${key}`,
+          FileInput: `s3://${RAW_BUCKET}/${key}`,
           AudioSelectors: {
             "Audio Selector 1": {
               DefaultSelection: "DEFAULT",
@@ -181,36 +258,27 @@ async function kickOffMediaConvert(
       ],
       OutputGroups: [
         {
-          Name: "MP4",
           OutputGroupSettings: {
             Type: "FILE_GROUP_SETTINGS",
             FileGroupSettings: {
-              Destination: `s3://${PROCESSED_BUCKET}/${dirName}/`,
+              Destination: `s3://${PROCESSED_BUCKET}/${outputPrefix}/`,
             },
           },
           Outputs: [
             {
-              NameModifier: `/${baseName}`,
-              ContainerSettings: {
-                Container: "MP4",
-              },
+              ContainerSettings: { Container: "MP4" },
               VideoDescription: {
                 CodecSettings: {
                   Codec: "H_264",
                   H264Settings: {
-                    MaxBitrate: 5000000,
+                    MaxBitrate: 5_000_000,
                     RateControlMode: "QVBR",
-                    QvbrSettings: {
-                      QvbrQualityLevel: 7,
-                    },
-                    SceneChangeDetect: "TRANSITION_DETECTION",
-                    QualityTuningLevel: "SINGLE_PASS_HQ",
-                    CodecProfile: "BASELINE",
-                    CodecLevel: "AUTO",
+                    QualityTuningLevel: "SINGLE_PASS",
                   },
                 },
                 Width: 1920,
                 Height: 1080,
+                RespondToAfd: "NONE",
                 ScalingBehavior: "DEFAULT",
               },
               AudioDescriptions: [
@@ -220,184 +288,29 @@ async function kickOffMediaConvert(
                     AacSettings: {
                       Bitrate: 128000,
                       CodingMode: "CODING_MODE_2_0",
-                      SampleRate: 48000,
                     },
                   },
                 },
               ],
+              NameModifier: "_transcoded",
             },
           ],
         },
       ],
     },
+    UserMetadata: {
+      uploadId: String(uploadId),
+      sourceKey: key,
+    },
   };
 
+  const job = await mediaConvert.createJob(jobParams).promise();
+
+  // Store the job ID so on-mediaconvert-complete can match it
+  upload.processedFilePath = { jobId: job.Job?.Id || "" };
+  await upload.save();
+
   console.log(
-    `Creating MediaConvert job for ${key}:`,
-    JSON.stringify(jobParams, null, 2)
+    `[on-media-format] MediaConvert job ${job.Job?.Id} started for upload ${uploadId}`
   );
-
-  const job = await mediaconvert.createJob(jobParams).promise();
-
-  console.log(`MediaConvert job created: ${job.Job?.Id}`);
-
-  return {
-    mp4: `${PROCESSED_BUCKET}/${outputKey}`,
-    jobId: job.Job?.Id || "",
-    status: "processing",
-  } as Record<string, string>;
-}
-
-async function callPizzabaseCallback(
-  uploadId: number,
-  processedPath: Record<string, string> | null,
-  status: "ready" | "failed"
-): Promise<void> {
-  const body = JSON.stringify({
-    id: uploadId,
-    processed_file_path: processedPath,
-    status,
-  });
-
-  const callbackUrl = `${PIZZABASE_API_URL}/uploads/media-format-callback`;
-
-  try {
-    const response = await fetch(callbackUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-    if (!response.ok) {
-      console.error(
-        `Callback failed for upload ${uploadId}: HTTP ${response.status}`
-      );
-    } else {
-      console.log(`Callback succeeded for upload ${uploadId}`);
-    }
-  } catch (err) {
-    console.error(`Callback error for upload ${uploadId}:`, err);
-  }
-}
-
-export async function handler(event: S3Event): Promise<void> {
-  const pool = getDbPool();
-
-  try {
-    for (const record of event.Records) {
-      const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
-      const bucket = record.s3.bucket.name;
-
-      console.log(`Processing media format for s3://${bucket}/${key}`);
-
-      // Determine content type from S3 metadata or extension
-      let contentType: string | undefined;
-      try {
-        const headResp = await s3
-          .headObject({ Bucket: bucket, Key: key })
-          .promise();
-        contentType = headResp.ContentType;
-      } catch {
-        // Use extension-based detection
-        const ext = path.extname(key).toLowerCase();
-        const extToMime: Record<string, string> = {
-          ".jpg": "image/jpeg",
-          ".jpeg": "image/jpeg",
-          ".png": "image/png",
-          ".gif": "image/gif",
-          ".webp": "image/webp",
-          ".heic": "image/heic",
-          ".heif": "image/heif",
-          ".mp4": "video/mp4",
-          ".mov": "video/quicktime",
-          ".webm": "video/webm",
-        };
-        contentType = extToMime[ext] || "application/octet-stream";
-      }
-
-      // Look up the upload by raw_file_path or file_path
-      let uploadId: number | null = null;
-      try {
-        const result = await pool.query(
-          `SELECT "id" FROM "uploads"
-           WHERE "raw_file_path" = $1 OR "file_path" = $1
-           LIMIT 1`,
-          [key]
-        );
-        if (result.rowCount > 0) {
-          uploadId = result.rows[0].id;
-        }
-      } catch (err) {
-        console.error(`DB lookup error for ${key}:`, err);
-      }
-
-      if (!uploadId) {
-        console.log(`No upload found for ${key}, skipping callback`);
-        // Still process the media — the file may be from a different source.
-      }
-
-      const isVideo = isVideoContentType(contentType);
-
-      if (isVideo) {
-        // Video: kick off MediaConvert job
-        try {
-          const processedPath = await kickOffMediaConvert(key, contentType);
-          console.log(
-            `MediaConvert started for ${key}, jobId=${processedPath.jobId}`
-          );
-
-          if (uploadId) {
-            // Update DB with processing status
-            try {
-              await pool.query(
-                `UPDATE "uploads"
-                 SET "media_status" = 'processing',
-                     "processed_file_path" = $1,
-                     "updated_at" = NOW()
-                 WHERE "id" = $2`,
-                [JSON.stringify(processedPath), uploadId]
-              );
-            } catch (dbErr) {
-              console.error(`DB update error:`, dbErr);
-            }
-          }
-        } catch (err) {
-          console.error(`MediaConvert error for ${key}:`, err);
-          if (uploadId) {
-            await callPizzabaseCallback(uploadId, null, "failed");
-          }
-        }
-      } else {
-        // Image: process synchronously
-        try {
-          const resp = await s3
-            .getObject({ Bucket: bucket, Key: key })
-            .promise();
-          const body = resp.Body as Buffer;
-
-          if (!body || body.length === 0) {
-            console.log(`Empty body for ${key}`);
-            continue;
-          }
-
-          const processedPath = await processImage(key, body, contentType);
-
-          console.log(
-            `Image processed for ${key}:`,
-            JSON.stringify(processedPath)
-          );
-
-          if (uploadId) {
-            await callPizzabaseCallback(uploadId, processedPath, "ready");
-          }
-        } catch (err) {
-          console.error(`Image processing error for ${key}:`, err);
-          if (uploadId) {
-            await callPizzabaseCallback(uploadId, null, "failed");
-          }
-        }
-      }
-    }
-  } finally {
-    await pool.end();
-  }
 }

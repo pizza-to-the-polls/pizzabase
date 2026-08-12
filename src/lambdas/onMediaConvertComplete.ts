@@ -1,184 +1,91 @@
 /**
  * Lambda: on-mediaconvert-complete
  *
- * Triggered by EventBridge when an AWS MediaConvert job completes or errors.
+ * Triggered by EventBridge when a MediaConvert job changes state
+ * (COMPLETE or ERROR).
  *
- * Reads job output from S3, then calls the pizzabase callback to update
- * the upload record's media_status.
+ * Finds the Upload by job ID (stored in processed_file_path.jobId by
+ * on-media-format), builds the MP4 output URL, and updates:
+ *   media_status = 'ready' | 'failed'
+ *   processed_file_path = { mp4: "https://..." }
  */
 
-import { S3 } from "aws-sdk";
-import { Pool } from "pg";
-import * as path from "path";
-
-const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
+import { initializeDataSource } from "../data-source";
+import { Upload } from "../entity/Upload";
 
 const PROCESSED_BUCKET =
-  process.env.PROCESSED_UPLOADS_BUCKET || "processed-uploads";
-const PIZZABASE_API_URL =
-  process.env.PIZZABASE_API_URL || "https://base.polls.pizza";
+  process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 
-interface MediaConvertEvent {
-  version: string;
-  id: string;
-  "detail-type": string;
-  source: string;
-  account: string;
-  time: string;
-  region: string;
-  resources: string[];
-  detail: {
-    status: string;
-    jobId: string;
-    outputGroupDetails?: {
-      type: string;
-      outputDetails: {
-        outputFilePaths: string[];
-      }[];
-    }[];
-  };
+interface MediaConvertDetail {
+  status: "COMPLETE" | "ERROR" | "CANCELED";
+  jobId: string;
+  outputGroupDetails?: Array<{
+    outputDetails: Array<{
+      outputFilePaths: string[];
+    }>;
+  }>;
 }
 
-function getDbPool(): Pool {
-  return new Pool({
-    host: process.env.DB_HOST || "localhost",
-    port: parseInt(process.env.DB_PORT || "5432", 10),
-    database: process.env.DB_NAME || "pizzabase",
-    user: process.env.DB_USER || "postgres",
-    password: process.env.DB_PASSWORD,
-    ssl: process.env.DB_SSL === "true" ? { rejectUnauthorized: false } : false,
-  });
+interface EventBridgeEvent {
+  detail: MediaConvertDetail;
 }
 
-async function callPizzabaseCallback(
-  uploadId: number,
-  processedPath: Record<string, string> | null,
-  status: "ready" | "failed"
-): Promise<void> {
-  const body = JSON.stringify({
-    id: uploadId,
-    processed_file_path: processedPath,
-    status,
-  });
+export async function handler(event: EventBridgeEvent): Promise<void> {
+  const { status, jobId, outputGroupDetails } = event.detail;
 
-  const callbackUrl = `${PIZZABASE_API_URL}/uploads/media-format-callback`;
+  console.log(
+    `[on-mediaconvert-complete] Job ${jobId} status: ${status}`
+  );
 
-  try {
-    const resp = await fetch(callbackUrl, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body,
-    });
-    if (!resp.ok) {
-      console.error(
-        `Callback failed for upload ${uploadId}: HTTP ${resp.status}`
-      );
-    }
-  } catch (err) {
-    console.error(`Callback error:`, err);
+  if (status !== "COMPLETE" && status !== "ERROR") {
+    return; // Only handle terminal states
   }
-}
 
-export async function handler(event: MediaConvertEvent): Promise<void> {
-  const { detail } = event;
+  await initializeDataSource();
 
-  console.log(`MediaConvert job ${detail.jobId} status: ${detail.status}`);
+  // Find upload by job ID stored in processed_file_path
+  const uploads = await Upload.find();
+  const upload = uploads.find(
+    (u) =>
+      u.processedFilePath &&
+      (u.processedFilePath as Record<string, string>).jobId === jobId
+  );
 
-  if (detail.status !== "COMPLETE") {
-    if (detail.status === "ERROR") {
-      console.error(
-        `MediaConvert job ${detail.jobId} failed. Full event:`,
-        JSON.stringify(event, null, 2)
-      );
-    }
+  if (!upload) {
+    console.warn(
+      `[on-mediaconvert-complete] No upload found for job ${jobId}`
+    );
     return;
   }
 
-  // Extract output file paths from the completed job.
-  const outputPaths: string[] = [];
-  if (detail.outputGroupDetails) {
-    for (const group of detail.outputGroupDetails) {
-      if (group.type === "FILE_GROUP_SETTINGS") {
-        for (const output of group.outputDetails) {
-          for (const filePath of output.outputFilePaths) {
-            outputPaths.push(filePath);
-          }
-        }
-      }
-    }
-  }
+  if (status === "COMPLETE") {
+    // Build MP4 URL from output paths
+    const outputs = outputGroupDetails?.[0]?.outputDetails || [];
+    const mp4Path = outputs[0]?.outputFilePaths?.[0];
 
-  console.log(`Output files:`, outputPaths);
-
-  // Try to find the upload by the job ID stored in processed_file_path.
-  const pool = getDbPool();
-  try {
-    // The job ID is stored in processed_file_path.jobId during the initial
-    // MediaConvert kick-off.
-    const result = await pool.query(
-      `SELECT "id" FROM "uploads"
-       WHERE "processed_file_path"->>'jobId' = $1
-       LIMIT 1`,
-      [detail.jobId]
-    );
-
-    if (result.rowCount === 0) {
-      console.log(`No upload found for MediaConvert job ${detail.jobId}`);
-      return;
-    }
-
-    const uploadId = result.rows[0].id as number;
-
-    // Build processed_file_path from output paths.
-    const processedPath: Record<string, string> = {};
-    for (const outputPath of outputPaths) {
-      const key = outputPath.replace(`s3://${PROCESSED_BUCKET}/`, "");
-      const ext = path.extname(key).toLowerCase().replace(".", "");
-      if (ext === "mp4" || ext === "mov") {
-        processedPath[ext] = outputPath;
-      }
-    }
-
-    // If no output paths found, try to find the file in processed bucket.
-    if (Object.keys(processedPath).length === 0) {
-      // Try to find by key pattern: scrub key → processed key.
-      const uploadResult = await pool.query(
-        `SELECT "raw_file_path" FROM "uploads" WHERE "id" = $1`,
-        [uploadId]
-      );
-      if (uploadResult.rowCount > 0) {
-        const rawPath = uploadResult.rows[0].raw_file_path as string;
-        const ext = path.extname(rawPath);
-        const baseName = path.basename(rawPath, ext);
-        const dirName = path.dirname(rawPath);
-        const expectedKey = `${dirName}/${baseName}.mp4`;
-
-        try {
-          await s3
-            .headObject({
-              Bucket: PROCESSED_BUCKET,
-              Key: expectedKey,
-            })
-            .promise();
-          processedPath.mp4 = `s3://${PROCESSED_BUCKET}/${expectedKey}`;
-        } catch {
-          // File not found.
-        }
-      }
-    }
-
-    if (Object.keys(processedPath).length > 0) {
+    if (mp4Path) {
+      // MediaConvert outputs full S3 paths like s3://bucket/key_transcoded.mp4
+      const key = mp4Path.replace(`s3://${PROCESSED_BUCKET}/`, "");
+      const mp4Url = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${key}`;
+      upload.processedFilePath = { mp4: mp4Url };
+      // file_path → primary processed output (mp4 for videos)
+      upload.filePath = key;
       console.log(
-        `Updating upload ${uploadId} with processed paths:`,
-        processedPath
+        `[on-mediaconvert-complete] Upload ${upload.id} ready: ${mp4Url}`
       );
-      await callPizzabaseCallback(uploadId, processedPath, "ready");
     } else {
-      console.error(`No output files found for job ${detail.jobId}`);
+      console.warn(
+        `[on-mediaconvert-complete] No output paths for job ${jobId}`
+      );
     }
-  } catch (err) {
-    console.error(`Error processing MediaConvert completion:`, err);
-  } finally {
-    await pool.end();
+
+    upload.mediaStatus = "ready";
+  } else {
+    upload.mediaStatus = "failed";
+    console.warn(
+      `[on-mediaconvert-complete] Upload ${upload.id} transcoding failed`
+    );
   }
+
+  await upload.save();
 }
