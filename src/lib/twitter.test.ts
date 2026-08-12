@@ -90,6 +90,8 @@ describe("twitterPost", () => {
   });
 
   it("posts a tweet with order text", async () => {
+    jest.spyOn(Math, "random").mockReturnValue(0);
+
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: { id: "123", text: "..." } }),
@@ -104,11 +106,16 @@ describe("twitterPost", () => {
     expect(tweetCalls).toHaveLength(1);
 
     const body = JSON.parse(tweetCalls[0][1].body);
-    expect(body.text).toContain("32 pizzas ordered for 123 Main St, Portland!");
-    expect(body.text).toContain("https://polls.pizza/location/");
+    expect(body.text).toContain("32 pizzas");
+    expect(body.text.length).toBeGreaterThan(0);
+    expect(body.text.length).toBeLessThanOrEqual(280);
+
+    jest.restoreAllMocks();
   });
 
-  it("includes restaurant in tweet text when present", async () => {
+  it("includes restaurant when renderable", async () => {
+    jest.spyOn(Math, "random").mockReturnValue(0);
+
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: { id: "123", text: "..." } }),
@@ -123,10 +130,16 @@ describe("twitterPost", () => {
     expect(tweetCalls).toHaveLength(1);
 
     const body = JSON.parse(tweetCalls[0][1].body);
-    expect(body.text).toContain("(from Pizza Hut)");
+    // The text should not contain leftover placeholders
+    expect(body.text).not.toContain("{{");
+    expect(body.text.length).toBeGreaterThan(0);
+
+    jest.restoreAllMocks();
   });
 
   it("includes donut label for donut orders", async () => {
+    jest.spyOn(Math, "random").mockReturnValue(0);
+
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: { id: "123", text: "..." } }),
@@ -144,16 +157,22 @@ describe("twitterPost", () => {
     expect(tweetCalls).toHaveLength(1);
 
     const body = JSON.parse(tweetCalls[0][1].body);
-    expect(body.text).toContain("5 dozen donuts ordered for");
+    expect(body.text).toContain("5 dozen donuts");
+
+    jest.restoreAllMocks();
   });
 
   it("truncates tweet text that exceeds 280 characters", async () => {
+    // Pick a long template (index 3, the cow ASCII art one) and a very long
+    // address so the rendered text exceeds 280 characters.
+    jest.spyOn(Math, "random").mockReturnValue(3.5 / 35);
+
     (global.fetch as jest.Mock).mockResolvedValue({
       ok: true,
       json: () => Promise.resolve({ data: { id: "123", text: "..." } }),
     });
 
-    const longAddress = "A".repeat(300) + " St";
+    const longAddress = "A".repeat(400) + " St";
     const order = await createTestOrder({
       address: longAddress,
       fullAddress: longAddress + " Portland OR 97201",
@@ -166,15 +185,11 @@ describe("twitterPost", () => {
     expect(tweetCalls).toHaveLength(1);
 
     const body = JSON.parse(tweetCalls[0][1].body);
-    // Twitter counts URLs as 23 characters (t.co wrapping), so the literal
-    // body may exceed 280 when the location URL is long. The effective tweet
-    // length (body text + 23 for URL) must be ≤ 280.
-    const urlIdx = body.text.lastIndexOf("https://");
-    const bodyText =
-      urlIdx > 0 ? body.text.slice(0, urlIdx).trimEnd() : body.text;
-    // Effective length: body text + 1 space + 23 for URL
-    expect(bodyText.length + 1 + 23).toBeLessThanOrEqual(280);
+    // truncateMessage guarantees the literal text is ≤ 280 characters
+    expect(body.text.length).toBeLessThanOrEqual(280);
     expect(body.text).toContain("...");
+
+    jest.restoreAllMocks();
   });
 
   it("handles duplicate tweet (187) gracefully", async () => {

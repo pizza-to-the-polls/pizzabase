@@ -1,7 +1,13 @@
-import { Order, OrderTypes } from "../entity/Order";
+import type { Order } from "../entity/Order";
 import { IntegrationSession } from "../entity/IntegrationSession";
 import { AppDataSource } from "../data-source";
 import { notifyBugsnag } from "./notifyBugsnag";
+import {
+  renderMessage,
+  truncateMessage,
+  MAX_BLUESKY_LENGTH,
+} from "./message-templates";
+import { collectMedia, MediaUrls } from "./media";
 import FormData from "form-data";
 
 interface SessionData {
@@ -58,7 +64,6 @@ interface UploadBlobResponse {
 
 const BLUESKY_BLOB_LIMIT = 976 * 1024; // ~976 KB
 const BLUESKY_VIDEO_LIMIT = 50 * 1024 * 1024; // 50 MB
-const BLUESKY_IMAGE_MAX_COUNT = 4;
 const SUPPORTED_VIDEO_FORMATS = ["mp4", "mpeg", "webm", "mov"];
 
 function getEnv(name: string): string {
@@ -71,31 +76,6 @@ function getEnv(name: string): string {
 
 function getEnvOrDefault(name: string, defaultValue: string): string {
   return process.env[name] || defaultValue;
-}
-
-/**
- * Build the post text summarizing an order.
- * Matches the existing Zapier format.
- */
-function buildPostText(order: Order): string {
-  const city = order.location.city;
-  const state = order.location.state;
-  const quantity = order.quantity;
-  const orderType = order.orderType;
-  const cost = order.cost;
-  const snacks = order.snacks;
-  const restaurant = order.restaurant;
-
-  const typeLabel = orderType === OrderTypes.pizzas ? "pizzas" : orderType;
-
-  let text = `🍕 ${quantity} ${typeLabel} ordered for ${city}, ${state}!`;
-  text += `\nCost: $${cost.toFixed(2)}`;
-  if (restaurant) {
-    text += ` · ${restaurant}`;
-  }
-  text += `\nSnacks: ${snacks}`;
-
-  return text;
 }
 
 async function apiCall(
@@ -497,62 +477,15 @@ async function uploadVideoBlob(
 }
 
 /**
- * Collect media URLs from the order context.
- * Checks the order's associated reports and the location's uploads.
- */
-async function getMediaUrlsFromOrder(
-  order: Order
-): Promise<{ images: string[]; videos: string[]; alt: string }> {
-  const images: string[] = [];
-  const videos: string[] = [];
-
-  const address = order.location.address;
-  const alt = `Long line at ${address}`;
-
-  // Check uploads associated with the location
-  const uploads = await order.location.uploads;
-  for (const upload of uploads) {
-    const url = `https://polls.pizza/${upload.filePath}`;
-    const ext = upload.filePath.split(".").pop()?.toLowerCase() || "";
-    if (SUPPORTED_VIDEO_FORMATS.includes(ext)) {
-      videos.push(url);
-    } else {
-      images.push(url);
-    }
-  }
-
-  // Check reports associated with the order for image URLs
-  const reports = await order.reports;
-  for (const report of reports) {
-    const reportURL = report.reportURL;
-    // Reports with twitter status URLs don't have direct media
-    // But if reportURL is an image URL, include it
-    if (
-      reportURL &&
-      /\.(jpg|jpeg|png|gif|webp|bmp|mp4|mpeg|webm|mov)(\?|$)/i.test(reportURL)
-    ) {
-      const ext = reportURL.split(".").pop()?.toLowerCase() || "";
-      if (SUPPORTED_VIDEO_FORMATS.includes(ext)) {
-        videos.push(reportURL);
-      } else {
-        images.push(reportURL);
-      }
-    }
-  }
-
-  return { images: images.slice(0, BLUESKY_IMAGE_MAX_COUNT), videos, alt };
-}
-
-/**
- * Build the BlueSky post embed from media.
+ * Build the BlueSky post embed from pre-collected media.
  * Videos are preferred over images (as per spec).
  */
 async function buildEmbed(
   pdsUrl: string,
   accessJwt: string,
-  order: Order
+  mediaUrls: MediaUrls
 ): Promise<ImageEmbed | VideoEmbed | undefined> {
-  const { images, videos, alt } = await getMediaUrlsFromOrder(order);
+  const { images, videos, alt } = mediaUrls;
 
   // Try video first (preferred per spec)
   if (videos.length > 0) {
@@ -598,10 +531,10 @@ async function createPost(
   pdsUrl: string,
   accessJwt: string,
   did: string,
-  order: Order
+  text: string,
+  mediaUrls: MediaUrls
 ): Promise<void> {
-  const text = buildPostText(order);
-  const embed = await buildEmbed(pdsUrl, accessJwt, order);
+  const embed = await buildEmbed(pdsUrl, accessJwt, mediaUrls);
 
   const record: PostRecord = {
     $type: "app.bsky.feed.post",
@@ -639,12 +572,32 @@ async function createPost(
 
 /**
  * Main entry point: post an order summary to BlueSky.
+ *
+ * When `text` and `mediaUrls` are provided they are used directly;
+ * otherwise they are resolved from the order. This allows the caller to
+ * share the same message and media across multiple platforms.
+ *
  * This is fire-and-forget — errors are logged but never thrown to the caller.
  */
-export async function blueskyPost(order: Order): Promise<void> {
+export async function blueskyPost(
+  order: Order,
+  text?: string,
+  mediaUrls?: MediaUrls
+): Promise<void> {
   try {
     const session = await getOrCreateSession();
-    await createPost(session.pdsUrl, session.accessJwt, session.did, order);
+    const finalText = truncateMessage(
+      text ?? renderMessage(order),
+      MAX_BLUESKY_LENGTH
+    );
+    const urls = mediaUrls ?? (await collectMedia(order));
+    await createPost(
+      session.pdsUrl,
+      session.accessJwt,
+      session.did,
+      finalText,
+      urls
+    );
     console.log(`BlueSky post created for order ${order.id}`);
   } catch (err) {
     console.error(`Failed to post order ${order.id} to BlueSky:`, err);

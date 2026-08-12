@@ -1,13 +1,17 @@
 import crypto from "crypto";
 import FormData from "form-data";
-import { Order, OrderTypes } from "../entity/Order";
+import type { Order } from "../entity/Order";
 import { Upload } from "../entity/Upload";
 import { notifyBugsnag } from "./notifyBugsnag";
+import {
+  renderMessage,
+  truncateMessage,
+  MAX_TWEET_LENGTH,
+} from "./message-templates";
+import type { MediaUrls } from "./media";
 
 const TWITTER_API_BASE = "https://api.twitter.com";
 const TWITTER_UPLOAD_BASE = "https://upload.twitter.com";
-const MAX_TWEET_LENGTH = 280;
-const URL_CHAR_COUNT = 23;
 
 // ---------------------------------------------------------------------------
 // Types
@@ -112,53 +116,21 @@ function generateOAuthHeader(
 // ---------------------------------------------------------------------------
 
 /**
- * Build tweet text from an order, respecting Twitter's 280-character limit
- * and URL counting rules (URLs count as 23 characters regardless of actual
- * length due to t.co wrapping).
- *
- * The returned text may exceed 280 literal characters when the location URL
- * is long, since Twitter counts the URL as only 23 chars. The effective
- * tweet length (body + 1 space + 23 for URL) is always ≤ 280.
+ * Convert shared MediaUrls to MediaItem[] for use with the existing Twitter
+ * media-upload pipeline.
  */
-function buildTweetText(order: Order): string {
-  const { quantity, orderType, restaurant, location } = order;
-  const locationUrl = `${
-    process.env.STATIC_SITE || "https://polls.pizza"
-  }/location/${encodeURIComponent(location.fullAddress)}`;
-
-  const typeLabel =
-    orderType === OrderTypes.donuts
-      ? "dozen donuts"
-      : orderType === OrderTypes.pizzas
-      ? "pizzas"
-      : orderType;
-
-  // Build body text without URL
-  let body = `${quantity} ${typeLabel} ordered for ${location.address}, ${location.city}! 🍕`;
-
-  if (restaurant) {
-    body += ` (from ${restaurant})`;
+function urlsToMediaItems(urls: MediaUrls): MediaItem[] {
+  const items: MediaItem[] = [];
+  const allUrls = [...urls.images, ...urls.videos];
+  for (const url of allUrls) {
+    const ext = url.split(".").pop()?.toLowerCase() || "";
+    items.push({
+      url,
+      altText: urls.alt,
+      isVideo: ["mp4", "mov", "mpeg", "webm"].includes(ext),
+    });
   }
-
-  // Effective tweet length = body + 1 space + 23 (URL always counts as 23).
-  // Twitter's /2/tweets endpoint applies t.co wrapping automatically.
-  const effectiveLength = body.length + 1 + URL_CHAR_COUNT;
-
-  if (effectiveLength > MAX_TWEET_LENGTH) {
-    // Try dropping restaurant info first
-    if (restaurant) {
-      const withoutRestaurant = `${quantity} ${typeLabel} ordered for ${location.address}, ${location.city}! 🍕`;
-      if (withoutRestaurant.length + 1 + URL_CHAR_COUNT <= MAX_TWEET_LENGTH) {
-        return `${withoutRestaurant} ${locationUrl}`;
-      }
-    }
-
-    // Truncate body to fit: reserve 1 for space, URL_CHAR_COUNT for URL, 3 for ellipsis
-    const maxBodyLen = MAX_TWEET_LENGTH - URL_CHAR_COUNT - 1 - 3;
-    body = body.slice(0, maxBodyLen) + "...";
-  }
-
-  return `${body} ${locationUrl}`;
+  return items;
 }
 
 /**
@@ -578,23 +550,38 @@ async function handleTwitterError(
 /**
  * Post an order summary to Twitter.
  *
+ * When `text` and `mediaUrls` are provided they are used directly;
+ * otherwise they are resolved from the order. This allows the caller to
+ * share the same message and media across multiple platforms.
+ *
  * This function is designed to be called as a fire-and-forget operation —
  * it never throws, and failures are logged rather than propagated.
  *
- * @param order  The placed order to announce
+ * @param order     The placed order to announce
+ * @param text      Optional pre-rendered post text (shared across platforms)
+ * @param mediaUrls Optional pre-collected media URLs (shared across platforms)
  */
-export async function twitterPost(order: Order): Promise<void> {
+export async function twitterPost(
+  order: Order,
+  text?: string,
+  mediaUrls?: MediaUrls
+): Promise<void> {
   // Skip if Twitter is not configured
   if (!process.env.TWITTER_API_KEY) {
     return;
   }
 
   try {
-    const text = buildTweetText(order);
-    const mediaItems = await fetchMediaForOrder(order);
+    const finalText = truncateMessage(
+      text ?? renderMessage(order),
+      MAX_TWEET_LENGTH
+    );
+    const items = mediaUrls
+      ? urlsToMediaItems(mediaUrls)
+      : await fetchMediaForOrder(order);
     const mediaIds: string[] = [];
 
-    for (const media of mediaItems) {
+    for (const media of items) {
       try {
         let id: string | null;
         if (media.isVideo) {
@@ -611,7 +598,7 @@ export async function twitterPost(order: Order): Promise<void> {
       }
     }
 
-    await postTweet(text, mediaIds);
+    await postTweet(finalText, mediaIds);
   } catch (err) {
     console.error("Twitter: failed to post order update:", err);
     notifyBugsnag(err as Error);
