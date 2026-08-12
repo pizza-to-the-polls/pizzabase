@@ -150,6 +150,17 @@ export class UploadsController {
 
     if (processed_file_path) {
       upload.processedFilePath = processed_file_path;
+      // file_path → primary processed output
+      const primary =
+        processed_file_path.webp ||
+        processed_file_path.jpeg ||
+        processed_file_path.mp4;
+      if (primary) {
+        upload.filePath = primary.replace(
+          /^https?:\/\/[^/]+\//,
+          ""
+        );
+      }
     }
 
     await upload.save();

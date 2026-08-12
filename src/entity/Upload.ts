@@ -81,7 +81,7 @@ export class Upload extends BaseEntity {
   @Column({ name: "moderation_score", type: "float", nullable: true })
   moderationScore: number | null;
 
-  @Column({ name: "raw_bucket", default: "raw-uploads" })
+  @Column({ name: "raw_bucket", default: "raw.polls.pizza" })
   rawBucket: string;
 
   @Column({ name: "sightengine_score", type: "float", nullable: true })
@@ -127,7 +127,7 @@ export class Upload extends BaseEntity {
       .replace(/\s/g, "-");
     upload.filePath = generatedPath;
     upload.rawFilePath = generatedPath;
-    upload.rawBucket = process.env.RAW_UPLOADS_BUCKET || "raw-uploads";
+    upload.rawBucket = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
     upload.mediaStatus = "processing";
 
     await upload.save();

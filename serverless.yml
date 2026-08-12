@@ -35,14 +35,11 @@ provider:
     STATIC_SITE: ${env:STATIC_SITE}
     UPLOAD_S3_BUCKET: reports.polls.pizza
 
-    RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw-uploads'}
-    SCRUBBED_UPLOADS_BUCKET: ${env:SCRUBBED_UPLOADS_BUCKET, 'scrubbed-uploads'}
-    PROCESSED_UPLOADS_BUCKET: ${env:PROCESSED_UPLOADS_BUCKET, 'processed-uploads'}
-    PIZZABASE_API_URL: ${env:PIZZABASE_API_URL, 'https://base.polls.pizza'}
-    MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
-    MEDIACONVERT_ENDPOINT: ${env:MEDIACONVERT_ENDPOINT, ''}
+    RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
     IMAGE_MAX_DIMENSION: ${env:IMAGE_MAX_DIMENSION, '1920'}
     IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
+    MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
+    MEDIACONVERT_ENDPOINT: ${env:MEDIACONVERT_ENDPOINT, ''}
 
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
     STRIPE_SECRET_WH: ${env:STRIPE_SECRET_WH}
@@ -114,9 +111,15 @@ functions:
     handler: build/lambdas/onS3UploadProcessExif.handler
     timeout: 60
     memorySize: 512
+    environment:
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+      AWS_REGION: ${env:AWS_REGION, 'us-west-2'}
     events:
       - s3:
-          bucket: raw-uploads
+          bucket: raw.polls.pizza
           event: s3:ObjectCreated:*
           existing: true
 
@@ -124,15 +127,34 @@ functions:
     handler: build/lambdas/onMediaFormat.handler
     timeout: 120
     memorySize: 1024
+    layers:
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:sharp:1
+    environment:
+      RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+      AWS_REGION: ${env:AWS_REGION, 'us-west-2'}
+      IMAGE_MAX_DIMENSION: ${env:IMAGE_MAX_DIMENSION, '1920'}
+      IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
+      MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
+      MEDIACONVERT_ENDPOINT: ${env:MEDIACONVERT_ENDPOINT, ''}
     events:
       - s3:
-          bucket: scrubbed-uploads
+          bucket: raw.polls.pizza
           event: s3:ObjectCreated:*
           existing: true
 
   on-mediaconvert-complete:
     handler: build/lambdas/onMediaConvertComplete.handler
     timeout: 30
+    environment:
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+      AWS_REGION: ${env:AWS_REGION, 'us-west-2'}
     events:
       - eventBridge:
           pattern:

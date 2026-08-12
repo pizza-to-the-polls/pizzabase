@@ -38,7 +38,7 @@ export class AddMediaPipeline1766200000000 implements MigrationInterface {
       `ALTER TABLE "uploads" ADD COLUMN "moderation_score" double precision`
     );
     await queryRunner.query(
-      `ALTER TABLE "uploads" ADD COLUMN "raw_bucket" character varying NOT NULL DEFAULT 'raw-uploads'`
+      `ALTER TABLE "uploads" ADD COLUMN "raw_bucket" character varying NOT NULL DEFAULT 'raw.polls.pizza'`
     );
 
     // Backfill raw_file_path from existing file_path
