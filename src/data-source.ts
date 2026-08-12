@@ -3,6 +3,7 @@ import "reflect-metadata";
 import { DataSource, DataSourceOptions } from "typeorm";
 import { PostgresConnectionOptions } from "typeorm/driver/postgres/PostgresConnectionOptions";
 import { AuroraPostgresConnectionOptions } from "typeorm/driver/aurora-postgres/AuroraPostgresConnectionOptions";
+import { withDatabaseResumeRetry } from "./lib/retryDatabaseResume";
 import { APIKey } from "./entity/APIKey";
 import { Action } from "./entity/Action";
 import { Donation } from "./entity/Donation";
@@ -78,6 +79,39 @@ if (process.env.NODE_ENV === "production") {
 }
 
 export const AppDataSource = new DataSource(options);
+
+// ── Aurora Serverless resume retry patch ──────────────────────────
+// When the Aurora DB auto-pauses, queries during the resume window throw
+// "resuming after being auto-paused". Wrap every query runner's query()
+// method with retry+backoff so the request survives the resume window.
+//
+// This patch is only installed for the aurora-postgres driver.
+// Dev and test use the plain postgres driver where resume errors never occur.
+
+if (options.type === "aurora-postgres") {
+  const originalCreateQueryRunner = AppDataSource.driver.createQueryRunner.bind(
+    AppDataSource.driver
+  );
+
+  // Cast through any — monkey-patching the driver instance doesn't match
+  // TypeORM's narrow Driver interface, but the runtime prototype is correct.
+  (AppDataSource.driver as any).createQueryRunner = (mode?: any) => {
+    const queryRunner = originalCreateQueryRunner(mode);
+    const originalQuery = queryRunner.query.bind(queryRunner);
+
+    queryRunner.query = ((
+      query: string,
+      parameters?: any[],
+      useStructuredResult?: boolean
+    ) => {
+      return withDatabaseResumeRetry(() =>
+        originalQuery(query, parameters, useStructuredResult)
+      );
+    }) as any;
+
+    return queryRunner;
+  };
+}
 
 export const initializeDataSource = async () => {
   if (AppDataSource.isInitialized) {
