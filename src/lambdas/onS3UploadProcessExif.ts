@@ -43,13 +43,17 @@ export async function handler(event: S3Event): Promise<void> {
     // Find the upload by raw_file_path
     const upload = await Upload.findOne({ where: { rawFilePath: key } as any });
     if (!upload) {
-      console.log(`[on-s3-upload-process-exif] No upload record for ${key} — may not be submitted yet`);
+      console.log(
+        `[on-s3-upload-process-exif] No upload record for ${key} — may not be submitted yet`
+      );
       continue;
     }
 
     // Already processed? Idempotency guard.
     if (upload.exifExtracted) {
-      console.log(`[on-s3-upload-process-exif] EXIF already extracted for upload ${upload.id}`);
+      console.log(
+        `[on-s3-upload-process-exif] EXIF already extracted for upload ${upload.id}`
+      );
       continue;
     }
 

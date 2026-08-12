@@ -18,8 +18,7 @@ import * as path from "path";
 
 const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
 
-const PROCESSED_BUCKET =
-  process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
+const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const RAW_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
 
 const IMAGE_MAX_DIMENSION = parseInt(
@@ -29,7 +28,13 @@ const IMAGE_MAX_DIMENSION = parseInt(
 const IMAGE_QUALITY = parseInt(process.env.IMAGE_QUALITY || "85", 10);
 
 const IMAGE_EXTENSIONS = new Set([
-  "jpg", "jpeg", "png", "gif", "webp", "heic", "heif",
+  "jpg",
+  "jpeg",
+  "png",
+  "gif",
+  "webp",
+  "heic",
+  "heif",
 ]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm"]);
 
@@ -59,7 +64,9 @@ export async function handler(event: S3Event): Promise<void> {
     // Find the upload by raw_file_path
     const upload = await Upload.findOne({ where: { rawFilePath: key } as any });
     if (!upload) {
-      console.log(`[on-media-format] No upload record for ${key} — may not be submitted yet`);
+      console.log(
+        `[on-media-format] No upload record for ${key} — may not be submitted yet`
+      );
       continue;
     }
 
@@ -88,7 +95,9 @@ export async function handler(event: S3Event): Promise<void> {
         // MediaConvert is async — on-mediaconvert-complete will update status
         console.log(`[on-media-format] MediaConvert job started for ${key}`);
       } else {
-        console.warn(`[on-media-format] Unknown extension: ${fileExt} for ${key}`);
+        console.warn(
+          `[on-media-format] Unknown extension: ${fileExt} for ${key}`
+        );
         upload.mediaStatus = "failed";
         await upload.save();
       }

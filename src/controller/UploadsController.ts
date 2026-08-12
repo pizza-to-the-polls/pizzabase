@@ -156,10 +156,7 @@ export class UploadsController {
         processed_file_path.jpeg ||
         processed_file_path.mp4;
       if (primary) {
-        upload.filePath = primary.replace(
-          /^https?:\/\/[^/]+\//,
-          ""
-        );
+        upload.filePath = primary.replace(/^https?:\/\/[^/]+\//, "");
       }
     }
 
