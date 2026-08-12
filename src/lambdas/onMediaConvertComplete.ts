@@ -13,8 +13,7 @@
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
 
-const PROCESSED_BUCKET =
-  process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
+const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 
 interface MediaConvertDetail {
   status: "COMPLETE" | "ERROR" | "CANCELED";
@@ -33,9 +32,7 @@ interface EventBridgeEvent {
 export async function handler(event: EventBridgeEvent): Promise<void> {
   const { status, jobId, outputGroupDetails } = event.detail;
 
-  console.log(
-    `[on-mediaconvert-complete] Job ${jobId} status: ${status}`
-  );
+  console.log(`[on-mediaconvert-complete] Job ${jobId} status: ${status}`);
 
   if (status !== "COMPLETE" && status !== "ERROR") {
     return; // Only handle terminal states
@@ -52,9 +49,7 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
   );
 
   if (!upload) {
-    console.warn(
-      `[on-mediaconvert-complete] No upload found for job ${jobId}`
-    );
+    console.warn(`[on-mediaconvert-complete] No upload found for job ${jobId}`);
     return;
   }
 

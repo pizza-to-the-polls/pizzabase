@@ -6,10 +6,12 @@ Two PRs implement the async media pipeline. This guide covers the infra pieces
 that can't be deployed automatically via serverless framework.
 
 **PRs:**
+
 - Backend: https://github.com/pizza-to-the-polls/pizzabase/pull/189
 - Frontend: https://github.com/pizza-to-the-polls/polls.pizza/pull/109
 
 **Architecture:**
+
 ```
 raw.polls.pizza (NEW, private)          reports.polls.pizza (EXISTING, public)
       │                                         ▲
@@ -195,11 +197,11 @@ Go to: https://github.com/pizza-to-the-polls/pizzabase/settings/secrets/actions
 
 Add these secrets:
 
-| Secret | Value |
-|--------|-------|
-| `RAW_UPLOADS_BUCKET` | `raw.polls.pizza` |
+| Secret                  | Value                                           |
+| ----------------------- | ----------------------------------------------- |
+| `RAW_UPLOADS_BUCKET`    | `raw.polls.pizza`                               |
 | `MEDIACONVERT_ROLE_ARN` | `arn:aws:iam::ACCOUNT_ID:role/MediaConvertRole` |
-| `AWS_ACCOUNT_ID` | Your AWS account ID (for layer ARN resolution) |
+| `AWS_ACCOUNT_ID`        | Your AWS account ID (for layer ARN resolution)  |
 
 The existing `UPLOAD_S3_BUCKET` secret (already set to `reports.polls.pizza`)
 doesn't need to change — it stays as the processed/public bucket.
@@ -211,16 +213,16 @@ doesn't need to change — it stays as the processed/public bucket.
 Add the new secrets to the deploy step in `.github/workflows/deploy.yml`:
 
 ```yaml
-      - name: deploy to aws
-        uses: serverless/github-action@v4.0.0
-        with:
-          args: deploy --stage prod
-        env:
-          # ... existing secrets ...
+- name: deploy to aws
+  uses: serverless/github-action@v4.0.0
+  with:
+    args: deploy --stage prod
+  env:
+    # ... existing secrets ...
 
-          RAW_UPLOADS_BUCKET: ${{ secrets.RAW_UPLOADS_BUCKET }}
-          MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
-          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+    RAW_UPLOADS_BUCKET: ${{ secrets.RAW_UPLOADS_BUCKET }}
+    MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
+    AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 ```
 
 ---
@@ -261,6 +263,7 @@ git push origin master
 ```
 
 The `deploy.yml` workflow will:
+
 1. Run tests
 2. Build TypeScript
 3. Run pre-deploy health check
@@ -315,12 +318,12 @@ curl -H 'Authorization: Basic <api-key>' \
 
 ## Summary
 
-| # | Item | Manual? | Time |
-|---|------|---------|------|
-| 1 | `raw.polls.pizza` bucket + CORS + lifecycle | Yes (or add CloudFormation to serverless.yml) | 5 min |
-| 2 | MediaConvert IAM role | Yes (one-time) | 3 min |
-| 3 | sharp Lambda layer | One-time (public layer may already exist) | 5 min |
-| 4 | GitHub Secrets (3 new) | Yes | 2 min |
-| 5 | deploy.yml update | Yes (edit + commit) | 2 min |
-| 6 | Verify + deploy | Automated via GitHub Actions | — |
-| **Total** | | | **~17 min** |
+| #         | Item                                        | Manual?                                       | Time        |
+| --------- | ------------------------------------------- | --------------------------------------------- | ----------- |
+| 1         | `raw.polls.pizza` bucket + CORS + lifecycle | Yes (or add CloudFormation to serverless.yml) | 5 min       |
+| 2         | MediaConvert IAM role                       | Yes (one-time)                                | 3 min       |
+| 3         | sharp Lambda layer                          | One-time (public layer may already exist)     | 5 min       |
+| 4         | GitHub Secrets (3 new)                      | Yes                                           | 2 min       |
+| 5         | deploy.yml update                           | Yes (edit + commit)                           | 2 min       |
+| 6         | Verify + deploy                             | Automated via GitHub Actions                  | —           |
+| **Total** |                                             |                                               | **~17 min** |
