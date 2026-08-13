@@ -79,7 +79,7 @@ async function postTextOnly(text: string): Promise<void> {
     );
   }
 
-  const data = await response.json() as { id: string };
+  const data = (await response.json()) as { id: string };
   console.log(`Threads text post created: ${data.id}`);
 }
 
@@ -138,7 +138,7 @@ async function postMedia(
         continue;
       }
 
-      const containerData = await containerResponse.json() as { id: string };
+      const containerData = (await containerResponse.json()) as { id: string };
       const creationId = containerData.id;
 
       if (!creationId) {
@@ -160,7 +160,7 @@ async function postMedia(
         continue;
       }
 
-      const publishData = await publishResponse.json() as { id: string };
+      const publishData = (await publishResponse.json()) as { id: string };
       console.log(`Threads media post published: ${publishData.id}`);
 
       // Success — one media is enough; return
