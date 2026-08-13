@@ -114,24 +114,17 @@ export async function withDatabaseResumeRetry<T>(
 
   let firstError: unknown;
 
-  for (let attempt = 0; attempt <= delaysMs.length; attempt++) {
+  // Try the initial call, then one retry per delay entry.
+  // We make delaysMs.length + 1 total attempts (initial + N retries).
+  for (let attempt = 0; attempt < delaysMs.length; attempt++) {
     try {
-      const result = await fn();
-      return result;
+      return await fn();
     } catch (error: unknown) {
-      // Capture the first error so we can re-throw it after exhaustion.
-      if (attempt === 0) {
-        firstError = error;
-      }
+      firstError ??= error;
 
       // Non-resume errors propagate immediately.
       if (!isDatabaseResumingError(error)) {
         throw error;
-      }
-
-      // No more retries — throw the original error.
-      if (attempt >= delaysMs.length) {
-        break;
       }
 
       const delay = delaysMs[attempt];
@@ -147,9 +140,18 @@ export async function withDatabaseResumeRetry<T>(
     }
   }
 
-  // Exhausted all retries — re-throw the first error so Bugsnag gets
-  // the original stack trace.
-  throw firstError;
+  // Final attempt (no more retries left). If this also throws a
+  // resume error, re-throw the first error so Bugsnag gets the
+  // original stack trace.
+  try {
+    return await fn();
+  } catch (error: unknown) {
+    firstError ??= error;
+    if (!isDatabaseResumingError(error)) {
+      throw error;
+    }
+    throw firstError;
+  }
 }
 
 // ── Private helpers ────────────────────────────────────────────────
