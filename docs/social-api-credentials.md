@@ -190,10 +190,12 @@ Note the `id` field — this is your `THREADS_USER_ID`.
 
 ### 5. Environment variables
 
-| Variable               | Description             | Source      |
-| ---------------------- | ----------------------- | ----------- |
-| `THREADS_ACCESS_TOKEN` | Long-lived access token | From step 3 |
-| `THREADS_USER_ID`      | Your Threads user ID    | From step 3 |
+| Variable          | Description                           | Source      |
+| ----------------- | ------------------------------------- | ----------- |
+| `THREADS_USER_ID` | Your Threads user ID (doesn't expire) | From step 3 |
+
+`THREADS_ACCESS_TOKEN` is not a Lambda env var anymore — it is stored in the
+`IntegrationSession` DB table and refreshed by a scheduled job. See step 7.
 
 ### 6. Test it
 
@@ -208,22 +210,44 @@ curl -X POST "https://graph.threads.net/v1.0/YOUR_USER_ID/threads" \
 ### 6. Set in AWS / SSM
 
 ```yaml
-THREADS_ACCESS_TOKEN: ${env:THREADS_ACCESS_TOKEN}
 THREADS_USER_ID: ${env:THREADS_USER_ID}
 ```
 
+`THREADS_USER_ID` does not expire, so it stays as a Lambda environment variable.
+
+The access token is stored in the `IntegrationSession` database table (same
+pattern as BlueSky), not in frozen Lambda env vars — Lambda env vars are
+snapshotted at deploy time, so a cron job updating them would not be visible
+to the running `app` function. Seed the token via the admin endpoint (below)
+or a one-off database insert.
+
 ### 7. Token refresh
 
-Long-lived tokens last ~60 days. You can refresh them before they expire:
+Long-lived Threads tokens last ~60 days. There are two recovery paths:
+
+#### Scheduled auto-refresh
+
+An EventBridge rule (`rate(45 days)`) invokes the `refreshThreadsToken` Lambda
+function. It reads the current token from the `IntegrationSession` table,
+calls Threads' refresh endpoint, and writes the new token back. No action is
+needed unless Bugsnag reports a failed refresh.
+
+#### Manual hard-refresh (token fully expired)
+
+When even the refresh token is dead, re-run the OAuth flow in a browser
+(steps above) to obtain a fresh long-lived token, then push it in via the
+admin endpoint:
 
 ```bash
-curl -X GET "https://graph.threads.net/v1.0/refresh_access_token?\
-  grant_type=th_refresh_token&\
-  access_token=CURRENT_LONG_LIVED_TOKEN"
+# After re-running the OAuth flow to get a new long-lived token:
+curl -X POST https://base.polls.pizza/threads-token \
+  -H "Authorization: Basic YOUR_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"accessToken": "NEW_LONG_LIVED_TOKEN"}'
 ```
 
-There's no auto-refresh in the module yet — tokens should be rotated manually
-or via a scheduled job. Token expiry will surface as auth errors to Bugsnag.
+This endpoint requires admin auth (the same `isAuthorized` API-key check as
+other admin routes). A successful response is `{ "success": true }`.
 
 ---
 
@@ -243,7 +267,7 @@ TWITTER_API_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 TWITTER_ACCESS_TOKEN=xxxxxxxxxxxxxxxxxx-xxxxxxxxxxxxxxxxxxxx
 TWITTER_ACCESS_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 # Threads
-THREADS_ACCESS_TOKEN=xxxxxxxxxxxxxxxxxxxxxxxx
+# (access token is stored in the IntegrationSession DB table; see step 7)
 THREADS_USER_ID=1234567890
 ```
 

@@ -51,7 +51,6 @@ provider:
     BSKY_HANDLE: ${env:BSKY_HANDLE}
     BSKY_APP_PASSWORD: ${env:BSKY_APP_PASSWORD}
 
-    THREADS_ACCESS_TOKEN: ${env:THREADS_ACCESS_TOKEN}
     THREADS_USER_ID: ${env:THREADS_USER_ID}
 
   iamRoleStatements:
@@ -101,6 +100,11 @@ functions:
     events:
       - http: ANY /
       - http: ANY /{proxy+}
+
+  refreshThreadsToken:
+    handler: build/refresh-threads-token.handler
+    events:
+      - schedule: rate(45 days)
 
 custom:
   customDomain:
