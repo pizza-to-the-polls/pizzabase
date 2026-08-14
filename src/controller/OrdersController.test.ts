@@ -18,7 +18,7 @@ describe("#show", () => {
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${order.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -44,7 +44,7 @@ describe("#delete", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await order.reload();
@@ -65,7 +65,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { limit: 2 } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const orders = await Order.find({ take: 2, order: { createdAt: "DESC" } });
     expect(body).toEqual({
@@ -75,7 +75,7 @@ describe("#index", () => {
           ...order.asJSON(),
           location: await order.location.asJSON(),
           reports: (await order.reports).map((report) => report.asJSON()),
-        }))
+        })),
       ),
     });
   });
@@ -84,7 +84,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { limit: 4, page: 1 } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     const orders = await Order.find({
@@ -99,7 +99,7 @@ describe("#index", () => {
           ...order.asJSON(),
           location: await order.location.asJSON(),
           reports: (await order.reports).map((report) => report.asJSON()),
-        }))
+        })),
       ),
     });
   });
@@ -115,7 +115,7 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -145,7 +145,7 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await location.reload();
     const [order] = await location.orders;
@@ -167,13 +167,13 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const order = await Order.findOne({ where: { cost: 500.23 } });
 
     expect(order.quantity).toEqual(32);
     expect(order.location.fullAddress).toEqual(
-      "550 Different Address City OR 12345"
+      "550 Different Address City OR 12345",
     );
     expect(order.location.validatedAt).toBeTruthy();
   });

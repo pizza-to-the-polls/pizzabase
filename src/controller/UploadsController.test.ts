@@ -17,6 +17,16 @@ import {
 // end-to-end. The S3 client is mocked to serve fixture bytes.
 jest.mock("../lib/aws");
 jest.mock("../lib/validator/geocode");
+jest.mock("@aws-sdk/client-s3", () => {
+  const original = jest.requireActual("@aws-sdk/client-s3");
+  return {
+    ...original,
+    S3Client: jest.fn(),
+    GetObjectCommand: jest.fn((input: any) => ({ input })),
+  };
+});
+
+const { S3Client } = require("@aws-sdk/client-s3");
 
 const controller = new UploadsController();
 
@@ -30,7 +40,7 @@ describe("#create", () => {
         body: {},
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -53,7 +63,7 @@ describe("#create", () => {
         },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -87,7 +97,7 @@ describe("#create", () => {
           upload.location = location;
           upload.fileHash = `${i}-hash`;
           await upload.save();
-        })
+        }),
     );
     const body = await controller.create(
       http_mocks.createRequest({
@@ -100,7 +110,7 @@ describe("#create", () => {
         },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -144,7 +154,7 @@ describe("#create", () => {
         },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect((body as any).isDuplicate).toEqual(true);
     expect((body as any).id).toEqual(upload.id);
@@ -175,7 +185,7 @@ describe("#create", () => {
         },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const upload = await Upload.findOne({
       order: { id: "DESC" },
@@ -202,7 +212,7 @@ describe("#create", () => {
         },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const upload = await Upload.findOne({
       order: { id: "DESC" },
@@ -211,7 +221,7 @@ describe("#create", () => {
 
     expect(upload.fileHash).toEqual("new-loc");
     expect(upload.location.fullAddress).toEqual(
-      "550 Different Address City OR 12345"
+      "550 Different Address City OR 12345",
     );
   });
 
@@ -235,7 +245,7 @@ describe("#create", () => {
           },
         }),
         response,
-        () => undefined
+        () => undefined,
       );
 
       expect(response.statusCode).toEqual(503);
@@ -285,19 +295,19 @@ describe("#getExif", () => {
    * for well-formed fixtures.
    */
   function mockS3WithBody(body: Buffer) {
-    const mockAws = require("aws-sdk");
-    mockAws.S3 = jest.fn().mockImplementation(() => ({
-      getObject: jest
+    // Clear any previous mock calls and set up the S3Client mock.
+    (S3Client as jest.Mock).mockReset();
+    (S3Client as jest.Mock).mockImplementation(() => ({
+      send: jest
         .fn()
         .mockImplementation(
-          (params: { Bucket: string; Key: string; Range?: string }) => ({
-            promise: jest.fn().mockResolvedValue({
+          (command: { input: { Key: string; Range?: string } }) =>
+            Promise.resolve({
               // Only return the body for the main image key, not sidecar keys
               // like .xmp or .c2pa — those should return null Body so they
               // don't falsely trigger sidecar detection.
-              Body: params.Key === `uploads/${fileName}` ? body : null,
+              Body: command.input.Key === `uploads/${fileName}` ? body : null,
             }),
-          })
         ),
     }));
   }
@@ -323,7 +333,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -344,7 +354,9 @@ describe("#getExif", () => {
     expect(body.review.assessment).toBe("limited-evidence");
     expect(body.review.confidence).toBe("low");
     expect(
-      body.review.positiveSignals.some((s: any) => s.code === "exif-dimensions")
+      body.review.positiveSignals.some(
+        (s: any) => s.code === "exif-dimensions",
+      ),
     ).toBe(true);
     expect(body.review.missingSignals).toContain("camera-make-model");
   });
@@ -356,7 +368,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -372,7 +384,7 @@ describe("#getExif", () => {
     expect(userComment).toBeDefined();
     if (userComment._bytes) {
       expect(
-        Buffer.from(userComment._bytes, "base64").toString("ascii")
+        Buffer.from(userComment._bytes, "base64").toString("ascii"),
       ).toContain("Screenshot");
     }
 
@@ -381,8 +393,8 @@ describe("#getExif", () => {
     expect(body.review.confidence).toBe("high");
     expect(
       body.review.cautionSignals.some(
-        (s: any) => s.code === "explicit-screenshot-marker"
-      )
+        (s: any) => s.code === "explicit-screenshot-marker",
+      ),
     ).toBe(true);
   });
 
@@ -393,7 +405,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -412,7 +424,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -421,18 +433,16 @@ describe("#getExif", () => {
   });
 
   it("returns null exif when S3 body is empty", async () => {
-    const mockAws = require("aws-sdk");
-    mockAws.S3 = jest.fn().mockImplementation(() => ({
-      getObject: jest.fn().mockReturnValue({
-        promise: jest.fn().mockResolvedValue({ Body: null }),
-      }),
+    (S3Client as jest.Mock).mockReset();
+    (S3Client as jest.Mock).mockImplementation(() => ({
+      send: jest.fn().mockResolvedValue({ Body: null }),
     }));
 
     const response = http_mocks.createResponse();
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -442,35 +452,36 @@ describe("#getExif", () => {
 
   it("performs one bounded S3 follow-up when the initial range cuts off before the EXIF signature", async () => {
     const initial = brooklynJpeg.slice(0, 7);
-    const getObject = jest
+    const send = jest
       .fn()
-      .mockImplementation(({ Key, Range }: { Key: string; Range?: string }) => {
-        // C2PA / XMP sidecar keys should return null Body.
-        if (Key !== `uploads/${fileName}`) {
-          return { promise: jest.fn().mockResolvedValue({ Body: null }) };
-        }
-        return {
-          promise: jest.fn().mockResolvedValue({
+      .mockImplementation(
+        ({ input }: { input: { Key: string; Range?: string } }) => {
+          // C2PA / XMP sidecar keys should return null Body.
+          if (input.Key !== `uploads/${fileName}`) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          return Promise.resolve({
             Body:
-              Range === "bytes=0-65535"
+              input.Range === "bytes=0-65535"
                 ? initial
                 : brooklynJpeg.slice(initial.length),
-          }),
-        };
-      });
-    const mockAws = require("aws-sdk");
-    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject: getObject }));
+          });
+        },
+      );
+    (S3Client as jest.Mock).mockReset();
+    (S3Client as jest.Mock).mockImplementation(() => ({ send }));
 
     const response = http_mocks.createResponse();
     const body = (await controller.getExif(
       authRequest(fileName, false),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(body.exif.Image.Orientation).toBe(1);
-    expect(getObject).toHaveBeenCalledTimes(5); // initial + follow-up + XMP sidecar + C2PA sidecar + null
-    expect(getObject.mock.calls[1][0].Range).toMatch(/^bytes=7-\d+$/);
+    // initial + EXIF follow-up + C2PA sidecar (404) + XMP follow-up + XMP sidecar (404)
+    expect(send).toHaveBeenCalledTimes(5);
+    expect(send.mock.calls[1][0].input.Range).toMatch(/^bytes=7-\d+$/);
   });
 
   // ---------------------------------------------------------------------
@@ -486,7 +497,7 @@ describe("#getExif", () => {
         params: { fileName },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(401);
@@ -502,7 +513,7 @@ describe("#getExif", () => {
         headers: { Authorization: "Basic badkey" },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(401);
@@ -518,7 +529,7 @@ describe("#getExif", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(404);
@@ -535,7 +546,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName, false),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(body.exif.Image.Orientation).toBe(1);
@@ -549,7 +560,7 @@ describe("#getExif", () => {
     const body = await controller.getExif(
       authRequest(fileName, false),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({ exif: null });
@@ -562,11 +573,11 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(body.review.disclaimer).toBe(
-      "Metadata can be removed or modified. This is review guidance, not proof of authenticity."
+      "Metadata can be removed or modified. This is review guidance, not proof of authenticity.",
     );
   });
 
@@ -577,7 +588,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     const responseBody = body as any;
@@ -607,7 +618,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -618,8 +629,8 @@ describe("#getExif", () => {
     });
     expect(
       body.review.positiveSignals.some(
-        (s: any) => s.code === "c2pa-manifest-present"
-      )
+        (s: any) => s.code === "c2pa-manifest-present",
+      ),
     ).toBe(true);
   });
 
@@ -630,7 +641,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -639,8 +650,8 @@ describe("#getExif", () => {
     expect(body.review.c2pa).toEqual({ detected: false, label: null });
     expect(
       body.review.positiveSignals.some(
-        (s: any) => s.code === "c2pa-manifest-present"
-      )
+        (s: any) => s.code === "c2pa-manifest-present",
+      ),
     ).toBe(false);
   });
 
@@ -659,7 +670,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName, false),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -669,26 +680,31 @@ describe("#getExif", () => {
   });
 
   it("falls back to sidecar .c2pa when C2PA not in container", async () => {
-    const mockAws = require("aws-sdk");
-    const getObject = jest
+    const send = jest
       .fn()
-      .mockImplementation(({ Key }: { Key: string; Range?: string }) => {
-        const sidecarKey = upload.filePath.replace(/\.(jpe?g|png)$/i, ".c2pa");
-        const body =
-          Key === upload.filePath
-            ? brooklynJpeg
-            : Key === sidecarKey
-            ? Buffer.from("sidecar c2pa data")
-            : null;
-        return { promise: jest.fn().mockResolvedValue({ Body: body }) };
-      });
-    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
+      .mockImplementation(
+        ({ input }: { input: { Key: string; Range?: string } }) => {
+          const sidecarKey = upload.filePath.replace(
+            /\.(jpe?g|png)$/i,
+            ".c2pa",
+          );
+          const body =
+            input.Key === upload.filePath
+              ? brooklynJpeg
+              : input.Key === sidecarKey
+                ? Buffer.from("sidecar c2pa data")
+                : null;
+          return Promise.resolve({ Body: body });
+        },
+      );
+    (S3Client as jest.Mock).mockReset();
+    (S3Client as jest.Mock).mockImplementation(() => ({ send }));
 
     const response = http_mocks.createResponse();
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -699,33 +715,31 @@ describe("#getExif", () => {
     });
     expect(
       body.review.positiveSignals.some(
-        (s: any) => s.code === "c2pa-manifest-present"
-      )
+        (s: any) => s.code === "c2pa-manifest-present",
+      ),
     ).toBe(true);
   });
 
   it("handles sidecar fetch failure without error", async () => {
-    const mockAws = require("aws-sdk");
-    const getObject = jest
+    const send = jest
       .fn()
-      .mockImplementation(({ Key }: { Key: string; Range?: string }) => {
-        if (Key === upload.filePath) {
-          return {
-            promise: jest.fn().mockResolvedValue({ Body: brooklynJpeg }),
-          };
-        }
-        // Sidecar throws NoSuchKey
-        return {
-          promise: jest.fn().mockRejectedValue(new Error("NoSuchKey")),
-        };
-      });
-    mockAws.S3 = jest.fn().mockImplementation(() => ({ getObject }));
+      .mockImplementation(
+        ({ input }: { input: { Key: string; Range?: string } }) => {
+          if (input.Key === upload.filePath) {
+            return Promise.resolve({ Body: brooklynJpeg });
+          }
+          // Sidecar throws NoSuchKey
+          return Promise.reject(new Error("NoSuchKey"));
+        },
+      );
+    (S3Client as jest.Mock).mockReset();
+    (S3Client as jest.Mock).mockImplementation(() => ({ send }));
 
     const response = http_mocks.createResponse();
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -746,20 +760,9 @@ describe("#getExif", () => {
     const ihdr = makeChunk(
       "IHDR",
       Buffer.from([
+        0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00,
         0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x00,
-        0x00,
-        0x00,
-        0x01,
-        0x08,
-        0x00,
-        0x00,
-        0x00,
-        0x00,
-      ])
+      ]),
     );
     const caBX = makeChunk("caBX", Buffer.from("C2PA manifest data"));
     const iend = makeChunk("IEND", Buffer.alloc(0));
@@ -771,7 +774,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);
@@ -793,7 +796,7 @@ describe("#getExif", () => {
     const body = (await controller.getExif(
       authRequest(fileName),
       response,
-      () => undefined
+      () => undefined,
     )) as any;
 
     expect(response.statusCode).toEqual(200);

@@ -38,62 +38,62 @@ describe("parseDigitalSourceType", () => {
 
   it("parses digitalCapture from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
     );
     expect(result.label).toBe("digital capture");
   });
 
   it("parses trainedAlgorithmicMedia from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia",
     );
     expect(result.label).toBe("AI-generated media");
   });
 
   it("parses screenCapture from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture",
     );
     expect(result.label).toBe("screen capture");
   });
 
   it("parses screenRecording from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/screenRecording"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/screenRecording",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/screenRecording"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/screenRecording",
     );
     expect(result.label).toBe("screen recording");
   });
 
   it("parses compositeSynthetic from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/compositeSynthetic"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/compositeSynthetic",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/compositeSynthetic"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/compositeSynthetic",
     );
     expect(result.label).toBe("composite / synthetic");
   });
 
   it("parses composite from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/composite"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/composite",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.label).toBe("composite");
@@ -101,7 +101,7 @@ describe("parseDigitalSourceType", () => {
 
   it("parses virtualRecording from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/virtualRecording"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/virtualRecording",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.label).toBe("virtual recording");
@@ -109,7 +109,7 @@ describe("parseDigitalSourceType", () => {
 
   it("parses negativeFilm from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/negativeFilm"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/negativeFilm",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.label).toBe("negative film");
@@ -117,7 +117,7 @@ describe("parseDigitalSourceType", () => {
 
   it("parses positiveFilm from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/positiveFilm"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/positiveFilm",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.label).toBe("positive film");
@@ -125,7 +125,7 @@ describe("parseDigitalSourceType", () => {
 
   it("parses scannedImage from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/scannedImage"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/scannedImage",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.label).toBe("scanned image");
@@ -133,7 +133,7 @@ describe("parseDigitalSourceType", () => {
 
   it("parses dataDrivenMedia from XMP element text", () => {
     const xml = xmpWithDst(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/dataDrivenMedia"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/dataDrivenMedia",
     );
     const result = parseDigitalSourceType(xml);
     expect(result.label).toBe("data-driven media");
@@ -146,11 +146,11 @@ describe("parseDigitalSourceType", () => {
   it("parses DigitalSourceType from rdf:resource attribute", () => {
     const xml = xmpWithDst(
       "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
-      true
+      true,
     );
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
     );
     expect(result.label).toBe("digital capture");
   });
@@ -211,7 +211,7 @@ describe("parseDigitalSourceType", () => {
     ].join("\n");
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
     );
   });
 
@@ -231,7 +231,7 @@ describe("parseDigitalSourceType", () => {
     ].join("\n");
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture",
     );
     expect(result.label).toBe("screen capture");
   });
@@ -261,7 +261,7 @@ describe("parseDigitalSourceType", () => {
     ].join("\n");
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
     );
     expect(result.label).toBe("digital capture");
   });
@@ -278,11 +278,11 @@ describe("parseDigitalSourceType", () => {
     ];
     for (let i = 0; i < 200; i++) {
       xmlParts.push(
-        `<rdf:Description rdf:about="" xmlns:ns${i}="http://ns${i}.example.com/">`
+        `<rdf:Description rdf:about="" xmlns:ns${i}="http://ns${i}.example.com/">`,
       );
     }
     xmlParts.push(
-      "<Iptc4xmpExt:DigitalSourceType>http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture</Iptc4xmpExt:DigitalSourceType>"
+      "<Iptc4xmpExt:DigitalSourceType>http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture</Iptc4xmpExt:DigitalSourceType>",
     );
     for (let i = 0; i < 200; i++) {
       xmlParts.push("</rdf:Description>");
@@ -318,17 +318,17 @@ describe("parseDigitalSourceType", () => {
     // and DST is found as a text node.
     const result = parseDigitalSourceType(xml);
     expect(result.uri).toBe(
-      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
+      "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture",
     );
   });
 
   it("returns null for non-string input at runtime", () => {
     // TypeScript would catch this at compile time, but runtime safety matters.
-    expect(parseDigitalSourceType((null as unknown) as string)).toEqual({
+    expect(parseDigitalSourceType(null as unknown as string)).toEqual({
       uri: null,
       label: null,
     });
-    expect(parseDigitalSourceType((undefined as unknown) as string)).toEqual({
+    expect(parseDigitalSourceType(undefined as unknown as string)).toEqual({
       uri: null,
       label: null,
     });
@@ -340,12 +340,12 @@ describe("DIGITAL_SOURCE_TYPE_LABELS", () => {
     expect(
       DIGITAL_SOURCE_TYPE_LABELS[
         "http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture"
-      ]
+      ],
     ).toBe("digital capture");
     expect(
       DIGITAL_SOURCE_TYPE_LABELS[
         "http://cv.iptc.org/newscodes/digitalsourcetype/trainedAlgorithmicMedia"
-      ]
+      ],
     ).toBe("AI-generated media");
   });
 

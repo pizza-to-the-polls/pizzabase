@@ -16,7 +16,10 @@ const GMAPS_COMPONENT_MAPPING = {
 import { NormalAddress } from "./types";
 
 export class GeocodingError extends Error {
-  constructor(message: string, public readonly status?: string) {
+  constructor(
+    message: string,
+    public readonly status?: string,
+  ) {
     super(message);
     this.name = "GeocodingError";
   }
@@ -48,27 +51,24 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
   }
 
   const resp = await fetch(
-    `${GMAPS_URL}?key=${GMAPS_KEY}&address=${encodeURIComponent(body)}`
+    `${GMAPS_URL}?key=${GMAPS_KEY}&address=${encodeURIComponent(body)}`,
   );
 
   if (!resp.ok) {
     throw new GeocodingError(
-      `Google Maps API returned HTTP ${resp.status}: ${resp.statusText}`
+      `Google Maps API returned HTTP ${resp.status}: ${resp.statusText}`,
     );
   }
 
-  const {
-    status,
-    error_message,
-    results,
-  } = (await resp.json()) as GmapsResponse;
+  const { status, error_message, results } =
+    (await resp.json()) as GmapsResponse;
 
   if (status !== "OK") {
     if (status === "ZERO_RESULTS") {
       return null;
     }
     throw new GeocodingError(
-      `Google Maps API error: ${status} — ${error_message || "No details"}`
+      `Google Maps API error: ${status} — ${error_message || "No details"}`,
     );
   }
 
@@ -82,31 +82,25 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       address_components,
     } = result;
 
-    const {
-      city,
-      state,
-      zip,
-      num,
-      street,
-      premise,
-    } = address_components.reduce(
-      (obj, { short_name, types }) => {
-        for (const type of types) {
-          if (GMAPS_COMPONENT_MAPPING[type]) {
-            obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+    const { city, state, zip, num, street, premise } =
+      address_components.reduce(
+        (obj, { short_name, types }) => {
+          for (const type of types) {
+            if (GMAPS_COMPONENT_MAPPING[type]) {
+              obj[GMAPS_COMPONENT_MAPPING[type]] = short_name;
+            }
           }
-        }
-        return obj;
-      },
-      {
-        city: "",
-        state: "",
-        zip: "",
-        num: "",
-        street: "",
-        premise: "",
-      }
-    );
+          return obj;
+        },
+        {
+          city: "",
+          state: "",
+          zip: "",
+          num: "",
+          street: "",
+          premise: "",
+        },
+      );
     const address = num && street ? `${num} ${street}` : premise;
 
     if (!address || !city || !state || !zip) {

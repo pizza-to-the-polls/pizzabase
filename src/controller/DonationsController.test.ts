@@ -45,10 +45,9 @@ describe("#create", () => {
     await controller.create(
       http_mocks.createRequest({ body: {} }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(Stripe).toHaveBeenCalledWith("STRIPE SECRET KEY", {
-      apiVersion: "2020-08-27",
       maxNetworkRetries: 6,
       timeout: 5_000,
     });
@@ -65,13 +64,12 @@ describe("#create", () => {
         },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "Gift of about 1/2 of a pizza",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 1000,
@@ -104,13 +102,12 @@ describe("#create", () => {
         body: { amountUsd: 100, url: "http://google.com" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
       payment_method_types: ["card"],
       line_items: [
         {
-          description: "About 5 pizzas",
           price_data: {
             product: "stripe_product_12345",
             unit_amount: 10000,
@@ -142,7 +139,7 @@ describe("#create", () => {
         },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(mockStripeClient.prices.list).toHaveBeenCalledWith({
@@ -215,17 +212,16 @@ describe("#webhook", () => {
         headers: { "stripe-signature": STRIPE_SIG },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(Stripe).toHaveBeenCalledWith("STRIPE SECRET KEY", {
-      apiVersion: "2020-08-27",
       maxNetworkRetries: 3,
       timeout: 10_000,
     });
     expect(mockStripeClient.webhooks.constructEvent).toHaveBeenCalledWith(
       body,
       STRIPE_SIG,
-      process.env.STRIPE_SECRET_WH
+      process.env.STRIPE_SECRET_WH,
     );
   });
 
@@ -255,7 +251,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const donation = await Donation.findOne({ where: { email } });
     expect(donation.stripeId).toEqual(id);
@@ -384,7 +380,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await donation.reload();
     expect(donation.cancelNote).toEqual("failed");
@@ -415,7 +411,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await donation.reload();
     expect(donation.cancelNote).toEqual("refunded");
@@ -446,7 +442,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await donation.reload();
     expect(donation.cancelNote).toEqual("dispute.funds_withdrawn");

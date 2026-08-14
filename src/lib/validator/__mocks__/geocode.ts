@@ -1,14 +1,17 @@
 import { NormalAddress } from "../";
 
 export class GeocodingError extends Error {
-  constructor(message: string, public readonly status?: string) {
+  constructor(
+    message: string,
+    public readonly status?: string,
+  ) {
     super(message);
     this.name = "GeocodingError";
   }
 }
 
 export const geocode = async (
-  fullAddress?: string
+  fullAddress?: string,
 ): Promise<NormalAddress | null> => {
   if (!fullAddress) {
     return null;

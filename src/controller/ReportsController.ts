@@ -12,7 +12,7 @@ export class ReportsController {
     const report: Report = await findOr404(
       await Report.findOne({ where: { id: Number(request.params.id || "") } }),
       response,
-      next
+      next,
     );
     if (!report) return;
 
@@ -56,7 +56,7 @@ export class ReportsController {
           location: await report.location.asJSON(),
           order: (await report.order)?.asJSON(),
           truck: (await report.truck)?.asJSON(),
-        }))
+        })),
       ),
       count,
     };
@@ -65,13 +65,8 @@ export class ReportsController {
   async create(request: Request, response: Response, _next: NextFunction) {
     const authed = await checkAuthorization(request);
 
-    const {
-      errors,
-      normalizedAddress,
-      reportURL,
-      contactInfo,
-      ...extra
-    } = await validateReport(request.body || {}, authed);
+    const { errors, normalizedAddress, reportURL, contactInfo, ...extra } =
+      await validateReport(request.body || {}, authed);
 
     if (Object.keys(errors).length > 0) {
       response.status(422);
@@ -89,15 +84,13 @@ export class ReportsController {
       }
     }
 
-    const [
-      report,
-      { alreadyOrdered, isUnique, hasTruck, willReceive },
-    ] = await Report.createNewReport(
-      contactInfo,
-      reportURL,
-      normalizedAddress,
-      extra
-    );
+    const [report, { alreadyOrdered, isUnique, hasTruck, willReceive }] =
+      await Report.createNewReport(
+        contactInfo,
+        reportURL,
+        normalizedAddress,
+        extra,
+      );
 
     if (authed) {
       await Action.log(report, "trusted report", request.body?.user);

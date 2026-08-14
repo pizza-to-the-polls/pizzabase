@@ -15,14 +15,14 @@ export class LocationsController {
   private async authorizeAndFindLocation(
     request: Request,
     response: Response,
-    next: NextFunction
+    next: NextFunction,
   ): Promise<Location | null> {
     if (!(await isAuthorized(request, response, next))) return null;
 
     return findOr404(
       await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
       response,
-      next
+      next,
     );
   }
 
@@ -35,7 +35,7 @@ export class LocationsController {
 
     return {
       results: await Promise.all(
-        locations.map(async (loc) => await loc.asJSON())
+        locations.map(async (loc) => await loc.asJSON()),
       ),
       count,
     };
@@ -45,7 +45,7 @@ export class LocationsController {
     const location: Location = await findOr404(
       await Location.fidByIdOrFullAddress(request.params.idOrAddress || ""),
       response,
-      next
+      next,
     );
     if (!location) return;
 
@@ -69,23 +69,23 @@ export class LocationsController {
       ...locJSON,
       hasTruck: authorized ? locJSON.hasTruck : await location.hasTruckJSON(),
       reports: (await location.openReports()).map((report) =>
-        report.asJSON(authorized)
+        report.asJSON(authorized),
       ),
       orders: await Promise.all(
         orders.map(async (order) => ({
           ...order.asJSON(authorized),
           reports: (await order.reports).map((report) =>
-            report.asJSON(authorized)
+            report.asJSON(authorized),
           ),
-        }))
+        })),
       ),
       trucks: await Promise.all(
         trucks.map(async (truck) => ({
           ...truck.asJSON(),
           reports: (await truck.reports).map((report) =>
-            report.asJSON(authorized)
+            report.asJSON(authorized),
           ),
-        }))
+        })),
       ),
     };
   }
@@ -94,7 +94,7 @@ export class LocationsController {
     const location: Location = await this.authorizeAndFindLocation(
       request,
       response,
-      next
+      next,
     );
     if (!location) return;
 
@@ -116,7 +116,7 @@ export class LocationsController {
     const location: Location | null = await this.authorizeAndFindLocation(
       request,
       response,
-      next
+      next,
     );
 
     if (!location) return;
@@ -133,14 +133,14 @@ export class LocationsController {
     const location: Location | null = await this.authorizeAndFindLocation(
       request,
       response,
-      next
+      next,
     );
 
     if (!location) return;
 
     const truck = await location.assignTruck(
       request.body?.user,
-      request.body?.city_state
+      request.body?.city_state,
     );
 
     await zapNewTruck(truck);
@@ -152,7 +152,7 @@ export class LocationsController {
     const location: Location | null = await this.authorizeAndFindLocation(
       request,
       response,
-      next
+      next,
     );
     if (!location) return;
 
@@ -172,7 +172,7 @@ export class LocationsController {
     const location: Location | null = await this.authorizeAndFindLocation(
       request,
       response,
-      next
+      next,
     );
     if (!location) return;
 

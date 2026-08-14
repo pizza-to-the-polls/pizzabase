@@ -33,7 +33,7 @@ export const validateReport = async (
     canDistribute?: boolean;
     addressOverride?: OverrideAddress;
   },
-  isAuthorized: boolean = false
+  isAuthorized: boolean = false,
 ): Promise<{
   normalizedAddress: NormalAddress;
   contactInfo: string;
@@ -50,7 +50,7 @@ export const validateReport = async (
 
   try {
     reportURL = normalizeURL(
-      url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : ""
+      url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : "",
     );
     if (!reportURL) {
       errors.url = URL_ERROR;
@@ -60,7 +60,7 @@ export const validateReport = async (
   }
 
   const contactInfo = normalizeContact(
-    contact ? contact : isAuthorized ? "trusted@example.com" : ""
+    contact ? contact : isAuthorized ? "trusted@example.com" : "",
   );
   if (!contactInfo) {
     errors.contact = CONTACT_ERROR;
@@ -68,7 +68,7 @@ export const validateReport = async (
 
   const normalizedAddress: null | NormalAddress = await normalizeAddress(
     address,
-    isAuthorized ? addressOverride : null
+    isAuthorized ? addressOverride : null,
   );
   if (!normalizedAddress) {
     errors.address = ADDRESS_ERROR;
@@ -85,8 +85,8 @@ export const validateReport = async (
     contactRole: contactRole
       ? contactRole
       : isAuthorized
-      ? "Trusted"
-      : undefined,
+        ? "Trusted"
+        : undefined,
     canDistribute,
   };
 };

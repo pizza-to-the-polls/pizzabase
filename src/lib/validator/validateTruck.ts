@@ -19,9 +19,8 @@ export const validateTruck = async ({
 }> => {
   const errors: ValidationError = {};
 
-  const normalizedAddress: null | NormalAddress = await normalizeAddress(
-    address
-  );
+  const normalizedAddress: null | NormalAddress =
+    await normalizeAddress(address);
   if (!normalizedAddress) {
     errors.address = ADDRESS_ERROR;
   }

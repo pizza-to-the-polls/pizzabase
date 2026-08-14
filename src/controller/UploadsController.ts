@@ -1,4 +1,5 @@
 import { NextFunction, Request, Response } from "express";
+import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
@@ -28,7 +29,7 @@ export class UploadsController {
       // Geocoding failures are server-level issues, not client validation
       if (errors._geocoding) {
         notifyBugsnag(
-          new Error(`Upload geocoding failure: ${errors._geocoding}`)
+          new Error(`Upload geocoding failure: ${errors._geocoding}`),
         );
         response.status(503);
         return {
@@ -45,7 +46,7 @@ export class UploadsController {
     try {
       const [upload, exists] = await Upload.createOrReject(
         request.ip,
-        uploadParams
+        uploadParams,
       );
 
       if (exists) {
@@ -88,19 +89,19 @@ export class UploadsController {
     const includeReview = request.query.includeReview === "true";
 
     try {
-      const s3Client = new (require("aws-sdk").S3)({
+      const s3Client = new S3Client({
         region: process.env.AWS_REGION || "us-west-2",
       });
       const bucket = process.env.UPLOAD_S3_BUCKET!;
 
       return extractExifAndReview(
         { s3Client: s3Client as any, bucket },
-        { filePath: upload.filePath, includeReview }
+        { filePath: upload.filePath, includeReview },
       );
     } catch (error) {
       console.error(
         `Could not extract EXIF data for upload ${upload.filePath}:`,
-        error
+        error,
       );
       return includeReview
         ? { exif: null, review: { assessment: "error" } }

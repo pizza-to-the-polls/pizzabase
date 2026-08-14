@@ -13,7 +13,7 @@ describe("CORS (via Lambda handler)", () => {
     expect(response.statusCode).toBe(200);
     expect(
       response.headers["access-control-allow-origin"] ||
-        response.headers["Access-Control-Allow-Origin"]
+        response.headers["Access-Control-Allow-Origin"],
     ).toBe("https://polls.pizza");
   });
 
@@ -28,7 +28,7 @@ describe("CORS (via Lambda handler)", () => {
     expect(response.statusCode).toBe(200);
     expect(
       response.headers["access-control-allow-origin"] ||
-        response.headers["Access-Control-Allow-Origin"]
+        response.headers["Access-Control-Allow-Origin"],
     ).toBe("https://polls.pizza");
   });
 });

@@ -54,10 +54,9 @@ describe("#create", () => {
     await controller.create(
       http_mocks.createRequest({ body: { email: goodEmail } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(Stripe).toHaveBeenCalledWith("STRIPE SECRET KEY", {
-      apiVersion: "2020-08-27",
       maxNetworkRetries: 6,
       timeout: 10_000,
     });
@@ -67,7 +66,7 @@ describe("#create", () => {
     const body = await controller.create(
       http_mocks.createRequest({ body: { email: goodEmail } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body.success).toEqual(true);
@@ -93,7 +92,7 @@ describe("#create", () => {
         body: { email: "invalid" },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -108,7 +107,7 @@ describe("#create", () => {
     const body = await controller.create(
       http_mocks.createRequest({ body: { email } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body.success).toEqual(true);
@@ -149,7 +148,7 @@ describe("#update", () => {
         body: { token: "bad-token" },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -168,7 +167,7 @@ describe("#update", () => {
         body: { token: "good-token" },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -179,7 +178,7 @@ describe("#update", () => {
       {
         customer: "cust_1234",
         return_url: `${process.env.STATIC_SITE}/crustclub`,
-      }
+      },
     );
     expect(response.statusCode).toEqual(200);
   });

@@ -6,11 +6,11 @@ import * as fs from "fs";
 export const uploadBulkCSV = async (
   callback: (
     data: { [key: string]: string },
-    manager: EntityManager
+    manager: EntityManager,
   ) => Promise<boolean>,
   csvFile: string,
   start: string | number | null = 0,
-  timeout: number = 150
+  timeout: number = 150,
 ) => {
   if (!AppDataSource.isInitialized) {
     await AppDataSource.initialize();
@@ -44,12 +44,12 @@ export const uploadBulkCSV = async (
     if (!success) failures.push(row);
 
     console.log(
-      `${num + 1} / ${data.length} ${success ? "success" : `fail with ${msg}`}`
+      `${num + 1} / ${data.length} ${success ? "success" : `fail with ${msg}`}`,
     );
     await new Promise((accept) => setTimeout(accept, timeout));
   }
 
   console.log(
-    failures.map((row) => `"${Object.values(row).join('","')}"`).join("\n")
+    failures.map((row) => `"${Object.values(row).join('","')}"`).join("\n"),
   );
 };

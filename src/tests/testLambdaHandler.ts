@@ -13,9 +13,8 @@
 
 import serverlessHttp from "serverless-http";
 
-let cachedHandlerPromise: Promise<
-  ReturnType<typeof serverlessHttp>
-> | null = null;
+let cachedHandlerPromise: Promise<ReturnType<typeof serverlessHttp>> | null =
+  null;
 
 /**
  * Lazy handler initialization with deferred app import.
@@ -47,7 +46,7 @@ const makeEvent = (
   method: string,
   path: string,
   body?: object,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ): any => ({
   httpMethod: method,
   path,
@@ -86,7 +85,7 @@ export const lambdaRequest = async (
   method: string,
   path: string,
   body?: object,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ): Promise<any> => {
   const handler = await getHandler();
   return handler(makeEvent(method, path, body, headers), makeContext());
@@ -98,13 +97,13 @@ export const lambdaGet = (path: string, headers?: Record<string, string>) =>
 export const lambdaPost = (
   path: string,
   body: object,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ) => lambdaRequest("POST", path, body, headers);
 
 export const lambdaPut = (
   path: string,
   body: object,
-  headers?: Record<string, string>
+  headers?: Record<string, string>,
 ) => lambdaRequest("PUT", path, body, headers);
 
 export const lambdaDelete = (path: string, headers?: Record<string, string>) =>

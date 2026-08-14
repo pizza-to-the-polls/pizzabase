@@ -185,7 +185,7 @@ export class Location extends BaseEntity {
 
   async mergeInto(
     canonicalLocation: Location,
-    mergedBy: string
+    mergedBy: string,
   ): Promise<void> {
     const query = { location: { id: this.id } };
     const relations = [Report, Order, Truck];
@@ -210,7 +210,7 @@ export class Location extends BaseEntity {
   }
 
   static async fidByIdOrFullAddress(
-    idOrAddress: string
+    idOrAddress: string,
   ): Promise<Location | null> {
     return this.findOne({
       where: idOrAddress.match(/[a-z]/g)
@@ -220,17 +220,10 @@ export class Location extends BaseEntity {
   }
 
   static async createFromAddress(
-    normalAddress: NormalAddress
+    normalAddress: NormalAddress,
   ): Promise<Location> {
-    const {
-      fullAddress,
-      address,
-      city,
-      state,
-      zip,
-      latitude,
-      longitude,
-    } = normalAddress;
+    const { fullAddress, address, city, state, zip, latitude, longitude } =
+      normalAddress;
 
     const location = new this();
 
@@ -247,7 +240,7 @@ export class Location extends BaseEntity {
     return location;
   }
   static async getOrCreateFromAddress(
-    normalAddress: NormalAddress
+    normalAddress: NormalAddress,
   ): Promise<[Location, boolean]> {
     const { fullAddress } = normalAddress;
     const exists = await this.findOne({

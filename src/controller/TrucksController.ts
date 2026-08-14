@@ -32,7 +32,7 @@ export class TrucksController {
         trucks.map(async (truck) => ({
           ...truck.asJSON(),
           location: await truck.location.asJSON(),
-        }))
+        })),
       ),
       count,
     };
@@ -40,7 +40,7 @@ export class TrucksController {
   async create(request: Request, response: Response, next: NextFunction) {
     if (!(await isAuthorized(request, response, next))) return null;
     const { errors, normalizedAddress, identifier } = await validateTruck(
-      request.body || {}
+      request.body || {},
     );
 
     if (Object.keys(errors).length > 0) {
@@ -51,7 +51,7 @@ export class TrucksController {
     const truck = await Truck.createForAddress(
       normalizedAddress,
       identifier,
-      request.body?.user
+      request.body?.user,
     );
     await zapNewTruck(truck);
 
