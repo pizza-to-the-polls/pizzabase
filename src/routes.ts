@@ -168,6 +168,12 @@ export const Routes = [
     action: "index",
   },
   {
+    method: "get",
+    route: "/banned-phone-numbers/:idOrPhoneNumber",
+    controller: BannedPhoneNumbersController,
+    action: "show",
+  },
+  {
     method: "post",
     route: "/banned-phone-numbers",
     controller: BannedPhoneNumbersController,

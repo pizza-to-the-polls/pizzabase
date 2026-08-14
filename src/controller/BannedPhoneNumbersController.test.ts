@@ -42,22 +42,25 @@ describe("#index", () => {
 
     const body = await controller.index(request, response, () => undefined);
 
-    expect(body).toEqual([
-      {
-        id: ban2.id,
-        phoneNumber: "6669876543",
-        reason: "Harassment",
-        bannedBy: "mod@example.com",
-        bannedAt: ban2.bannedAt,
-      },
-      {
-        id: ban1.id,
-        phoneNumber: "5551234567",
-        reason: "Spam",
-        bannedBy: "admin@example.com",
-        bannedAt: ban1.bannedAt,
-      },
-    ]);
+    expect(body).toEqual({
+      results: [
+        {
+          id: ban2.id,
+          phoneNumber: "6669876543",
+          reason: "Harassment",
+          bannedBy: "mod@example.com",
+          bannedAt: ban2.bannedAt,
+        },
+        {
+          id: ban1.id,
+          phoneNumber: "5551234567",
+          reason: "Spam",
+          bannedBy: "admin@example.com",
+          bannedAt: ban1.bannedAt,
+        },
+      ],
+      count: 2,
+    });
     expect(response.statusCode).toEqual(200);
   });
 
@@ -70,8 +73,106 @@ describe("#index", () => {
 
     const body = await controller.index(request, response, () => undefined);
 
-    expect(body).toEqual([]);
+    expect(body).toEqual({ results: [], count: 0 });
     expect(response.statusCode).toEqual(200);
+  });
+
+  it("paginates with limit and page query params", async () => {
+    const ban1 = new BannedPhoneNumber();
+    ban1.phoneNumber = "5551234567";
+    ban1.reason = "Spam";
+    ban1.bannedBy = "admin@example.com";
+    await ban1.save();
+
+    const ban2 = new BannedPhoneNumber();
+    ban2.phoneNumber = "6669876543";
+    ban2.reason = "Harassment";
+    ban2.bannedBy = "mod@example.com";
+    await ban2.save();
+
+    const request = http_mocks.createRequest({
+      method: "GET",
+      query: { limit: "1", page: "1" },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+    const response = http_mocks.createResponse();
+
+    const body = (await controller.index(
+      request,
+      response,
+      () => undefined
+    )) as JsonResponse;
+
+    expect(body.count).toEqual(2);
+    expect(body.results.length).toEqual(1);
+    expect(body.results[0].id).toEqual(ban1.id);
+  });
+});
+
+describe("#show", () => {
+  let ban: BannedPhoneNumber;
+
+  beforeEach(async () => {
+    ban = new BannedPhoneNumber();
+    ban.phoneNumber = "5551234567";
+    ban.reason = "Spam reports";
+    ban.bannedBy = "admin@example.com";
+    await ban.save();
+  });
+
+  it("returns 401 without auth", async () => {
+    const request = http_mocks.createRequest({
+      method: "GET",
+      params: { idOrPhoneNumber: `${ban.id}` },
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.show(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(401);
+    expect(body).toEqual({ errors: ["Not authorized"] });
+  });
+
+  it("returns a ban by id", async () => {
+    const request = http_mocks.createRequest({
+      method: "GET",
+      params: { idOrPhoneNumber: `${ban.id}` },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.show(request, response, () => undefined);
+
+    expect(body).toEqual(ban.asJSON());
+    expect(response.statusCode).toEqual(200);
+  });
+
+  it("returns a ban by normalized phone number", async () => {
+    const request = http_mocks.createRequest({
+      method: "GET",
+      params: { idOrPhoneNumber: "555-123-4567" },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.show(request, response, () => undefined);
+
+    expect(body).toEqual(ban.asJSON());
+    expect(response.statusCode).toEqual(200);
+  });
+
+  it("returns 404 for a nonexistent ban", async () => {
+    const request = http_mocks.createRequest({
+      method: "GET",
+      params: { idOrPhoneNumber: "9999999999" },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.show(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toBeFalsy();
   });
 });
 

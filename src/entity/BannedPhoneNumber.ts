@@ -35,4 +35,21 @@ export class BannedPhoneNumber extends BaseEntity {
     const normalized = normalizePhone(phoneNumber);
     return (await this.count({ where: { phoneNumber: normalized } })) > 0;
   }
+
+  static async findByIdOrPhoneNumber(
+    idOrPhoneNumber: string
+  ): Promise<BannedPhoneNumber | null> {
+    // SERIAL ids are small; phone numbers are 10+ digits. Only treat short
+    // all-digit values as ids so 10-digit phone numbers never overflow integer.
+    if (/^\d{1,7}$/.test(idOrPhoneNumber)) {
+      const byId = await this.findOne({
+        where: { id: Number(idOrPhoneNumber) },
+      });
+      if (byId) return byId;
+    }
+
+    return this.findOne({
+      where: { phoneNumber: normalizePhone(idOrPhoneNumber) },
+    });
+  }
 }

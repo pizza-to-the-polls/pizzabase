@@ -10,11 +10,38 @@ export class BannedPhoneNumbersController {
       return { errors: ["Not authorized"] };
     }
 
-    const bans = await BannedPhoneNumber.find({
+    const limit = Number(request.query.limit || 100);
+    const take = limit < 100 ? limit : 100;
+    const skip = Number(request.query.page || 0) * limit;
+
+    const [bans, count] = await BannedPhoneNumber.findAndCount({
+      take,
+      skip,
       order: { bannedAt: "DESC" },
     });
 
-    return bans.map((ban) => ban.asJSON());
+    return {
+      results: bans.map((ban) => ban.asJSON()),
+      count,
+    };
+  }
+
+  async show(request: Request, response: Response, next: NextFunction) {
+    if (!(await checkAuthorization(request))) {
+      response.status(401);
+      return { errors: ["Not authorized"] };
+    }
+
+    const ban: BannedPhoneNumber = await findOr404(
+      await BannedPhoneNumber.findByIdOrPhoneNumber(
+        request.params.idOrPhoneNumber || ""
+      ),
+      response,
+      next
+    );
+    if (!ban) return;
+
+    return ban.asJSON();
   }
 
   async create(request: Request, response: Response, _next: NextFunction) {
