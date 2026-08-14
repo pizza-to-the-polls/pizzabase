@@ -8,6 +8,7 @@ import {
   MAX_BLUESKY_LENGTH,
 } from "./message-templates";
 import { collectMedia, MediaUrls } from "./media";
+import { socialEnabled } from "./social-config";
 import FormData from "form-data";
 
 interface SessionData {
@@ -595,6 +596,10 @@ export async function blueskyPost(
   text?: string,
   mediaUrls?: MediaUrls
 ): Promise<void> {
+  if (!socialEnabled().bluesky) {
+    return; // not configured — clean no-op
+  }
+
   try {
     const session = await getOrCreateSession();
     const finalText = truncateMessage(

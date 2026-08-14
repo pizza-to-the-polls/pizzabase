@@ -216,7 +216,7 @@ export async function threadsPost(
   text?: string,
   mediaUrls?: MediaUrls
 ): Promise<void> {
-  // Skip if Threads is not configured
+  // Skip if Threads is not configured (token retrieved from SSM at runtime)
   const accessToken = await getAccessToken();
   if (!accessToken) {
     return;
