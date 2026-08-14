@@ -8,6 +8,7 @@ import { UploadsController } from "./controller/UploadsController";
 import { SightEngineController } from "./controller/SightEngineController";
 import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
+import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
 
 export const Routes = [
   {
@@ -159,6 +160,30 @@ export const Routes = [
     route: "/webhook",
     controller: DonationsController,
     action: "webhook",
+  },
+  {
+    method: "get",
+    route: "/banned-phone-numbers",
+    controller: BannedPhoneNumbersController,
+    action: "index",
+  },
+  {
+    method: "get",
+    route: "/banned-phone-numbers/:idOrPhoneNumber",
+    controller: BannedPhoneNumbersController,
+    action: "show",
+  },
+  {
+    method: "post",
+    route: "/banned-phone-numbers",
+    controller: BannedPhoneNumbersController,
+    action: "create",
+  },
+  {
+    method: "delete",
+    route: "/banned-phone-numbers/:id",
+    controller: BannedPhoneNumbersController,
+    action: "delete",
   },
   {
     method: "get",
