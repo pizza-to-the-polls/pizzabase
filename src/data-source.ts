@@ -65,7 +65,7 @@ const testConfig: PostgresConnectionOptions = {
   dropSchema: true,
   synchronize: true,
   logging: false,
-  entities: ["src/entity/**/*.ts"],
+  entities,
   migrations: ["src/migration/**/*.ts"],
   subscribers: ["src/subscriber/**/*.ts"],
 };
