@@ -119,31 +119,66 @@ Twitter's OAuth 1.0a — just a long-lived access token.
 4. From the app dashboard, add the **Threads API** product:
    - Go to **Add Product** → find **Threads** → click **Set Up**
 
-### 2. Get a Threads user access token
+### 2. Get credentials from the Threads API Setup
 
-The easiest way to get a long-lived token for your own account:
+1. From the app dashboard, go to **Threads** → **API Setup** (in the left sidebar)
+2. Note the **Threads App ID** and **Threads App Secret** — these are your
+   OAuth 2.0 client credentials, specific to the Threads product
+3. You'll also need a **redirect URI** — add one under Threads settings
+   (e.g. `https://polls.pizza/oauth/callback` or use
+   `https://developers.facebook.com/tools/explorer/callback` for testing)
 
-1. Go to **Graph API Explorer** (https://developers.facebook.com/tools/explorer/)
-2. Select your app from the dropdown
-3. Under **User or Page**, select **Get User Access Token**
-4. In the permissions dialog, add:
-   - `threads_basic`
-   - `threads_content_publish`
-   - `threads_manage_insights` (optional)
-5. Click **Generate Access Token**
-6. Copy the short-lived token
-7. Exchange it for a long-lived token (60 days):
+### 3. Get a Threads user access token
+
+The Threads API uses OAuth 2.0. The simplest path for your own account:
+
+**Step A — Get an authorization code:**
+
+Open this URL in a browser (replace the placeholders):
+
+```
+https://threads.net/oauth/authorize?
+  client_id=YOUR_THREADS_APP_ID&
+  redirect_uri=YOUR_REDIRECT_URI&
+  scope=threads_basic,threads_content_publish&
+  response_type=code
+```
+
+Log in with the Threads account you want to post from. You'll be
+redirected to your redirect URI with a `?code=...` in the URL.
+Copy the code.
+
+> **If you get `"The user has not accepted the invite to test the app"`:**
+> Your app is in development mode and your account doesn't have a role.
+> Go to the Meta Developer dashboard → **App Roles** → **Roles** → Add
+> your Threads account as a **Tester** (or Admin/Developer). Then retry.
+
+**Step B — Exchange the code for a short-lived token:**
+
+```bash
+curl -X POST "https://api.threads.net/oauth/access_token" \
+  -d "client_id=YOUR_THREADS_APP_ID" \
+  -d "client_secret=YOUR_THREADS_APP_SECRET" \
+  -d "redirect_uri=YOUR_REDIRECT_URI" \
+  -d "code=AUTHORIZATION_CODE" \
+  -d "grant_type=authorization_code"
+```
+
+This returns `{ access_token: "...", user_id: "..." }` — a short-lived
+access token (~1 hour) and your Threads user ID.
+
+**Step C — Exchange for a long-lived token (60 days):**
 
 ```bash
 curl -X GET "https://graph.threads.net/v1.0/access_token?\
   grant_type=th_exchange_token&\
-  client_secret=YOUR_APP_SECRET&\
+  client_secret=YOUR_THREADS_APP_SECRET&\
   access_token=SHORT_LIVED_TOKEN"
 ```
 
 This returns a long-lived token valid for ~60 days.
 
-### 3. Get your Threads user ID
+### 4. Get your Threads user ID
 
 ```bash
 curl -X GET "https://graph.threads.net/v1.0/me?\
@@ -153,14 +188,14 @@ curl -X GET "https://graph.threads.net/v1.0/me?\
 
 Note the `id` field — this is your `THREADS_USER_ID`.
 
-### 4. Environment variables
+### 5. Environment variables
 
 | Variable               | Description             | Source      |
 | ---------------------- | ----------------------- | ----------- |
-| `THREADS_ACCESS_TOKEN` | Long-lived access token | From step 2 |
+| `THREADS_ACCESS_TOKEN` | Long-lived access token | From step 3 |
 | `THREADS_USER_ID`      | Your Threads user ID    | From step 3 |
 
-### 5. Test it
+### 6. Test it
 
 ```bash
 # Post a simple text thread
