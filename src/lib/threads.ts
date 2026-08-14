@@ -1,4 +1,6 @@
 import type { Order } from "../entity/Order";
+import { AppDataSource } from "../data-source";
+import { IntegrationSession } from "../entity/IntegrationSession";
 import { notifyBugsnag } from "./notifyBugsnag";
 import { renderMessage, truncateMessage } from "./message-templates";
 import { collectMedia, MediaUrls } from "./media";
@@ -10,12 +12,19 @@ const MAX_THREADS_LENGTH = 500;
 // Helpers
 // ---------------------------------------------------------------------------
 
-function getAccessToken(): string {
-  const token = process.env.THREADS_ACCESS_TOKEN;
-  if (!token) {
-    throw new Error("THREADS_ACCESS_TOKEN environment variable is not set");
+async function getAccessToken(): Promise<string | null> {
+  try {
+    const repo = AppDataSource.getRepository(IntegrationSession);
+    const row = await repo.findOne({ where: { service: "threads" } });
+    if (row?.credentials?.accessToken) {
+      return row.credentials.accessToken;
+    }
+  } catch (err) {
+    console.error("Failed to read Threads token from DB:", err);
   }
-  return token;
+
+  // Fallback for the transition period before the DB is seeded.
+  return process.env.THREADS_ACCESS_TOKEN || null;
 }
 
 function getUserId(): string {
@@ -35,7 +44,10 @@ async function threadsApi(
   body: Record<string, unknown>,
   retryOnTransient: boolean = true
 ): Promise<Response> {
-  const accessToken = getAccessToken();
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
+    throw new Error("Threads access token is not configured");
+  }
   const userId = getUserId();
   const url = `${THREADS_API_BASE}/${userId}/${endpoint}`;
 
@@ -205,7 +217,8 @@ export async function threadsPost(
   mediaUrls?: MediaUrls
 ): Promise<void> {
   // Skip if Threads is not configured
-  if (!process.env.THREADS_ACCESS_TOKEN) {
+  const accessToken = await getAccessToken();
+  if (!accessToken) {
     return;
   }
 

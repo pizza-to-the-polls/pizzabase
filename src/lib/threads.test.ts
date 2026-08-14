@@ -1,4 +1,6 @@
 import { threadsPost } from "./threads";
+import { AppDataSource } from "../data-source";
+import { IntegrationSession } from "../entity/IntegrationSession";
 import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
@@ -7,14 +9,23 @@ import { Upload } from "../entity/Upload";
 // Helpers
 // ---------------------------------------------------------------------------
 
-function setThreadsEnv() {
+async function setThreadsEnv() {
   process.env.THREADS_ACCESS_TOKEN = "test-threads-access-token";
   process.env.THREADS_USER_ID = "test-threads-user-id";
+
+  const repo = AppDataSource.getRepository(IntegrationSession);
+  const row = new IntegrationSession();
+  row.service = "threads";
+  row.credentials = { accessToken: "test-threads-access-token" };
+  await repo.save(row);
 }
 
-function clearThreadsEnv() {
+async function clearThreadsEnv() {
   delete process.env.THREADS_ACCESS_TOKEN;
   delete process.env.THREADS_USER_ID;
+
+  const repo = AppDataSource.getRepository(IntegrationSession);
+  await repo.delete({ service: "threads" });
 }
 
 async function createTestOrder(
@@ -66,13 +77,13 @@ function threadsFetchCalls(): [string, RequestInit][] {
 // ---------------------------------------------------------------------------
 
 describe("threadsPost", () => {
-  beforeEach(() => {
-    setThreadsEnv();
+  beforeEach(async () => {
+    await setThreadsEnv();
     (global.fetch as jest.Mock).mockReset();
   });
 
-  afterEach(() => {
-    clearThreadsEnv();
+  afterEach(async () => {
+    await clearThreadsEnv();
   });
 
   // ------------------------------------------------------------------
@@ -80,7 +91,7 @@ describe("threadsPost", () => {
   // ------------------------------------------------------------------
 
   it("is a no-op when THREADS_ACCESS_TOKEN is not set", async () => {
-    clearThreadsEnv();
+    await clearThreadsEnv();
     const order = await createTestOrder();
 
     await threadsPost(order);
