@@ -7,10 +7,7 @@ export class AddIntegrationSessions1766200000000 implements MigrationInterface {
     await queryRunner.query(
       `CREATE TABLE "integration_sessions" (
         "service" character varying NOT NULL,
-        "access_jwt" text NOT NULL,
-        "refresh_jwt" text NOT NULL,
-        "did" character varying NOT NULL,
-        "handle" character varying NOT NULL,
+        "credentials" text NOT NULL,
         "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
         CONSTRAINT "PK_integration_sessions" PRIMARY KEY ("service")
       )`

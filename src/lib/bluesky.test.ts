@@ -159,9 +159,9 @@ describe("blueskyPost", () => {
       const repo = AppDataSource.getRepository(IntegrationSession);
       const sess = await repo.findOne({ where: { service: "bluesky" } });
       expect(sess).toBeTruthy();
-      expect(sess!.accessJwt).toBe("tok-access");
-      expect(sess!.refreshJwt).toBe("tok-refresh");
-      expect(sess!.did).toBe("did:plc:abc123");
+      expect(sess!.credentials.accessJwt).toBe("tok-access");
+      expect(sess!.credentials.refreshJwt).toBe("tok-refresh");
+      expect(sess!.credentials.did).toBe("did:plc:abc123");
     });
 
     it("reuses an existing valid session", async () => {
@@ -169,10 +169,12 @@ describe("blueskyPost", () => {
       const repo = AppDataSource.getRepository(IntegrationSession);
       const existing = new IntegrationSession();
       existing.service = "bluesky";
-      existing.accessJwt = "cached-access";
-      existing.refreshJwt = "cached-refresh";
-      existing.did = "did:plc:cached";
-      existing.handle = "cached.test";
+      existing.credentials = {
+        accessJwt: "cached-access",
+        refreshJwt: "cached-refresh",
+        did: "did:plc:cached",
+        handle: "cached.test",
+      };
       await repo.save(existing);
 
       routeMock(standardMocks());
@@ -206,10 +208,12 @@ describe("blueskyPost", () => {
       const repo = AppDataSource.getRepository(IntegrationSession);
       const existing = new IntegrationSession();
       existing.service = "bluesky";
-      existing.accessJwt = "expired-access";
-      existing.refreshJwt = "expired-refresh";
-      existing.did = "did:plc:expired";
-      existing.handle = "expired.test";
+      existing.credentials = {
+        accessJwt: "expired-access",
+        refreshJwt: "expired-refresh",
+        did: "did:plc:expired",
+        handle: "expired.test",
+      };
       await repo.save(existing);
 
       routeMock(
@@ -240,7 +244,9 @@ describe("blueskyPost", () => {
 
       // DB row should be updated
       await existing.reload();
-      expect(existing.accessJwt).toBe("tok-access-new");
+      expect(existing.credentials.accessJwt).toBe("tok-access-new");
+      expect(existing.credentials.refreshJwt).toBe("tok-refresh-new");
+      expect(existing.credentials.did).toBe("did:plc:expired");
     });
 
     it("re-authenticates when refresh fails", async () => {
@@ -248,10 +254,12 @@ describe("blueskyPost", () => {
       const repo = AppDataSource.getRepository(IntegrationSession);
       const existing = new IntegrationSession();
       existing.service = "bluesky";
-      existing.accessJwt = "busted-access";
-      existing.refreshJwt = "busted-refresh";
-      existing.did = "did:plc:busted";
-      existing.handle = "busted.test";
+      existing.credentials = {
+        accessJwt: "busted-access",
+        refreshJwt: "busted-refresh",
+        did: "did:plc:busted",
+        handle: "busted.test",
+      };
       await repo.save(existing);
 
       routeMock(
@@ -279,7 +287,7 @@ describe("blueskyPost", () => {
       // Old session should be gone, new one persisted
       const sessions = await repo.find();
       expect(sessions.length).toBe(1);
-      expect(sessions[0].accessJwt).toBe("tok-access");
+      expect(sessions[0].credentials.accessJwt).toBe("tok-access");
 
       // Post should still succeed
       const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(

@@ -192,40 +192,49 @@ async function getOrCreateSession(): Promise<SessionData> {
 
     sessionRow = new IntegrationSession();
     sessionRow.service = "bluesky";
-    sessionRow.accessJwt = session.accessJwt;
-    sessionRow.refreshJwt = session.refreshJwt;
-    sessionRow.did = session.did;
-    sessionRow.handle = session.handle;
+    sessionRow.credentials = {
+      accessJwt: session.accessJwt,
+      refreshJwt: session.refreshJwt,
+      did: session.did,
+      handle: session.handle,
+    };
     await repo.save(sessionRow);
 
     return session;
   }
 
   // Check if the access token is still active
-  const isActive = await getSession(pdsUrl, sessionRow.accessJwt);
+  const isActive = await getSession(pdsUrl, sessionRow.credentials.accessJwt);
 
   if (isActive) {
+    const creds = sessionRow.credentials;
     return {
-      accessJwt: sessionRow.accessJwt,
-      refreshJwt: sessionRow.refreshJwt,
-      did: sessionRow.did,
-      handle: sessionRow.handle,
+      accessJwt: creds.accessJwt,
+      refreshJwt: creds.refreshJwt,
+      did: creds.did,
+      handle: creds.handle,
       pdsUrl,
     };
   }
 
   // Try to refresh
   try {
-    const refreshed = await refreshSession(pdsUrl, sessionRow.refreshJwt);
-    sessionRow.accessJwt = refreshed.accessJwt;
-    sessionRow.refreshJwt = refreshed.refreshJwt;
+    const refreshed = await refreshSession(
+      pdsUrl,
+      sessionRow.credentials.refreshJwt
+    );
+    sessionRow.credentials = {
+      ...sessionRow.credentials,
+      accessJwt: refreshed.accessJwt,
+      refreshJwt: refreshed.refreshJwt,
+    };
     await repo.save(sessionRow);
 
     return {
       accessJwt: refreshed.accessJwt,
       refreshJwt: refreshed.refreshJwt,
-      did: sessionRow.did,
-      handle: sessionRow.handle,
+      did: sessionRow.credentials.did,
+      handle: sessionRow.credentials.handle,
       pdsUrl,
     };
   } catch {
@@ -236,10 +245,12 @@ async function getOrCreateSession(): Promise<SessionData> {
 
     sessionRow = new IntegrationSession();
     sessionRow.service = "bluesky";
-    sessionRow.accessJwt = session.accessJwt;
-    sessionRow.refreshJwt = session.refreshJwt;
-    sessionRow.did = session.did;
-    sessionRow.handle = session.handle;
+    sessionRow.credentials = {
+      accessJwt: session.accessJwt,
+      refreshJwt: session.refreshJwt,
+      did: session.did,
+      handle: session.handle,
+    };
     await repo.save(sessionRow);
 
     return session;

@@ -9,19 +9,10 @@ import {
 @Entity({ name: "integration_sessions" })
 export class IntegrationSession extends BaseEntity {
   @PrimaryColumn()
-  service: string; // "bluesky"
+  service: string; // "bluesky", "threads", ...
 
-  @Column({ type: "text", name: "access_jwt" })
-  accessJwt: string;
-
-  @Column({ type: "text", name: "refresh_jwt" })
-  refreshJwt: string;
-
-  @Column()
-  did: string;
-
-  @Column()
-  handle: string;
+  @Column({ type: "simple-json", name: "credentials" })
+  credentials: Record<string, string>;
 
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt: Date;
