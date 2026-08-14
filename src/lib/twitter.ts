@@ -9,6 +9,7 @@ import {
   MAX_TWEET_LENGTH,
 } from "./message-templates";
 import type { MediaUrls } from "./media";
+import { socialEnabled } from "./social-config";
 
 const TWITTER_API_BASE = "https://api.twitter.com";
 const TWITTER_UPLOAD_BASE = "https://upload.twitter.com";
@@ -567,7 +568,7 @@ export async function twitterPost(
   mediaUrls?: MediaUrls
 ): Promise<void> {
   // Skip if Twitter is not configured
-  if (!process.env.TWITTER_API_KEY) {
+  if (!socialEnabled().twitter) {
     return;
   }
 

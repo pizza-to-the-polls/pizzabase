@@ -1,4 +1,5 @@
 import { blueskyPost } from "./bluesky";
+import * as notifyBugsnagModule from "./notifyBugsnag";
 import { AppDataSource } from "../data-source";
 import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
@@ -765,6 +766,77 @@ describe("blueskyPost", () => {
   // Error handling
   // ------------------------------------------------------------------
   describe("error handling", () => {
+    it("is a silent no-op when BlueSky is not configured", async () => {
+      const origHandle = process.env.BSKY_HANDLE;
+      const origPassword = process.env.BSKY_APP_PASSWORD;
+
+      delete process.env.BSKY_HANDLE;
+      delete process.env.BSKY_APP_PASSWORD;
+
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+      const bugsnagSpy = jest
+        .spyOn(notifyBugsnagModule, "notifyBugsnag")
+        .mockImplementation(() => {});
+
+      try {
+        const order = await buildOrder();
+        await blueskyPost(order);
+
+        // No AT Protocol API calls should have been made
+        const xrpcCalls = (global.fetch as jest.Mock).mock.calls.filter(
+          (c: any[]) => typeof c[0] === "string" && c[0].includes("xrpc")
+        );
+        expect(xrpcCalls).toHaveLength(0);
+
+        // Missing config must not be logged or reported as a runtime error
+        expect(errorSpy).not.toHaveBeenCalled();
+        expect(bugsnagSpy).not.toHaveBeenCalled();
+      } finally {
+        if (origHandle === undefined) {
+          delete process.env.BSKY_HANDLE;
+        } else {
+          process.env.BSKY_HANDLE = origHandle;
+        }
+        if (origPassword === undefined) {
+          delete process.env.BSKY_APP_PASSWORD;
+        } else {
+          process.env.BSKY_APP_PASSWORD = origPassword;
+        }
+        bugsnagSpy.mockRestore();
+        errorSpy.mockRestore();
+      }
+    });
+
+    it("is a silent no-op when only part of the BlueSky config is set", async () => {
+      const origPassword = process.env.BSKY_APP_PASSWORD;
+
+      delete process.env.BSKY_APP_PASSWORD;
+
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      try {
+        const order = await buildOrder();
+        await blueskyPost(order);
+
+        const xrpcCalls = (global.fetch as jest.Mock).mock.calls.filter(
+          (c: any[]) => typeof c[0] === "string" && c[0].includes("xrpc")
+        );
+        expect(xrpcCalls).toHaveLength(0);
+        expect(errorSpy).not.toHaveBeenCalled();
+      } finally {
+        if (origPassword === undefined) {
+          delete process.env.BSKY_APP_PASSWORD;
+        } else {
+          process.env.BSKY_APP_PASSWORD = origPassword;
+        }
+        errorSpy.mockRestore();
+      }
+    });
+
     it("does not throw when all BlueSky calls fail", async () => {
       // All fetches fail
       (global.fetch as jest.Mock).mockRejectedValue(

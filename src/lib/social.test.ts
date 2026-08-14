@@ -150,6 +150,47 @@ describe("socialPost", () => {
     // Should not throw — fire-and-forget semantics
   });
 
+  it("does not call any platform when none are configured", async () => {
+    const origBlueskyHandle = process.env.BSKY_HANDLE;
+    const origBlueskyPassword = process.env.BSKY_APP_PASSWORD;
+    const origTwitterKey = process.env.TWITTER_API_KEY;
+    const origThreadsToken = process.env.THREADS_ACCESS_TOKEN;
+
+    delete process.env.BSKY_HANDLE;
+    delete process.env.BSKY_APP_PASSWORD;
+    delete process.env.TWITTER_API_KEY;
+    delete process.env.THREADS_ACCESS_TOKEN;
+
+    try {
+      await socialPost(mockOrder);
+
+      expect(blueskyPost).not.toHaveBeenCalled();
+      expect(twitterPost).not.toHaveBeenCalled();
+      expect(threadsPost).not.toHaveBeenCalled();
+    } finally {
+      if (origBlueskyHandle === undefined) {
+        delete process.env.BSKY_HANDLE;
+      } else {
+        process.env.BSKY_HANDLE = origBlueskyHandle;
+      }
+      if (origBlueskyPassword === undefined) {
+        delete process.env.BSKY_APP_PASSWORD;
+      } else {
+        process.env.BSKY_APP_PASSWORD = origBlueskyPassword;
+      }
+      if (origTwitterKey === undefined) {
+        delete process.env.TWITTER_API_KEY;
+      } else {
+        process.env.TWITTER_API_KEY = origTwitterKey;
+      }
+      if (origThreadsToken === undefined) {
+        delete process.env.THREADS_ACCESS_TOKEN;
+      } else {
+        process.env.THREADS_ACCESS_TOKEN = origThreadsToken;
+      }
+    }
+  });
+
   it("does not throw when all three reject", async () => {
     (blueskyPost as jest.Mock).mockRejectedValue(new Error("BlueSky down"));
     (twitterPost as jest.Mock).mockRejectedValue(new Error("Twitter down"));

@@ -4,6 +4,7 @@ import { twitterPost } from "./twitter";
 import { threadsPost } from "./threads";
 import { renderMessage } from "./message-templates";
 import { collectMedia } from "./media";
+import { socialEnabled } from "./social-config";
 
 /**
  * Fire-and-forget social media posting for a placed order.
@@ -25,13 +26,20 @@ export async function socialPost(order: Order): Promise<void> {
     console.error("Failed to collect media for order:", err);
   }
 
-  blueskyPost(order, text, mediaUrls).catch((err) =>
-    console.error("BlueSky post failed:", err)
-  );
-  twitterPost(order, text, mediaUrls).catch((err) =>
-    console.error("Twitter post failed:", err)
-  );
-  threadsPost(order, text, mediaUrls).catch((err) =>
-    console.error("Threads post failed:", err)
-  );
+  const enabled = socialEnabled();
+  if (enabled.bluesky) {
+    blueskyPost(order, text, mediaUrls).catch((err) =>
+      console.error("BlueSky post failed:", err)
+    );
+  }
+  if (enabled.twitter) {
+    twitterPost(order, text, mediaUrls).catch((err) =>
+      console.error("Twitter post failed:", err)
+    );
+  }
+  if (enabled.threads) {
+    threadsPost(order, text, mediaUrls).catch((err) =>
+      console.error("Threads post failed:", err)
+    );
+  }
 }
