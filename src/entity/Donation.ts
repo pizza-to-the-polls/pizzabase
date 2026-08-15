@@ -59,32 +59,35 @@ export class Donation extends BaseEntity {
     id,
     amount,
     receipt_email,
-    billing_details: {
-      email,
-      address: { postal_code },
-    },
-    metadata: { referrer, giftName, giftEmail, url },
+    billing_details = {},
+    metadata = {},
   }: {
     id: string;
     amount: number;
-    receipt_email: string;
-    metadata: {
+    receipt_email?: string;
+    metadata?: {
       referrer?: string;
       giftName?: string;
       giftEmail?: string;
       url?: string;
     };
-    billing_details: { email: string; address: { postal_code: string } };
+    billing_details?: {
+      email?: string;
+      address?: { postal_code?: string };
+    };
   }): Promise<Donation> {
+    const { email, address: { postal_code } = {} } = billing_details || {};
+    const { referrer, giftName, giftEmail, url } = metadata || {};
+
     const donation = new Donation();
     donation.amountGross = amount / 100;
     donation.amount = Math.floor(amount * (1 - 0.029) - 0.3 * 100) / 100;
-    donation.email = email || receipt_email;
+    donation.email = email || receipt_email || "";
     donation.stripeId = id;
-    donation.postalCode = postal_code;
-    donation.referrer = referrer;
-    if (giftName && giftEmail) donation.gift = `${giftName} <${giftEmail}>`;
-    donation.url = url;
+    donation.postalCode = postal_code ?? null;
+    donation.referrer = referrer ?? null;
+    donation.gift = giftName && giftEmail ? `${giftName} <${giftEmail}>` : null;
+    donation.url = url || "https://polls.pizza";
 
     await donation.save();
 

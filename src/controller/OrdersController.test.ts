@@ -152,6 +152,7 @@ describe("#create", () => {
 
     expect(order.cost).toEqual(500.23);
     expect(order.quantity).toEqual(32);
+    expect(order.restaurant).toBeNull();
     expect(location.validatedAt).toBeTruthy();
   });
 

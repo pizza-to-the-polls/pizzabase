@@ -192,10 +192,10 @@ export class Report extends BaseEntity {
 
     const willReceive = !(await location.hasDistributor()) && !!canDistribute;
     report.canDistribute = canDistribute ? 1 : 0;
-    report.waitTime = waitTime;
-    report.contactFirstName = contactFirstName;
-    report.contactLastName = contactLastName;
-    report.contactRole = contactRole;
+    report.waitTime = waitTime ?? null;
+    report.contactFirstName = contactFirstName ?? null;
+    report.contactLastName = contactLastName ?? null;
+    report.contactRole = contactRole ?? null;
 
     const reportExists =
       !isNewLocation &&

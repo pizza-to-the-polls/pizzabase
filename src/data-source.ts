@@ -82,22 +82,54 @@ if (process.env.NODE_ENV === "production") {
 
 export const AppDataSource = new DataSource(options);
 
-// ── Aurora Serverless resume retry patch ──────────────────────────
+// ── Aurora Data API parameter sanitization ────────────────────────
+// The typeorm-aurora-data-api-driver's getType() has no mapping for
+// JavaScript undefined, so it throws "'param_N' is an invalid type".
+// The postgres driver (dev/test) silently converts undefined → NULL,
+// but the Aurora RDS Data API is stricter.
+//
+// This helper walks top-level positional/named parameters and replaces
+// every undefined with null so the driver maps them to type "NULL".
+
+export const sanitizeQueryParameters = (
+  parameters?: any[] | Record<string, unknown>
+): any[] | Record<string, unknown> | undefined => {
+  if (parameters == null) return parameters;
+  if (Array.isArray(parameters)) {
+    return parameters.map((p) => (p === undefined ? null : p));
+  }
+  if (typeof parameters === "object") {
+    return Object.fromEntries(
+      Object.entries(parameters).map(([k, v]) => [
+        k,
+        v === undefined ? null : v,
+      ])
+    );
+  }
+  return parameters;
+};
+
+// ── Aurora Serverless resume retry & parameter sanitizer patch ─────
 // When the Aurora DB auto-pauses, queries during the resume window throw
 // "resuming after being auto-paused". Wrap every query runner's query()
 // method with retry+backoff so the request survives the resume window.
 //
+// Also sanitizes undefined→null in query parameters so the Aurora Data
+// API driver doesn't throw "'param_N' is an invalid type".
+//
 // This patch is only installed for the aurora-postgres driver.
-// Dev and test use the plain postgres driver where resume errors never occur.
+// Dev and test use the plain postgres driver where resume errors never occur
+// and undefined params are already handled silently.
 
-if (options.type === "aurora-postgres") {
-  const originalCreateQueryRunner = AppDataSource.driver.createQueryRunner.bind(
-    AppDataSource.driver
-  );
+export const installAuroraCompatibilityPatches = (
+  driver: any,
+  sleep?: (ms: number) => Promise<void>
+): void => {
+  const originalCreateQueryRunner = driver.createQueryRunner.bind(driver);
 
   // Cast through any — monkey-patching the driver instance doesn't match
   // TypeORM's narrow Driver interface, but the runtime prototype is correct.
-  (AppDataSource.driver as any).createQueryRunner = (mode?: any) => {
+  driver.createQueryRunner = (mode?: any) => {
     const queryRunner = originalCreateQueryRunner(mode);
     const originalQuery = queryRunner.query.bind(queryRunner);
 
@@ -106,13 +138,19 @@ if (options.type === "aurora-postgres") {
       parameters?: any[],
       useStructuredResult?: boolean
     ) => {
-      return withDatabaseResumeRetry(() =>
-        originalQuery(query, parameters, useStructuredResult)
+      const sanitized = sanitizeQueryParameters(parameters);
+      return withDatabaseResumeRetry(
+        () => originalQuery(query, sanitized, useStructuredResult),
+        sleep ? { sleep } : undefined
       );
     }) as any;
 
     return queryRunner;
   };
+};
+
+if (options.type === "aurora-postgres") {
+  installAuroraCompatibilityPatches(AppDataSource.driver);
 }
 
 export const initializeDataSource = async () => {
