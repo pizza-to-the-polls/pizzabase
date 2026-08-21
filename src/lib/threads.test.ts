@@ -295,6 +295,11 @@ describe("threadsPost", () => {
           ok: true,
           json: () => Promise.resolve({ id: "vid-container-789" }),
         })
+        // Status poll — container FINISHED
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: "FINISHED" }),
+        })
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ id: "vid-post-101" }),
@@ -303,13 +308,58 @@ describe("threadsPost", () => {
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(3);
+
+      // Status check happens between container creation and publish
+      expect(calls[1][0]).toContain("fields=status");
+      expect(calls[1][0]).toContain("vid-container-789");
 
       // Step 1: container should have video_url, not image_url
       const containerBody = JSON.parse(calls[0][1].body as string);
       expect(containerBody.media_type).toBe("VIDEO");
       expect(containerBody.video_url).toContain("threads-video.mp4");
       expect(containerBody.image_url).toBeUndefined();
+    });
+
+    it("falls back to text-only when video container errors during processing", async () => {
+      const order = await createTestOrder();
+
+      const upload = new Upload();
+      upload.location = order.location;
+      upload.ipAddress = "127.0.0.1";
+      upload.filePath = "uploads/chicago-il-threads-err.mp4";
+      upload.fileHash = "threads_err_vid";
+      await upload.save();
+
+      (global.fetch as jest.Mock)
+        // Video container succeeds
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: "err-container-000" }),
+        })
+        // Status poll — processing FAILED (returns immediately, no waiting)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: "ERROR" }),
+        })
+        // Text-only fallback post
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: "text-only-fallback" }),
+        });
+
+      await threadsPost(order);
+
+      const calls = threadsFetchCalls();
+      expect(calls).toHaveLength(3);
+
+      // No publish attempted — last call is the text-only fallback
+      const lastUrl = calls[2][0] as string;
+      const lastBody = JSON.parse(calls[2][1].body as string);
+      expect(lastUrl).toContain("/threads");
+      expect(lastUrl).not.toContain("threads_publish");
+      expect(lastBody.creation_id).toBeUndefined();
+      expect(lastBody.text).toBeDefined();
     });
 
     it("tries video first then falls back to image", async () => {
@@ -581,6 +631,11 @@ describe("threadsPost", () => {
           ok: true,
           json: () => Promise.resolve({ id: "shared-vid-container" }),
         })
+        // Status poll — container FINISHED
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ status: "FINISHED" }),
+        })
         // Video publish
         .mockResolvedValueOnce({
           ok: true,
@@ -590,7 +645,7 @@ describe("threadsPost", () => {
       await threadsPost(order, "Shared template text", providedMedia);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(3);
 
       const containerBody = JSON.parse(calls[0][1].body as string);
       expect(containerBody.text).toBe("Shared template text");

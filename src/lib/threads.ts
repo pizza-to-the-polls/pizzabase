@@ -100,6 +100,49 @@ async function postTextOnly(text: string): Promise<void> {
 // ---------------------------------------------------------------------------
 
 /**
+ * Poll a media container's status until it finishes processing.
+ *
+ * Video containers require server-side processing on Threads' end; publishing
+ * one before its status is FINISHED is rejected. Returns true when the
+ * container is FINISHED, false on ERROR, EXPIRED, or timeout.
+ */
+async function waitForContainerReady(
+  creationId: string,
+  maxAttempts: number = 8,
+  intervalMs: number = 2000
+): Promise<boolean> {
+  const accessToken = await getAccessToken();
+  if (!accessToken) return false;
+
+  for (let attempt = 0; attempt < maxAttempts; attempt++) {
+    const res = await fetch(
+      `${THREADS_API_BASE}/${creationId}?fields=status&access_token=${encodeURIComponent(
+        accessToken
+      )}`
+    );
+
+    if (!res.ok) {
+      console.error(`Threads container status check failed: ${res.status}`);
+      return false;
+    }
+
+    const { status } = (await res.json()) as { status?: string };
+    if (status === "FINISHED") return true;
+    if (status === "ERROR" || status === "EXPIRED") {
+      console.error(`Threads container ${creationId} entered state ${status}`);
+      return false;
+    }
+
+    await new Promise((resolve) => setTimeout(resolve, intervalMs));
+  }
+
+  console.error(
+    `Threads container ${creationId} not ready after ${maxAttempts} polls`
+  );
+  return false;
+}
+
+/**
  * Post a Thread with an image or video.
  *
  * Threads requires a two-step flow:
@@ -156,6 +199,18 @@ async function postMedia(
       if (!creationId) {
         console.error("Threads media container created but no id returned");
         continue;
+      }
+
+      // Video containers require server-side processing on Threads' end;
+      // publishing before the container is FINISHED is rejected.
+      if (media.mediaType === "VIDEO") {
+        const ready = await waitForContainerReady(creationId);
+        if (!ready) {
+          console.error(
+            `Threads video container ${creationId} not publishable; trying next media`
+          );
+          continue;
+        }
       }
 
       // Step 2: Publish

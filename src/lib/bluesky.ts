@@ -374,8 +374,11 @@ function buildCloudFrontResizeUrl(imageUrl: string): string {
     edits: { resize: { width: 750, fit: "inside" } },
   };
 
+  // Match the original Zapier code byte-for-byte: btoa() produces standard
+  // padded base64. Do NOT switch to base64url — the CloudFront image handler
+  // expects the exact encoding the Zapier integration used.
   const encodedParams = Buffer.from(JSON.stringify(resizeParams)).toString(
-    "base64url"
+    "base64"
   );
   return `https://d120oba23kfdpx.cloudfront.net/${encodedParams}`;
 }
