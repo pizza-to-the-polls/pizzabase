@@ -72,7 +72,7 @@ describe("#overall", () => {
     const body = await controller.overall(
       http_mocks.createRequest(),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual(overall);
@@ -146,7 +146,7 @@ describe("#yearly", () => {
         params: { year: `${new Date().getFullYear()}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(thisBody).toEqual(overall);
@@ -154,7 +154,7 @@ describe("#yearly", () => {
     const pastBody = await controller.yearly(
       http_mocks.createRequest({ params: { year: `2009` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(pastBody).toEqual({

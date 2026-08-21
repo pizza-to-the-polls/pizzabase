@@ -92,7 +92,9 @@ describe("reviewExif", () => {
     const result = reviewExif(data);
     expect(result.assessment).toBe("likely-screen-or-software-generated");
     expect(
-      result.cautionSignals.some((s) => s.code === "explicit-screenshot-marker")
+      result.cautionSignals.some(
+        (s) => s.code === "explicit-screenshot-marker",
+      ),
     ).toBe(true);
   });
 
@@ -119,7 +121,9 @@ describe("reviewExif", () => {
     const result = reviewExif(data);
     expect(result.assessment).toBe("likely-screen-or-software-generated");
     expect(
-      result.cautionSignals.some((s) => s.code === "explicit-screenshot-marker")
+      result.cautionSignals.some(
+        (s) => s.code === "explicit-screenshot-marker",
+      ),
     ).toBe(true);
   });
 
@@ -137,7 +141,9 @@ describe("reviewExif", () => {
     const result = reviewExif(data);
     expect(result.assessment).toBe("likely-screen-or-software-generated");
     expect(
-      result.cautionSignals.some((s) => s.code === "explicit-screenshot-marker")
+      result.cautionSignals.some(
+        (s) => s.code === "explicit-screenshot-marker",
+      ),
     ).toBe(true);
   });
 
@@ -247,10 +253,10 @@ describe("reviewExif", () => {
         "camera-make-model",
         "optical-settings",
         "capture-timestamp",
-      ])
+      ]),
     );
     expect(result.cautionSignals.map((signal) => signal.code)).toContain(
-      "explicit-screenshot-marker"
+      "explicit-screenshot-marker",
     );
   });
 
@@ -278,7 +284,7 @@ describe("reviewExif", () => {
     expect(result.assessment).toBe("limited-evidence");
     expect(result.confidence).toBe("medium");
     expect(
-      result.cautionSignals.some((s) => s.code === "software-editor")
+      result.cautionSignals.some((s) => s.code === "software-editor"),
     ).toBe(true);
   });
 
@@ -305,10 +311,10 @@ describe("reviewExif", () => {
 
     expect(result.missingSignals).toContain("capture-timestamp");
     expect(
-      result.positiveSignals.some((s) => s.code === "camera-make-model")
+      result.positiveSignals.some((s) => s.code === "camera-make-model"),
     ).toBe(true);
     expect(
-      result.positiveSignals.some((s) => s.code === "optical-settings")
+      result.positiveSignals.some((s) => s.code === "optical-settings"),
     ).toBe(true);
   });
 
@@ -358,7 +364,7 @@ describe("reviewExif", () => {
 
     const result = reviewExif(data);
     expect(result.positiveSignals.some((s) => s.code === "gps-data")).toBe(
-      true
+      true,
     );
     expect(result.assessment).toBe("likely-camera-capture");
     expect(result.confidence).toBe("high");
@@ -378,7 +384,7 @@ describe("reviewExif", () => {
     const result = reviewExif(data);
     expect(result.assessment).toBe("limited-evidence");
     expect(
-      result.cautionSignals.some((s) => s.code === "software-editor")
+      result.cautionSignals.some((s) => s.code === "software-editor"),
     ).toBe(true);
   });
 
@@ -391,7 +397,7 @@ describe("reviewExif", () => {
 
     const result = reviewExif(data);
     expect(
-      result.cautionSignals.some((s) => s.code === "software-editor")
+      result.cautionSignals.some((s) => s.code === "software-editor"),
     ).toBe(true);
   });
 
@@ -426,7 +432,7 @@ describe("reviewExif", () => {
           FNumber: 8,
           DateTimeOriginal: new Date(),
         },
-      }).disclaimer
+      }).disclaimer,
     ).toBe(DISCLAIMER);
   });
 
@@ -499,7 +505,7 @@ describe("reviewExif", () => {
       label: "c2pa-manifest",
     });
     expect(
-      result.positiveSignals.some((s) => s.code === "c2pa-manifest-present")
+      result.positiveSignals.some((s) => s.code === "c2pa-manifest-present"),
     ).toBe(true);
     // C2PA is additive – assessment still driven by EXIF evidence
     expect(result.assessment).toBe("likely-camera-capture");
@@ -525,7 +531,7 @@ describe("reviewExif", () => {
     });
     expect(result.c2pa).toEqual({ detected: false, label: null });
     expect(
-      result.positiveSignals.some((s) => s.code === "c2pa-manifest-present")
+      result.positiveSignals.some((s) => s.code === "c2pa-manifest-present"),
     ).toBe(false);
   });
 

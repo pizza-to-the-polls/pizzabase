@@ -34,10 +34,10 @@ export class BannedPhoneNumbersController {
 
     const ban: BannedPhoneNumber = await findOr404(
       await BannedPhoneNumber.findByIdOrPhoneNumber(
-        request.params.idOrPhoneNumber || ""
+        request.params.idOrPhoneNumber || "",
       ),
       response,
-      next
+      next,
     );
     if (!ban) return;
 
@@ -73,7 +73,7 @@ export class BannedPhoneNumbersController {
         where: { id: Number(request.params.id || "") },
       }),
       response,
-      next
+      next,
     );
     if (!ban) return;
 

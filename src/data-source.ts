@@ -94,7 +94,7 @@ export const AppDataSource = new DataSource(options);
 // every undefined with null so the driver maps them to type "NULL".
 
 export const sanitizeQueryParameters = (
-  parameters?: any[] | Record<string, unknown>
+  parameters?: any[] | Record<string, unknown>,
 ): any[] | Record<string, unknown> | undefined => {
   if (parameters == null) return parameters;
   if (Array.isArray(parameters)) {
@@ -105,7 +105,7 @@ export const sanitizeQueryParameters = (
       Object.entries(parameters).map(([k, v]) => [
         k,
         v === undefined ? null : v,
-      ])
+      ]),
     );
   }
   return parameters;
@@ -125,7 +125,7 @@ export const sanitizeQueryParameters = (
 
 export const installAuroraCompatibilityPatches = (
   driver: any,
-  sleep?: (ms: number) => Promise<void>
+  sleep?: (ms: number) => Promise<void>,
 ): void => {
   const originalCreateQueryRunner = driver.createQueryRunner.bind(driver);
 
@@ -138,12 +138,12 @@ export const installAuroraCompatibilityPatches = (
     queryRunner.query = ((
       query: string,
       parameters?: any[],
-      useStructuredResult?: boolean
+      useStructuredResult?: boolean,
     ) => {
       const sanitized = sanitizeQueryParameters(parameters);
       return withDatabaseResumeRetry(
         () => originalQuery(query, sanitized, useStructuredResult),
-        sleep ? { sleep } : undefined
+        sleep ? { sleep } : undefined,
       );
     }) as any;
 

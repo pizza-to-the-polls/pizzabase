@@ -9,7 +9,7 @@ import { DATABASE_RESUMING_MESSAGE } from "./lib/retryDatabaseResume";
 function resumeError(): Error {
   return new Error(
     `The Aurora DB instance db-XXX is ${DATABASE_RESUMING_MESSAGE}. ` +
-      "Please wait a few seconds and try again."
+      "Please wait a few seconds and try again.",
   );
 }
 
@@ -39,7 +39,7 @@ function fakeDriver() {
       query: (
         query: string,
         parameters?: any[],
-        useStructuredResult?: boolean
+        useStructuredResult?: boolean,
       ) => {
         recordedCalls.push({ query, parameters, useStructuredResult });
         return Promise.resolve();
@@ -71,7 +71,7 @@ describe("sanitizeQueryParameters", () => {
 
   it("replaces undefined with null in named-param objects", () => {
     expect(
-      sanitizeQueryParameters({ a: undefined, b: 1, c: null, d: "hi" })
+      sanitizeQueryParameters({ a: undefined, b: 1, c: null, d: "hi" }),
     ).toEqual({ a: null, b: 1, c: null, d: "hi" });
   });
 

@@ -96,7 +96,7 @@ export class Donation extends BaseEntity {
 
   static async failCharge(
     note: string,
-    { id }: { id: string }
+    { id }: { id: string },
   ): Promise<Donation | null> {
     const donation = await this.findOne({ where: { stripeId: id } });
 

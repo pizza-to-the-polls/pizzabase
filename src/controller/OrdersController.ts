@@ -32,7 +32,7 @@ export class OrdersController {
     const order: Order = await findOr404(
       await Order.findOne({ where: { id: Number(request.params.id || "") } }),
       response,
-      next
+      next,
     );
     if (!order) return;
 
@@ -49,7 +49,7 @@ export class OrdersController {
     const order: Order = await findOr404(
       await Order.findOne({ where: { id: Number(request.params.id || "") } }),
       response,
-      next
+      next,
     );
 
     if (!order) return;
@@ -82,7 +82,7 @@ export class OrdersController {
         ...order.asJSON(),
         location: await order.location.asJSON(),
         reports: (await order.reports).map((report) => report.asJSON()),
-      }))
+      })),
     );
     return { results, count };
   }

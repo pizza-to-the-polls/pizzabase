@@ -19,7 +19,6 @@ interface NewDonation {
 
 const initStripe = (maxNetworkRetries: number = 6, timeout: number = 5_000) =>
   new Stripe(process.env.STRIPE_SECRET_KEY, {
-    apiVersion: "2020-08-27",
     maxNetworkRetries,
     timeout,
   });
@@ -34,7 +33,7 @@ const processSubscription = async (body: NewSubscription): Promise<string> => {
   });
 
   const { id: price } = data.find(
-    ({ unit_amount }) => unit_amount === amountUsd * 100
+    ({ unit_amount }) => unit_amount === amountUsd * 100,
   ) || { id: null };
 
   if (!price) throw new Error("Not a valid subscription level!");
@@ -70,21 +69,12 @@ const processDonation = async (body: NewDonation): Promise<string> => {
   const { amountUsd, url, referrer, giftName, giftEmail } = body;
   const isGift = giftName && giftEmail;
 
-  const numberOfPizzas: number = amountUsd / 20;
-
   const stripe = initStripe();
 
   const { id } = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
     line_items: [
       {
-        description: `${isGift ? "Gift of about" : "About"} ${
-          numberOfPizzas >= 1
-            ? `${Math.round(numberOfPizzas)}`
-            : numberOfPizzas >= 0.5
-            ? "1/2 of a"
-            : "1/4 of a"
-        } ${numberOfPizzas <= 1 ? "pizza" : "pizzas"}`,
         price_data: {
           product: process.env.STRIPE_PRODUCT_ID,
           unit_amount: amountUsd * 100,
@@ -128,7 +118,7 @@ export const findCustomer = async (email: string): Promise<string> => {
 
 export const processWebhook = (
   body: string | Buffer,
-  secret: string
+  secret: string,
 ): { event: any; type: string } => {
   const stripe = initStripe(3, 10_000);
 
@@ -138,14 +128,14 @@ export const processWebhook = (
   } = stripe.webhooks.constructEvent(
     body,
     secret,
-    process.env.STRIPE_SECRET_WH
+    process.env.STRIPE_SECRET_WH,
   );
 
   return { event, type };
 };
 
 export const sessionForCheckout = async (
-  incoming: NewDonation | NewSubscription
+  incoming: NewDonation | NewSubscription,
 ): Promise<string | null> => {
   switch (incoming.type) {
     case "donation":

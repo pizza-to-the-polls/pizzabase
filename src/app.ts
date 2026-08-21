@@ -8,10 +8,8 @@ import { initBugSnagMiddleware } from "./lib/middleware/bugsnag";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",");
 
-const {
-  addBugSnagRequestHandler,
-  addBugSnagErrorHandler,
-} = initBugSnagMiddleware();
+const { addBugSnagRequestHandler, addBugSnagErrorHandler } =
+  initBugSnagMiddleware();
 
 const app = express();
 
@@ -30,7 +28,7 @@ app.use(
     methods: "GET,HEAD,PUT,PATCH,POST,DELETE",
     allowedHeaders: "Content-Type,Authorization",
     optionsSuccessStatus: 200,
-  })
+  }),
 );
 app.use("/webhook", bodyParser.raw({ type: "*/*" }));
 app.use(bodyParser.json());
@@ -47,7 +45,7 @@ Routes.forEach(({ method, route, controller, action }) => {
           .then((controllerResult) =>
             controllerResult !== null && controllerResult !== undefined
               ? res.send(controllerResult)
-              : undefined
+              : undefined,
           )
           .catch((e) => {
             next(e);
@@ -55,7 +53,7 @@ Routes.forEach(({ method, route, controller, action }) => {
       } else if (result !== null && result !== undefined) {
         res.json(result);
       }
-    }
+    },
   );
 });
 

@@ -19,7 +19,7 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -48,7 +48,7 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await location.reload();
     const truck = await location.activeTruck();
@@ -68,12 +68,12 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const truck = await Truck.findOne({ where: { identifier: "detroit-mi" } });
 
     expect(truck.location.fullAddress).toEqual(
-      "550 Different Address City OR 12345"
+      "550 Different Address City OR 12345",
     );
     expect(truck.location.validatedAt).toBeTruthy();
   });
@@ -92,8 +92,8 @@ describe("#all", () => {
       if (trucks > 3) {
         await Location.query(`
           UPDATE trucks SET created_at = '${old.toISOString()}' WHERE trucks.id = ${
-          truck.id
-        }
+            truck.id
+          }
         `);
       }
     }
@@ -106,7 +106,7 @@ describe("#all", () => {
         query: { limit: 3 },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const [trucks, active] = await Truck.findAndCountActiveTrucks();
     expect(body.count).toEqual(active);
@@ -116,8 +116,8 @@ describe("#all", () => {
         trucks.slice(0, 3).map(async (truck) => ({
           ...truck.asJSON(),
           location: await truck.location.asJSON(),
-        }))
-      )
+        })),
+      ),
     );
   });
 
@@ -128,7 +128,7 @@ describe("#all", () => {
         query: { past: true },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(body.count).toEqual((await Location.find()).length);
   });
@@ -143,7 +143,7 @@ describe("#all", () => {
         query: { past: true, location: `${location.id}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(body.count).toEqual(1);
     expect(body.results).toEqual([
@@ -164,7 +164,7 @@ describe("#all", () => {
         query: { location: `${location.id}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     expect(body.count).toEqual(1);
     expect(body.results).toEqual([

@@ -166,17 +166,15 @@ describe("#create", () => {
     expect(report.contactLastName).toEqual(contactLastName);
     expect(report.contactRole).toEqual(contactRole);
 
-    const [
-      zapUrl,
-      { body: zapBody },
-    ] = (global.fetch as jest.Mock).mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (global.fetch as jest.Mock).mock
+      .calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_LOCATION",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 
@@ -226,17 +224,15 @@ describe("#create", () => {
     expect(report.contactLastName).toBeNull();
     expect(report.contactRole).toBeNull();
 
-    const [
-      zapUrl,
-      { body: zapBody },
-    ] = (global.fetch as jest.Mock).mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (global.fetch as jest.Mock).mock
+      .calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_REPORT);
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_REPORT",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 
@@ -261,7 +257,7 @@ describe("#create", () => {
         state: "IL",
         zip: "60615",
       },
-      { canDistribute: true }
+      { canDistribute: true },
     );
 
     const request = http_mocks.createRequest({
@@ -325,17 +321,15 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { contactInfo: contact } });
     expect(report).toBeTruthy();
 
-    const [
-      zapUrl,
-      { body: zapBody },
-    ] = (global.fetch as jest.Mock).mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (global.fetch as jest.Mock).mock
+      .calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_LOCATION",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 
@@ -403,7 +397,7 @@ describe("#create", () => {
 
     const order = await Order.placeOrder(
       { cost: 50, quantity: 5 },
-      report.location
+      report.location,
     );
 
     const request = http_mocks.createRequest({
@@ -572,7 +566,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { limit: "5" } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -583,8 +577,8 @@ describe("#index", () => {
             location: await report.location.asJSON(),
             order: report.order?.asJSON(),
             truck: report.truck?.asJSON(),
-          })
-        )
+          }),
+        ),
       ),
       count: await Report.count(),
     });
@@ -600,7 +594,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { truck: `${truck.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -615,7 +609,7 @@ describe("#index", () => {
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
-        }))
+        })),
       ),
       count: await Report.count({ where: { truck: { id: truck.id } } }),
     });
@@ -630,7 +624,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { location: `${location.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -645,7 +639,7 @@ describe("#index", () => {
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
-        }))
+        })),
       ),
       count: await Report.count({ where: { location: { id: location.id } } }),
     });
@@ -657,7 +651,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { order: `${order.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -672,7 +666,7 @@ describe("#index", () => {
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
-        }))
+        })),
       ),
       count: await Report.count({ where: { order: { id: order.id } } }),
     });
@@ -687,7 +681,7 @@ describe("#show", () => {
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${report.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({

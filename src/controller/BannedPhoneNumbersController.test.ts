@@ -100,7 +100,7 @@ describe("#index", () => {
     const body = (await controller.index(
       request,
       response,
-      () => undefined
+      () => undefined,
     )) as JsonResponse;
 
     expect(body.count).toEqual(2);
@@ -205,7 +205,7 @@ describe("#create", () => {
     const body = (await controller.create(
       request,
       response,
-      () => undefined
+      () => undefined,
     )) as JsonResponse;
 
     expect(body.phoneNumber).toEqual("5551234567");
@@ -238,7 +238,7 @@ describe("#create", () => {
     const body = (await controller.create(
       request,
       response,
-      () => undefined
+      () => undefined,
     )) as JsonResponse;
 
     expect(body.phoneNumber).toEqual("5552342345");
@@ -263,7 +263,7 @@ describe("#create", () => {
     const response = http_mocks.createResponse();
 
     await expect(
-      controller.create(request, response, () => undefined)
+      controller.create(request, response, () => undefined),
     ).rejects.toThrow();
   });
 });
