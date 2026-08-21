@@ -28,7 +28,7 @@ export const buildTestData = async () => {
         await Report.createNewReport(
           `${j}@exampe.com`,
           `http://twitter.com/status/${j}`,
-          address
+          address,
         );
         if (orders > 0) {
           await Order.placeOrder(
@@ -37,7 +37,7 @@ export const buildTestData = async () => {
               orderType: OrderTypes.pizzas,
               cost: Math.ceil(Math.random() * 200 * 100) / 100,
             },
-            location
+            location,
           );
           orders += -1;
         }

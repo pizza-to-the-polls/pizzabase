@@ -6,16 +6,8 @@ import { Report } from "../src/entity/Report";
 const SUCCESS = /Done|Delivered/i;
 
 const backfillReport = async (data: { [key: string]: string }, manager) => {
-  const {
-    who,
-    status,
-    timestamp,
-    cost,
-    pizzas,
-    full_address,
-    url,
-    contact,
-  } = data;
+  const { who, status, timestamp, cost, pizzas, full_address, url, contact } =
+    data;
 
   const newNow = new Date(timestamp);
 
@@ -35,7 +27,7 @@ const backfillReport = async (data: { [key: string]: string }, manager) => {
   const [report] = await Report.createNewReport(
     contact,
     url,
-    normalizedAddress
+    normalizedAddress,
   );
   const { location } = report;
   const orderInput = await validateOrder({ quantity: pizzas, cost, user: who });
@@ -45,40 +37,40 @@ const backfillReport = async (data: { [key: string]: string }, manager) => {
     await location.validate(who);
     await manager.query(`
         UPDATE orders SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${
-      order.id
-    }
+          order.id
+        }
       `);
     await manager.query(`
         UPDATE actions SET created_at = '${newNow.toISOString()}' WHERE entity_type = 'Order' AND entity_id = ${
-      order.id
-    }
+          order.id
+        }
       `);
     await manager.query(`
         UPDATE locations SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}', validated_at = '${newNow.toISOString()}' WHERE id = ${
-      location.id
-    }
+          location.id
+        }
       `);
     await manager.query(`
         UPDATE actions SET created_at = '${newNow.toISOString()}' WHERE entity_type = 'Location' AND entity_id = ${
-      location.id
-    }
+          location.id
+        }
       `);
     await manager.query(`
         UPDATE reports SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${
-      report.id
-    }
+          report.id
+        }
       `);
   } else {
     await location.skip(who);
     await manager.query(`
         UPDATE locations SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${
-      location.id
-    }
+          location.id
+        }
       `);
     await manager.query(`
         UPDATE reports SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}', skipped_at = '${newNow.toISOString()}' WHERE id = ${
-      report.id
-    }
+          report.id
+        }
       `);
   }
 

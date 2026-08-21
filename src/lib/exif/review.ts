@@ -68,7 +68,7 @@ function str(val: unknown): string | null {
     try {
       return Buffer.from(
         (val as Record<string, unknown>)._bytes as string,
-        "base64"
+        "base64",
       ).toString("utf-8");
     } catch {
       return null;
@@ -331,7 +331,7 @@ const DETECTORS: SignalDetector[] = [
         "screen shot",
       ];
       return markers.some(
-        (m) => containsWordCI(desc, m) || containsWordCI(comment, m)
+        (m) => containsWordCI(desc, m) || containsWordCI(comment, m),
       );
     },
   },
@@ -378,9 +378,7 @@ const DETECTORS: SignalDetector[] = [
 // Assessment logic
 // ---------------------------------------------------------------------------
 
-function detectSignals(
-  data: ExifData
-): {
+function detectSignals(data: ExifData): {
   positive: Signal[];
   caution: Signal[];
   missing: string[];
@@ -427,10 +425,10 @@ function computeAssessment(
   positive: Signal[],
   caution: Signal[],
   _missing: string[],
-  dst?: { uri: string; label: string } | null
+  dst?: { uri: string; label: string } | null,
 ): { assessment: Assessment; confidence: Confidence } {
   const hasScreenshotMarker = caution.some(
-    (s) => s.code === "explicit-screenshot-marker"
+    (s) => s.code === "explicit-screenshot-marker",
   );
   const hasSoftwareEditor = caution.some((s) => s.code === "software-editor");
   const positiveCodes = new Set(positive.map((s) => s.code));
@@ -550,7 +548,7 @@ export const DISCLAIMER =
 export function reviewExif(
   data: ExifData,
   digitalSourceType?: { uri: string; label: string } | null,
-  c2paResult?: { detected: boolean; label: string | null }
+  c2paResult?: { detected: boolean; label: string | null },
 ): ReviewResult {
   const noMetaResult = (): ReviewResult => {
     const res: ReviewResult = {
@@ -584,7 +582,7 @@ export function reviewExif(
     // Inject IPTC Digital Source Type signal when available.
     if (digitalSourceType && digitalSourceType.uri) {
       const dstDetector = DETECTORS.find(
-        (d) => d.code === "iptc-digital-source-type"
+        (d) => d.code === "iptc-digital-source-type",
       );
       if (dstDetector) {
         noMeta.positiveSignals.push({
@@ -603,7 +601,7 @@ export function reviewExif(
   // so the reviewer sees that IPTC metadata was factored in.
   if (digitalSourceType && digitalSourceType.uri) {
     const dstDetector = DETECTORS.find(
-      (d) => d.code === "iptc-digital-source-type"
+      (d) => d.code === "iptc-digital-source-type",
     );
     if (dstDetector) {
       const label = `IPTC Digital Source Type: ${digitalSourceType.label}`;
@@ -646,7 +644,7 @@ export function reviewExif(
     positive,
     caution,
     missing,
-    digitalSourceType
+    digitalSourceType,
   );
 
   const result: ReviewResult = {

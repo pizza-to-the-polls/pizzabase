@@ -2,7 +2,7 @@ import dbHelper from "./dbHelper";
 import { APIKey } from "../entity/APIKey";
 
 global.fetch = jest.fn(() =>
-  Promise.resolve({ ok: true, json: () => Promise.resolve({}) })
+  Promise.resolve({ ok: true, json: () => Promise.resolve({}) }),
 ) as jest.Mock;
 
 beforeAll(async () => {

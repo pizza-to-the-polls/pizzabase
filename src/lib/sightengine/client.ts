@@ -1,4 +1,5 @@
-import { S3 } from "aws-sdk";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { getSignedUrl } from "@aws-sdk/s3-request-presigner";
 
 const SIGHTENGINE_URL = "https://api.sightengine.com/1.0/check.json";
 
@@ -31,16 +32,21 @@ interface SightEngineApiResponse {
  */
 export async function checkImage(
   bucket: string,
-  key: string
+  key: string,
 ): Promise<SightEngineResult> {
-  const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
+  const s3Client = new S3Client({
+    region: process.env.AWS_REGION || "us-west-2",
+  });
 
   // Generate a presigned URL so SightEngine can fetch the image directly
-  const imageUrl = await s3.getSignedUrlPromise("getObject", {
-    Bucket: bucket,
-    Key: key,
-    Expires: 300, // 5 minutes — enough for SightEngine to fetch
-  });
+  const imageUrl = await getSignedUrl(
+    s3Client,
+    new GetObjectCommand({
+      Bucket: bucket,
+      Key: key,
+    }),
+    { expiresIn: 300 }, // 5 minutes — enough for SightEngine to fetch
+  );
 
   // Ask SightEngine to check the image at the presigned URL
   const params = new URLSearchParams({
@@ -54,7 +60,7 @@ export async function checkImage(
 
   if (!response.ok) {
     throw new Error(
-      `SightEngine API error: ${response.status} ${response.statusText}`
+      `SightEngine API error: ${response.status} ${response.statusText}`,
     );
   }
 

@@ -50,12 +50,12 @@ export class TotalsController {
     return this.toTotals({
       ...(
         await manager.query(
-          `${this.DONATION_QUERY} AND date_part('year', donations.created_at) = ${year}`
+          `${this.DONATION_QUERY} AND date_part('year', donations.created_at) = ${year}`,
         )
       )[0],
       ...(
         await manager.query(
-          `${this.ORDER_QUERY} AND date_part('year', orders.created_at) = ${year}`
+          `${this.ORDER_QUERY} AND date_part('year', orders.created_at) = ${year}`,
         )
       )[0],
     });

@@ -87,7 +87,7 @@ function detectC2paFromBuffer(buffer: Buffer): C2paDetectionResult {
 
 export async function detectC2pa(
   buffer: Buffer,
-  fetchSidecar?: () => Promise<Buffer | null>
+  fetchSidecar?: () => Promise<Buffer | null>,
 ): Promise<C2paDetectionResult> {
   if (buffer.length < 2) return { detected: false, label: null };
   let result = detectC2paFromBuffer(buffer);

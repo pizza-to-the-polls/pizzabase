@@ -31,13 +31,7 @@ export const DATABASE_RESUMING_MESSAGE = "resuming after being auto-paused";
  *   - 7 retries total, ~11s total sleep time
  */
 export const DEFAULT_RETRY_DELAYS_MS = [
-  1000,
-  1000,
-  1000,
-  1000,
-  1000,
-  2000,
-  4000,
+  1000, 1000, 1000, 1000, 1000, 2000, 4000,
 ];
 
 // ── Error detection ────────────────────────────────────────────────
@@ -106,7 +100,7 @@ export interface RetryOptions {
  */
 export async function withDatabaseResumeRetry<T>(
   fn: () => Promise<T>,
-  options?: RetryOptions
+  options?: RetryOptions,
 ): Promise<T> {
   const delaysMs = options?.delaysMs ?? DEFAULT_RETRY_DELAYS_MS;
   const sleep = options?.sleep ?? defaultSleep;
@@ -133,7 +127,7 @@ export async function withDatabaseResumeRetry<T>(
 
       logger(
         `Database is resuming, retrying in ${delay}ms ` +
-          `(attempt ${retryNumber}/${maxRetries})`
+          `(attempt ${retryNumber}/${maxRetries})`,
       );
 
       await sleep(delay);

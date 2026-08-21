@@ -16,26 +16,26 @@ import {
 // Helpers
 // ---------------------------------------------------------------------------
 
-/** Build a mock S3 client that returns fixed buffers for known keys. */
-function mockS3(
-  overrides: Record<string, Buffer | null> = {}
-): {
-  getObject: jest.Mock;
+/**
+ * Build a mock S3 client that uses the v3 `send(command)` pattern.
+ * The mock inspects `command.input` to determine the S3 key/range.
+ */
+function mockS3(overrides: Record<string, Buffer | null> = {}): {
+  send: jest.Mock;
 } {
-  const getObject = jest
+  const send = jest
     .fn()
     .mockImplementation(
-      (params: { Bucket: string; Key: string; Range?: string }) => ({
-        promise: jest.fn().mockResolvedValue({
-          Body: overrides[params.Key] ?? overrides["*"] ?? null,
+      (command: { input: { Bucket: string; Key: string; Range?: string } }) =>
+        Promise.resolve({
+          Body: overrides[command.input.Key] ?? overrides["*"] ?? null,
         }),
-      })
     );
-  return { getObject };
+  return { send };
 }
 
-function deps(getObject: jest.Mock) {
-  return { s3Client: { getObject } as any, bucket: "test-bucket" };
+function deps(send: jest.Mock) {
+  return { s3Client: { send } as any, bucket: "test-bucket" };
 }
 
 // ---------------------------------------------------------------------------
@@ -49,7 +49,7 @@ describe("extractExifAndReview", () => {
 
   it("extracts EXIF from a JPEG with real metadata", async () => {
     const s3 = mockS3({ [filePath]: brooklynJpeg });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: false,
     });
@@ -63,7 +63,7 @@ describe("extractExifAndReview", () => {
 
   it("includes review envelope when includeReview is true", async () => {
     const s3 = mockS3({ [filePath]: brooklynJpeg });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: true,
     });
@@ -76,7 +76,7 @@ describe("extractExifAndReview", () => {
 
   it("returns limited-evidence for a sparse JPEG with no camera make/model", async () => {
     const s3 = mockS3({ [filePath]: brooklynJpeg });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: true,
     });
@@ -89,19 +89,19 @@ describe("extractExifAndReview", () => {
 
   it("flags screenshot JPEG via ImageDescription in review", async () => {
     const s3 = mockS3({ [filePath]: redondoJpeg });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: true,
     });
 
     // Redondo explicitly contains "Screenshot" in ImageDescription.
     expect(result.review?.assessment).toBe(
-      "likely-screen-or-software-generated"
+      "likely-screen-or-software-generated",
     );
     expect(
       (result.review as any).cautionSignals?.some(
-        (s: any) => s.code === "explicit-screenshot-marker"
-      )
+        (s: any) => s.code === "explicit-screenshot-marker",
+      ),
     ).toBe(true);
   });
 
@@ -109,7 +109,7 @@ describe("extractExifAndReview", () => {
 
   it("returns null EXIF for PNG without eXIf chunk", async () => {
     const s3 = mockS3({ [filePath]: losAngelesPng });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: false,
     });
@@ -120,7 +120,7 @@ describe("extractExifAndReview", () => {
 
   it("returns no-metadata review for PNG without EXIF", async () => {
     const s3 = mockS3({ [filePath]: losAngelesPng });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: true,
     });
@@ -131,29 +131,23 @@ describe("extractExifAndReview", () => {
 
   // ---- S3 errors ---------------------------------------------------------
 
-  it("rejects when S3 getObject throws", async () => {
-    const getObject = jest.fn().mockImplementation(() => ({
-      promise: jest.fn().mockRejectedValue(new Error("S3 error")),
-    }));
+  it("rejects when S3 send throws", async () => {
+    const send = jest.fn().mockRejectedValue(new Error("S3 error"));
     await expect(
-      extractExifAndReview(deps(getObject), {
+      extractExifAndReview(deps(send), {
         filePath,
         includeReview: false,
-      })
+      }),
     ).rejects.toThrow("S3 error");
   });
 
-  it("returns error assessment in review when S3 throws with includeReview", async () => {
-    const getObject = jest.fn().mockImplementation(() => ({
-      promise: jest.fn().mockRejectedValue(new Error("S3 error")),
-    }));
-    // The service itself throws on S3 errors — the caller (controller)
-    // catches and returns the error shape.  Test that path.
+  it("throws S3 error even with includeReview (caller catches)", async () => {
+    const send = jest.fn().mockRejectedValue(new Error("S3 error"));
     await expect(
-      extractExifAndReview(deps(getObject), {
+      extractExifAndReview(deps(send), {
         filePath,
         includeReview: true,
-      })
+      }),
     ).rejects.toThrow("S3 error");
   });
 
@@ -161,7 +155,7 @@ describe("extractExifAndReview", () => {
 
   it("returns null EXIF for an empty buffer", async () => {
     const s3 = mockS3({ [filePath]: Buffer.alloc(0) });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: false,
     });
@@ -171,7 +165,7 @@ describe("extractExifAndReview", () => {
 
   it("returns null EXIF for garbage bytes", async () => {
     const s3 = mockS3({ [filePath]: Buffer.from("not an image") });
-    const result = await extractExifAndReview(deps(s3.getObject), {
+    const result = await extractExifAndReview(deps(s3.send), {
       filePath,
       includeReview: false,
     });
@@ -182,33 +176,37 @@ describe("extractExifAndReview", () => {
   // ---- S3 Range reads (bounded follow-up) --------------------------------
 
   it("issues a follow-up Range read when EXIF segment overflows initial buffer", async () => {
-    // Build a JPEG where the EXIF APP1 segment extends past byte 100.
-    // The initial read of 64 KiB will contain the full EXIF for Brooklyn,
-    // so this tests that the follow-up callback is wired but not exercised
-    // for non-truncated data.
-    const getObject = jest
+    const send = jest
       .fn()
       .mockImplementation(
-        (params: { Bucket: string; Key: string; Range?: string }) => ({
-          promise: jest.fn().mockResolvedValue({
-            Body: params.Range?.startsWith("bytes=0-") ? brooklynJpeg : null,
-          }),
-        })
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          if (command.input.Key === `${filePath}.xmp`) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          if (command.input.Key === `${filePath}.c2pa`) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          const range = command.input.Range || "";
+          return Promise.resolve({
+            Body: range.startsWith("bytes=0-") ? brooklynJpeg : null,
+          });
+        },
       );
 
     const result = await extractExifAndReview(
-      { s3Client: { getObject } as any, bucket: "test-bucket" },
-      { filePath, includeReview: false }
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath, includeReview: false },
     );
 
     expect(result.exif).not.toBeNull();
-    expect(getObject).toHaveBeenCalledTimes(3); // initial + XMP sidecar (404 ok) + C2PA sidecar (404 ok)
+    // Called for initial range + XMP sidecar + C2PA sidecar (both 404)
+    expect(send).toHaveBeenCalledTimes(3);
   });
 
   it("issues a follow-up Range read when XMP segment overflows initial buffer", async () => {
     // Build a minimal JPEG with XMP APP1 segment starting after byte 64 KiB.
-    // The XMP retry callback should fire, request the missing range, and
-    // try extraction again.
     const soi = Buffer.from([0xff, 0xd8]);
     const eoi = Buffer.from([0xff, 0xd9]);
 
@@ -216,9 +214,8 @@ describe("extractExifAndReview", () => {
     const padding = Buffer.alloc(65535 - soi.length);
     const xmpBody = Buffer.from(
       '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/"><Iptc4xmpExt:DigitalSourceType>http://cv.iptc.org/newscodes/digitalsourcetype/digitalCapture</Iptc4xmpExt:DigitalSourceType></rdf:Description></rdf:RDF></x:xmpmeta>',
-      "utf-8"
+      "utf-8",
     );
-    // APP1 marker 0xFFE1, length = 2 + xmpSig.length + xmpBody.length
     const xmpSig = Buffer.from("http://ns.adobe.com/xap/1.0/\0", "ascii");
     const app1Len = 2 + xmpSig.length + xmpBody.length;
     const lenBuf = Buffer.alloc(2);
@@ -235,42 +232,39 @@ describe("extractExifAndReview", () => {
       eoi,
     ]);
 
-    const getObject = jest
+    const send = jest
       .fn()
       .mockImplementation(
-        (params: { Bucket: string; Key: string; Range?: string }) => {
-          if (!params.Range || params.Range.startsWith("bytes=0-")) {
-            // Initial read: return first 64 KiB.
-            return {
-              promise: jest
-                .fn()
-                .mockResolvedValue({ Body: jpeg.slice(0, 65535) }),
-            };
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          if (command.input.Key === `${filePath}.c2pa`) {
+            return Promise.reject(new Error("NoSuchKey"));
           }
-          // Follow-up read: return the remaining bytes.
-          const match = params.Range.match(/^bytes=(\d+)-(\d+)$/);
+          if (command.input.Key === `${filePath}.xmp`) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          const range = command.input.Range || "";
+          if (!range || range.startsWith("bytes=0-")) {
+            return Promise.resolve({ Body: jpeg.slice(0, 65535) });
+          }
+          const match = range.match(/^bytes=(\d+)-(\d+)$/);
           if (match) {
             const start = parseInt(match[1], 10);
             const end = parseInt(match[2], 10);
-            return {
-              promise: jest
-                .fn()
-                .mockResolvedValue({ Body: jpeg.slice(start, end + 1) }),
-            };
+            return Promise.resolve({ Body: jpeg.slice(start, end + 1) });
           }
-          return { promise: jest.fn().mockResolvedValue({ Body: null }) };
-        }
+          return Promise.resolve({ Body: null });
+        },
       );
 
     const result = await extractExifAndReview(
-      { s3Client: { getObject } as any, bucket: "test-bucket" },
-      { filePath, includeReview: true }
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath, includeReview: true },
     );
 
     // Should have issued the follow-up (at least 2 calls: initial + follow-up).
-    expect(getObject).toHaveBeenCalledTimes(3); // follow-up + C2PA sidecar (404 ok)
-
-    // XMP follow-up was issued.
+    expect(send).toHaveBeenCalledTimes(3); // follow-up + C2PA sidecar (404)
     expect(result.exif).toBeNull(); // no EXIF in this synthetic JPEG
     expect(result.review).toBeDefined();
   });
@@ -278,30 +272,35 @@ describe("extractExifAndReview", () => {
   // ---- XMP sidecar -------------------------------------------------------
 
   it("falls back to XMP .xmp sidecar when container has no embedded XMP", async () => {
-    const getObject = jest
+    const send = jest
       .fn()
       .mockImplementation(
-        (params: { Bucket: string; Key: string; Range?: string }) => {
-          if (params.Key === `${filePath}.xmp`) {
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          if (command.input.Key === `${filePath}.xmp`) {
             const xmp = Buffer.from(
               '<x:xmpmeta xmlns:x="adobe:ns:meta/"><rdf:RDF xmlns:rdf="http://www.w3.org/1999/02/22-rdf-syntax-ns#"><rdf:Description xmlns:Iptc4xmpExt="http://iptc.org/std/Iptc4xmpExt/2008-02-29/"><Iptc4xmpExt:DigitalSourceType>http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture</Iptc4xmpExt:DigitalSourceType></rdf:Description></rdf:RDF></x:xmpmeta>',
-              "utf-8"
+              "utf-8",
             );
-            return { promise: jest.fn().mockResolvedValue({ Body: xmp }) };
+            return Promise.resolve({ Body: xmp });
+          }
+          if (command.input.Key === `${filePath}.c2pa`) {
+            return Promise.reject(new Error("NoSuchKey"));
           }
           // Brooklyn JPEG has no embedded XMP.
-          return {
-            promise: jest.fn().mockResolvedValue({ Body: brooklynJpeg }),
-          };
-        }
+          return Promise.resolve({
+            Body: brooklynJpeg,
+          });
+        },
       );
 
     const result = await extractExifAndReview(
-      { s3Client: { getObject } as any, bucket: "test-bucket" },
-      { filePath, includeReview: true }
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath, includeReview: true },
     );
 
-    expect(getObject).toHaveBeenCalledTimes(3); // image + XMP sidecar + C2PA sidecar
+    expect(send).toHaveBeenCalledTimes(3); // image + XMP sidecar + C2PA sidecar
     expect((result.review as any)?.digitalSourceType).toEqual({
       uri: "http://cv.iptc.org/newscodes/digitalsourcetype/screenCapture",
       label: "screen capture",
@@ -309,24 +308,27 @@ describe("extractExifAndReview", () => {
   });
 
   it("handles missing XMP sidecar gracefully", async () => {
-    const getObject = jest
+    const send = jest
       .fn()
       .mockImplementation(
-        (params: { Bucket: string; Key: string; Range?: string }) => {
-          if (params.Key === `${filePath}.xmp`) {
-            return {
-              promise: jest.fn().mockRejectedValue(new Error("NoSuchKey")),
-            };
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          if (command.input.Key === `${filePath}.xmp`) {
+            return Promise.reject(new Error("NoSuchKey"));
           }
-          return {
-            promise: jest.fn().mockResolvedValue({ Body: brooklynJpeg }),
-          };
-        }
+          if (command.input.Key === `${filePath}.c2pa`) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          return Promise.resolve({
+            Body: brooklynJpeg,
+          });
+        },
       );
 
     const result = await extractExifAndReview(
-      { s3Client: { getObject } as any, bucket: "test-bucket" },
-      { filePath, includeReview: true }
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath, includeReview: true },
     );
 
     // Should still get EXIF, just no digitalSourceType.
@@ -338,30 +340,32 @@ describe("extractExifAndReview", () => {
 
   it("falls back to .c2pa sidecar when C2PA not in container", async () => {
     const c2paSidecarKey = `${filePath}.c2pa`;
-    const getObject = jest
+    const send = jest
       .fn()
       .mockImplementation(
-        (params: { Bucket: string; Key: string; Range?: string }) => {
-          if (params.Key === c2paSidecarKey) {
-            // Minimal C2PA manifest bytes — just needs to be non-empty.
-            return {
-              promise: jest
-                .fn()
-                .mockResolvedValue({ Body: Buffer.from("c2pa-manifest") }),
-            };
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          if (command.input.Key === c2paSidecarKey) {
+            return Promise.resolve({
+              Body: Buffer.from("c2pa-manifest"),
+            });
           }
-          return {
-            promise: jest.fn().mockResolvedValue({ Body: brooklynJpeg }),
-          };
-        }
+          if (command.input.Key === `${filePath}.xmp`) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          return Promise.resolve({
+            Body: brooklynJpeg,
+          });
+        },
       );
 
     const result = await extractExifAndReview(
-      { s3Client: { getObject } as any, bucket: "test-bucket" },
-      { filePath, includeReview: true }
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath, includeReview: true },
     );
 
-    expect(getObject).toHaveBeenCalledTimes(3); // initial + XMP sidecar (404) + C2PA sidecar
+    expect(send).toHaveBeenCalledTimes(3); // initial + XMP sidecar (404) + C2PA sidecar
     expect(result.c2pa).toEqual({ detected: true, label: "c2pa-sidecar" });
     expect(result.exif).not.toBeNull();
   });
@@ -373,7 +377,7 @@ describe("extractExifAndReview", () => {
     // this test verifies the service integration returns safe JSON.
     return (async () => {
       const s3 = mockS3({ [filePath]: brooklynJpeg });
-      const result = await extractExifAndReview(deps(s3.getObject), {
+      const result = await extractExifAndReview(deps(s3.send), {
         filePath,
         includeReview: false,
       });

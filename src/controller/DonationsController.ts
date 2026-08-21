@@ -9,7 +9,7 @@ export class DonationsController {
     try {
       const { event, type } = processWebhook(
         request.body,
-        request.headers["stripe-signature"]
+        request.headers["stripe-signature"],
       );
 
       switch (type) {

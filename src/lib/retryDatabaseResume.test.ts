@@ -10,7 +10,7 @@ import {
 function resumeError(): Error {
   return new Error(
     `The Aurora DB instance db-XXX is ${DATABASE_RESUMING_MESSAGE}. ` +
-      "Please wait a few seconds and try again."
+      "Please wait a few seconds and try again.",
   );
 }
 
@@ -33,7 +33,7 @@ describe("isDatabaseResumingError", () => {
     const err = resumeError();
     // Sanity check: the phrase is embedded, not the whole message.
     expect(err.message.length).toBeGreaterThan(
-      DATABASE_RESUMING_MESSAGE.length
+      DATABASE_RESUMING_MESSAGE.length,
     );
     expect(isDatabaseResumingError(err)).toBe(true);
   });
@@ -48,16 +48,16 @@ describe("isDatabaseResumingError", () => {
     expect(isDatabaseResumingError(undefined)).toBe(false);
     expect(isDatabaseResumingError(42)).toBe(false);
     expect(
-      isDatabaseResumingError({ message: DATABASE_RESUMING_MESSAGE })
+      isDatabaseResumingError({ message: DATABASE_RESUMING_MESSAGE }),
     ).toBe(false); // not an Error instance
   });
 
   it("returns false for errors without the phrase in their message", () => {
     expect(isDatabaseResumingError(new Error("some other message"))).toBe(
-      false
+      false,
     );
     expect(isDatabaseResumingError(new TypeError("TypeError message"))).toBe(
-      false
+      false,
     );
   });
 });
@@ -105,7 +105,7 @@ describe("withDatabaseResumeRetry", () => {
         sleep: async (ms: number) => {
           delays.push(ms);
         },
-      })
+      }),
     ).rejects.toThrow(DATABASE_RESUMING_MESSAGE);
 
     expect(delays).toEqual([1000, 1000, 1000, 1000, 1000, 2000, 4000]);
@@ -117,7 +117,7 @@ describe("withDatabaseResumeRetry", () => {
     const fn = jest.fn().mockRejectedValue(otherError());
 
     await expect(
-      withDatabaseResumeRetry(fn, { sleep: fakeSleep })
+      withDatabaseResumeRetry(fn, { sleep: fakeSleep }),
     ).rejects.toThrow("does not exist");
 
     // Called exactly once — no retries.
@@ -133,11 +133,11 @@ describe("withDatabaseResumeRetry", () => {
       .fn()
       .mockRejectedValueOnce(firstError)
       .mockRejectedValue(
-        new Error(`different later error with ${DATABASE_RESUMING_MESSAGE}`)
+        new Error(`different later error with ${DATABASE_RESUMING_MESSAGE}`),
       );
 
     await expect(
-      withDatabaseResumeRetry(fn, { sleep: fakeSleep })
+      withDatabaseResumeRetry(fn, { sleep: fakeSleep }),
     ).rejects.toBe(firstError);
 
     // Called once initially + one per retry delay.
@@ -163,7 +163,7 @@ describe("withDatabaseResumeRetry", () => {
 
     expect(logger).toHaveBeenCalledTimes(1);
     expect(logger).toHaveBeenCalledWith(
-      expect.stringContaining("Database is resuming, retrying in")
+      expect.stringContaining("Database is resuming, retrying in"),
     );
   });
 
@@ -221,7 +221,7 @@ describe("withDatabaseResumeRetry", () => {
         sleep: async (ms: number) => {
           delays.push(ms);
         },
-      })
+      }),
     ).rejects.toThrow(DATABASE_RESUMING_MESSAGE);
 
     expect(delays).toEqual([500, 1000]);
@@ -264,7 +264,7 @@ describe("withDatabaseResumeRetry", () => {
         await withDatabaseResumeRetry(fn, { sleep: fakeSleep });
         expect(warnSpy).toHaveBeenCalledTimes(1);
         expect(warnSpy).toHaveBeenCalledWith(
-          expect.stringContaining("Database is resuming, retrying in")
+          expect.stringContaining("Database is resuming, retrying in"),
         );
       } finally {
         warnSpy.mockRestore();
@@ -280,7 +280,7 @@ describe("withDatabaseResumeRetry", () => {
         withDatabaseResumeRetry(fn, {
           delaysMs: [],
           sleep: fakeSleep,
-        })
+        }),
       ).rejects.toThrow(DATABASE_RESUMING_MESSAGE);
 
       // Called exactly once — no retries with empty delays.
@@ -299,7 +299,7 @@ describe("withDatabaseResumeRetry", () => {
       });
 
       await expect(
-        withDatabaseResumeRetry(fn, { sleep: fakeSleep })
+        withDatabaseResumeRetry(fn, { sleep: fakeSleep }),
       ).rejects.toThrow("does not exist");
 
       expect(fn).toHaveBeenCalledTimes(2);

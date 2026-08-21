@@ -113,7 +113,7 @@ describe("SightEngine endpoint (via Lambda handler)", () => {
   test("GET /uploads/:fileName/sightengine returns 404 for non-existent upload", async () => {
     const response = await lambdaGet(
       "/uploads/does-not-exist.jpg/sightengine",
-      { Authorization: `Basic ${process.env.GOOD_API_KEY}` }
+      { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
     );
 
     expect(response.statusCode).toBe(404);

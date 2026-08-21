@@ -13,8 +13,8 @@ it("returns truck details if within range", async () => {
         address: "2222 W Braker Ln",
         zip: "78758",
       }),
-      new Date("10/24/2020")
-    )
+      new Date("10/24/2020"),
+    ),
   ).toEqual({
     citystate: "austin-tx",
     date: "2020-10-24",
@@ -33,8 +33,8 @@ it("returns false if not truck on date", async () => {
         address: "2222 W Braker Ln",
         zip: "78758",
       }),
-      new Date("10/24/2000")
-    )
+      new Date("10/24/2000"),
+    ),
   ).toEqual(false);
 });
 
@@ -50,8 +50,8 @@ it("returns false if not in state", async () => {
         address: "2222 W Braker Ln",
         zip: "78758",
       }),
-      new Date("10/24/2020")
-    )
+      new Date("10/24/2020"),
+    ),
   ).toEqual(false);
 });
 
@@ -67,7 +67,7 @@ it("returns false if not in range", async () => {
         address: "2222 W Braker Ln",
         zip: "78758",
       }),
-      new Date("10/24/2020")
-    )
+      new Date("10/24/2020"),
+    ),
   ).toEqual(false);
 });

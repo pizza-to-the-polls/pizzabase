@@ -165,7 +165,7 @@ export class Report extends BaseEntity {
       contactFirstName?: string;
       contactLastName?: string;
       contactRole?: string;
-    } = {}
+    } = {},
   ): Promise<
     [
       Report,
@@ -175,20 +175,19 @@ export class Report extends BaseEntity {
         isNewLocation: boolean;
         hasTruck: boolean;
         alreadyOrdered: boolean;
-      }
+      },
     ]
   > {
     const report = new this();
 
     report.contactInfo = contactInfo;
     report.reportURL = reportURL;
-    const [location, isNewLocation] = await Location.getOrCreateFromAddress(
-      address
-    );
+    const [location, isNewLocation] =
+      await Location.getOrCreateFromAddress(address);
     report.location = location;
 
     const truck = await location.activeTruck();
-    if (!!truck) report.truck = truck;
+    if (truck) report.truck = truck;
 
     const willReceive = !(await location.hasDistributor()) && !!canDistribute;
     report.canDistribute = canDistribute ? 1 : 0;

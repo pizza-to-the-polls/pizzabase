@@ -5,7 +5,7 @@ import { Location } from "../src/entity/Location";
 
 const preOrderReport = async (
   data: { [key: string]: string },
-  manager
+  manager,
 ): Promise<boolean> => {
   const {
     Address,
@@ -25,9 +25,10 @@ const preOrderReport = async (
 
   const newNow = new Date(`${date} ${Time} ${zone}`);
   const who = "preorder";
-  const restaurant = (Restaurant.includes("#")
-    ? Restaurant.split(/\#[0-9]+\s/).reverse()[0]
-    : Restaurant.replace(/[0-9]*/, "")
+  const restaurant = (
+    Restaurant.includes("#")
+      ? Restaurant.split(/\#[0-9]+\s/).reverse()[0]
+      : Restaurant.replace(/[0-9]*/, "")
   )
     .split(/\ - |\(|\r|\n/)[0]
     .trim();
@@ -56,13 +57,13 @@ const preOrderReport = async (
   await location.validate(who);
   await manager.query(`
       UPDATE orders SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}' WHERE id = ${
-    order.id
-  }
+        order.id
+      }
     `);
   await manager.query(`
       UPDATE locations SET created_at = '${newNow.toISOString()}', updated_at = '${newNow.toISOString()}', validated_at = '${newNow.toISOString()}' WHERE id = ${
-    location.id
-  }
+        location.id
+      }
     `);
   return true;
 };

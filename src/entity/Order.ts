@@ -143,7 +143,7 @@ export class Order extends BaseEntity {
       restaurant?: string;
       user?: string;
     },
-    address: NormalAddress
+    address: NormalAddress,
   ): Promise<Order> {
     const [location] = await Location.getOrCreateFromAddress(address);
 
@@ -164,7 +164,7 @@ export class Order extends BaseEntity {
       orderType?: OrderTypes;
       user?: string;
     },
-    location: Location
+    location: Location,
   ): Promise<Order> {
     const order = new this();
 

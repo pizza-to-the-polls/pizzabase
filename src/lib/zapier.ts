@@ -28,7 +28,7 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
         : undefined,
       truck: report.truck ? report.truck.asJSON() : undefined,
     },
-    hook
+    hook,
   );
 
 const zapOrder = async (order: Order, hook: ZapHooks): Promise<void> =>
@@ -41,7 +41,7 @@ const zapOrder = async (order: Order, hook: ZapHooks): Promise<void> =>
         distributor: await order.distributor(),
       },
     },
-    hook
+    hook,
   );
 
 const zapUpload = async (upload: Upload, hook: ZapHooks): Promise<void> =>
@@ -53,7 +53,7 @@ const zapUpload = async (upload: Upload, hook: ZapHooks): Promise<void> =>
         ipAddress: upload.ipAddress,
       },
     },
-    hook
+    hook,
   );
 
 const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
@@ -63,7 +63,7 @@ const zapTruck = async (truck: Truck, hook: ZapHooks): Promise<void> =>
       location: await truck.location.asJSONPrivate(),
       reports: (await truck.reports).map((report) => report.asJSONPrivate()),
     },
-    hook
+    hook,
   );
 
 const zapAny = async (objs: any, hook: ZapHooks): Promise<void> => {

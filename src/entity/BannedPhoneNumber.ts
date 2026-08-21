@@ -37,7 +37,7 @@ export class BannedPhoneNumber extends BaseEntity {
   }
 
   static async findByIdOrPhoneNumber(
-    idOrPhoneNumber: string
+    idOrPhoneNumber: string,
   ): Promise<BannedPhoneNumber | null> {
     // SERIAL ids are small; phone numbers are 10+ digits. Only treat short
     // all-digit values as ids so 10-digit phone numbers never overflow integer.

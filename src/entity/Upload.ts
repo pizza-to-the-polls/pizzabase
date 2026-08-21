@@ -53,7 +53,7 @@ export class Upload extends BaseEntity {
       fileExt,
       normalizedAddress,
       fileHash,
-    }: { fileExt: string; normalizedAddress: NormalAddress; fileHash: string }
+    }: { fileExt: string; normalizedAddress: NormalAddress; fileHash: string },
   ): Promise<[Upload, boolean]> {
     const exists = await this.findOne({
       where: { fileHash },
@@ -69,7 +69,7 @@ export class Upload extends BaseEntity {
 
     if (count + 1 > UPLOAD_MAX) {
       throw new Error(
-        "Whoops! You've had too many uploads recently - slow your roll"
+        "Whoops! You've had too many uploads recently - slow your roll",
       );
     }
     const upload = new this();
