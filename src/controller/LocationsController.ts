@@ -10,6 +10,7 @@ import {
   zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
+import { socialPost } from "../lib/social";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -163,7 +164,11 @@ export class LocationsController {
       return { errors };
     }
 
-    await zapNewOrder(await Order.placeOrder(order, location));
+    const placedOrder = await Order.placeOrder(order, location);
+    await zapNewOrder(placedOrder);
+
+    // Fire-and-forget: social posting never blocks the response
+    socialPost(placedOrder);
 
     return { success: true };
   }
