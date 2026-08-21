@@ -3,6 +3,8 @@ import { Report } from "../entity/Report";
 import { Action } from "../entity/Action";
 import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
+import { isValidPhone } from "../lib/validator/normalizeContact";
+import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 
 export class ReportsController {
@@ -74,6 +76,17 @@ export class ReportsController {
     if (Object.keys(errors).length > 0) {
       response.status(422);
       return { errors };
+    }
+
+    if (isValidPhone(contactInfo)) {
+      if (await BannedPhoneNumber.isBanned(contactInfo)) {
+        return {
+          address: normalizedAddress.fullAddress,
+          hasTruck: false,
+          willReceive: false,
+          alreadyOrdered: false,
+        };
+      }
     }
 
     const [

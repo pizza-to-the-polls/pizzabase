@@ -5,6 +5,7 @@ import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
 import { Action } from "../entity/Action";
+import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import {
   ADDRESS_ERROR,
   URL_ERROR,
@@ -220,6 +221,10 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { reportURL: url } });
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
+    expect(report.waitTime).toEqual(waitTime);
+    expect(report.contactFirstName).toBeNull();
+    expect(report.contactLastName).toBeNull();
+    expect(report.contactRole).toBeNull();
 
     const [
       zapUrl,
@@ -426,6 +431,85 @@ describe("#create", () => {
     expect(report.order.id).toBe(order.id);
 
     expect((global.fetch as jest.Mock).mock.calls.length).toEqual(0);
+  });
+
+  test("Banned phone number is silently skipped", async () => {
+    const url = "http://twitter.com/something/status/banme";
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const contact = "555-234-2345";
+
+    const ban = new BannedPhoneNumber();
+    ban.phoneNumber = "5552342345";
+    ban.reason = "Spam";
+    ban.bannedBy = "admin";
+    await ban.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { url, contact, address },
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toEqual(200);
+
+    // Verify no report was created
+    const report = await Report.findOne({
+      where: { contactInfo: contact },
+    });
+    expect(report).toBeNull();
+
+    // Verify no zapier hooks were called
+    expect((global.fetch as jest.Mock).mock.calls.length).toBe(0);
+  });
+
+  test("Email address is not checked against banned numbers", async () => {
+    const url = "http://twitter.com/something/status/email";
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const contact = "test@example.com";
+
+    const ban = new BannedPhoneNumber();
+    ban.phoneNumber = "5552342345";
+    ban.reason = "Spam";
+    ban.bannedBy = "admin";
+    await ban.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url,
+        contact,
+        address,
+        waitTime: "5",
+        canDistribute: true,
+      },
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.create(request, response, () => undefined);
+
+    // Email should be processed normally
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      willReceive: true,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toEqual(200);
+
+    // Verify the report was created
+    const report = await Report.findOne({ where: { reportURL: url } });
+    expect(report).toBeTruthy();
+
+    // Verify zapier hook was called
+    expect((global.fetch as jest.Mock).mock.calls.length).toBeGreaterThan(0);
   });
 
   test("Non-cannonical loc, creates new report on canonical loc", async () => {
