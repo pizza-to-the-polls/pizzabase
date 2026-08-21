@@ -3,7 +3,9 @@ import { Upload } from "../entity/Upload";
 import { UPLOAD_CONTENT_TYPES } from "./validator";
 
 const s3 = new aws.S3({ region: "us-west-2" });
-const S3_BUCKET = process.env.UPLOAD_S3_BUCKET;
+
+const RAW_UPLOADS_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
+const MAX_FILE_BYTES = 52_428_800; // 50 MB
 
 interface Presigned {
   presigned: {
@@ -20,18 +22,15 @@ export const presignUpload = async (upload: Upload): Promise<Presigned> => {
   const [fileExt] = filePath.split(".").reverse();
 
   const s3Params = {
-    Bucket: S3_BUCKET,
-    Expires: 60,
-    ACL: "public-read",
+    Bucket: RAW_UPLOADS_BUCKET,
+    Expires: 300,
     Fields: {
       key: filePath,
+      "x-amz-meta-upload-id": String(id),
     },
     Conditions: [
-      ["content-length-range", 0, 100_000_000],
-      ["starts-with", "$Content-Type", "image/"],
-      ["eq", "$x-amz-meta-user-id", id],
-      ["eq", "$x-amz-acl", "public-read"],
-      ["eq", "$ACL", "public-read"],
+      ["content-length-range", 0, MAX_FILE_BYTES],
+      ["eq", "$x-amz-meta-upload-id", String(id)],
     ],
     ContentType: UPLOAD_CONTENT_TYPES[fileExt],
   };

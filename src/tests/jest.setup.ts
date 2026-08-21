@@ -17,6 +17,7 @@ beforeAll(async () => {
     "https://hooks.example.com/skip-location-hook/";
 
   process.env.GOOD_API_KEY = (await APIKey.generate()).key;
+  process.env.MEDIA_CALLBACK_SECRET = "test-callback-secret";
 });
 afterEach(async () => {
   await dbHelper.cleanAll();
