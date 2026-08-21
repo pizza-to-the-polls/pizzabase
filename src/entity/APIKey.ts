@@ -27,7 +27,7 @@ export class APIKey extends BaseEntity {
   static async generate(description?: string): Promise<APIKey> {
     const apiKey = new this();
     apiKey.key = uuidv4();
-    apiKey.description = description;
+    apiKey.description = description ?? null;
     await apiKey.save();
 
     return apiKey;

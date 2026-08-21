@@ -268,6 +268,98 @@ describe("#webhook", () => {
     expect(donation.url).toEqual(url);
   });
 
+  it("handles a sparse charge with missing optional fields", async () => {
+    const id = "stripe_sparsecharge";
+    const amount = 200_00;
+    const email = "minimal@example.net";
+    const body = {
+      type: "charge.succeeded",
+      data: {
+        object: {
+          id,
+          amount,
+          billing_details: { email, address: {} },
+          metadata: {},
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const donation = await Donation.findOne({ where: { email } });
+    expect(donation).toBeTruthy();
+    expect(donation.stripeId).toEqual(id);
+    expect(donation.postalCode).toBeNull();
+    expect(donation.referrer).toBeNull();
+    expect(donation.gift).toBeNull();
+    expect(donation.url).toEqual("https://polls.pizza");
+  });
+
+  it("handles a charge with null billing_details", async () => {
+    const id = "stripe_nullbilling";
+    const amount = 100_00;
+    const body = {
+      type: "charge.succeeded",
+      data: {
+        object: {
+          id,
+          amount,
+          billing_details: null,
+          metadata: null,
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const donation = await Donation.findOne({ where: { email: "" } });
+    expect(donation).toBeTruthy();
+    expect(donation.stripeId).toEqual(id);
+    expect(donation.email).toEqual("");
+    expect(donation.postalCode).toBeNull();
+    expect(donation.referrer).toBeNull();
+    expect(donation.gift).toBeNull();
+    expect(donation.url).toEqual("https://polls.pizza");
+  });
+
+  it("handles a charge with no receipt_email (uses empty string fallback)", async () => {
+    const id = "stripe_noemail";
+    const amount = 300_00;
+    const body = {
+      type: "charge.succeeded",
+      data: {
+        object: {
+          id,
+          amount,
+          billing_details: {},
+          metadata: {},
+        },
+      },
+    };
+    await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined
+    );
+    const donation = await Donation.findOne({ where: { email: "" } });
+    expect(donation).toBeTruthy();
+    expect(donation.email).toEqual("");
+    expect(donation.stripeId).toEqual(id);
+  });
+
   it("deducts a failed charge", async () => {
     const id = "stripe_tokengoeshere";
 

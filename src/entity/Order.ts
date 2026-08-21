@@ -172,7 +172,7 @@ export class Order extends BaseEntity {
     order.orderType = orderType || OrderTypes.pizzas;
     order.snacks = quantity * ORDER_TYPE_TO_SNACKS[order.orderType];
     order.cost = cost;
-    order.restaurant = restaurant;
+    order.restaurant = restaurant ?? null;
     order.location = location;
 
     await order.save();

@@ -221,6 +221,10 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { reportURL: url } });
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
+    expect(report.waitTime).toEqual(waitTime);
+    expect(report.contactFirstName).toBeNull();
+    expect(report.contactLastName).toBeNull();
+    expect(report.contactRole).toBeNull();
 
     const [
       zapUrl,
