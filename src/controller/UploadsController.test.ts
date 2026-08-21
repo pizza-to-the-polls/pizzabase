@@ -902,6 +902,7 @@ describe("#getExif", () => {
     const body = await controller.mediaFormatCallback(
       http_mocks.createRequest({
         method: "POST",
+        headers: { "x-callback-secret": process.env.MEDIA_CALLBACK_SECRET },
         body: {
           id: upload.id,
           status: "ready",
@@ -931,6 +932,7 @@ describe("#getExif", () => {
     await controller.mediaFormatCallback(
       http_mocks.createRequest({
         method: "POST",
+        headers: { "x-callback-secret": process.env.MEDIA_CALLBACK_SECRET },
         body: {
           id: upload.id,
           status: "failed",
@@ -949,6 +951,7 @@ describe("#getExif", () => {
     const body = await controller.mediaFormatCallback(
       http_mocks.createRequest({
         method: "POST",
+        headers: { "x-callback-secret": process.env.MEDIA_CALLBACK_SECRET },
         body: {},
       }),
       response,
@@ -959,11 +962,34 @@ describe("#getExif", () => {
     expect(body).toEqual({ errors: ["Missing required fields: id, status"] });
   });
 
+  it("mediaFormatCallback returns 401 without the callback secret", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.mediaFormatCallback(
+      http_mocks.createRequest({
+        method: "POST",
+        body: {
+          id: upload.id,
+          status: "ready",
+        },
+      }),
+      response,
+      () => undefined
+    );
+
+    expect(response.statusCode).toEqual(401);
+    expect(body).toEqual({ errors: ["Unauthorized"] });
+
+    // The record must be untouched.
+    const untouched = await Upload.findOne({ where: { id: upload.id } });
+    expect(untouched!.mediaStatus).toBe("processing");
+  });
+
   it("mediaFormatCallback returns 404 for non-existent upload", async () => {
     const response = http_mocks.createResponse();
     const body = await controller.mediaFormatCallback(
       http_mocks.createRequest({
         method: "POST",
+        headers: { "x-callback-secret": process.env.MEDIA_CALLBACK_SECRET },
         body: {
           id: 99999,
           status: "ready",
@@ -975,5 +1001,89 @@ describe("#getExif", () => {
 
     expect(response.statusCode).toEqual(404);
     expect(body).toEqual({ errors: ["Upload not found"] });
+  });
+
+  // -----------------------------------------------------------------------
+  // showMedia (GET /uploads/:fileName permalink resolver)
+  // -----------------------------------------------------------------------
+
+  describe("#showMedia", () => {
+    it("redirects to the processed output when ready", async () => {
+      const repo = AppDataSource.getRepository(Upload);
+      await repo.update(upload.id, {
+        processedFilePath: {
+          webp:
+            "https://reports.polls.pizza.s3.amazonaws.com/uploads/1/image.webp",
+          jpeg:
+            "https://reports.polls.pizza.s3.amazonaws.com/uploads/1/image.jpeg",
+        },
+        mediaStatus: "ready",
+      });
+
+      const response = http_mocks.createResponse();
+      await controller.showMedia(
+        http_mocks.createRequest({
+          method: "GET",
+          params: { fileName },
+        }),
+        response,
+        () => undefined
+      );
+
+      expect(response.statusCode).toEqual(302);
+      expect(response._getRedirectUrl()).toContain("image.webp");
+    });
+
+    it("redirects legacy uploads (no raw_file_path) to the public bucket", async () => {
+      const repo = AppDataSource.getRepository(Upload);
+      await repo.update(upload.id, { rawFilePath: null as any });
+
+      const response = http_mocks.createResponse();
+      await controller.showMedia(
+        http_mocks.createRequest({
+          method: "GET",
+          params: { fileName },
+        }),
+        response,
+        () => undefined
+      );
+
+      expect(response.statusCode).toEqual(302);
+      expect(response._getRedirectUrl()).toContain(
+        "reports.polls.pizza.s3.amazonaws.com"
+      );
+      expect(response._getRedirectUrl()).toContain(upload.filePath!);
+    });
+
+    it("returns 404 while media is still processing (raw is private)", async () => {
+      // Fresh upload from beforeEach: processing, no output yet.
+      const response = http_mocks.createResponse();
+      const body = await controller.showMedia(
+        http_mocks.createRequest({
+          method: "GET",
+          params: { fileName },
+        }),
+        response,
+        () => undefined
+      );
+
+      expect(response.statusCode).toEqual(404);
+      expect(body).toEqual({ errors: ["Media not available"] });
+    });
+
+    it("returns 404 for an unknown fileName", async () => {
+      const response = http_mocks.createResponse();
+      const body = await controller.showMedia(
+        http_mocks.createRequest({
+          method: "GET",
+          params: { fileName: "nope-does-not-exist.jpg" },
+        }),
+        response,
+        () => undefined
+      );
+
+      expect(response.statusCode).toEqual(404);
+      expect(body).toEqual({ errors: ["Not found"] });
+    });
   });
 });

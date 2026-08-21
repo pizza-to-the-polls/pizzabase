@@ -78,10 +78,12 @@ export class UploadsController {
     if (!(await isAuthorized(request, response, next))) return null;
 
     const { fileName } = request.params;
-    const filePath = `uploads/${fileName}`;
+    const pathKey = `uploads/${fileName}`;
 
+    // New uploads keep rawFilePath stable for life; legacy rows only have
+    // filePath. Look up both so the Retool viewer works for either.
     const upload = await Upload.findOne({
-      where: { filePath } as any,
+      where: [{ rawFilePath: pathKey }, { filePath: pathKey }] as any,
     });
     if (!findOr404(upload, response, next)) return null;
 
@@ -107,11 +109,13 @@ export class UploadsController {
       const s3Client = new (require("aws-sdk").S3)({
         region: process.env.AWS_REGION || "us-west-2",
       });
+      // Legacy uploads live in the public bucket; new ones in their
+      // recorded raw bucket. Null rawBucket ⇒ pre-pipeline row.
       const bucket = upload.rawBucket || process.env.UPLOAD_S3_BUCKET!;
 
       return extractExifAndReview(
         { s3Client: s3Client as any, bucket },
-        { filePath: upload.filePath, includeReview }
+        { filePath: upload.rawFilePath || upload.filePath, includeReview }
       );
     } catch (error) {
       console.error(
@@ -125,14 +129,68 @@ export class UploadsController {
   }
 
   /**
+   * Permalink resolver for media. GET /uploads/:fileName
+   *
+   * Redirects to wherever the media currently lives:
+   *   - processed output when formatting is complete (webp/jpeg/mp4/gif)
+   *   - the public bucket for legacy uploads that never went through the
+   *     pipeline
+   *   - 404 while processing (raw files are private and never served)
+   *
+   * This keeps report.url stable forever regardless of what the pipeline
+   * does with storage behind the scenes.
+   */
+  async showMedia(request: Request, response: Response, _next: NextFunction) {
+    const { fileName } = request.params;
+    const pathKey = `uploads/${fileName}`;
+
+    const upload = await Upload.findOne({
+      where: [{ rawFilePath: pathKey }, { filePath: pathKey }] as any,
+    });
+    if (!upload) {
+      response.status(404);
+      return { errors: ["Not found"] };
+    }
+
+    // Legacy row: no raw file path recorded means it predates the pipeline
+    // and lives in the public bucket under its original key.
+    if (!upload.rawFilePath) {
+      const bucket = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
+      return response.redirect(
+        302,
+        `https://${bucket}.s3.amazonaws.com/${upload.filePath}`
+      );
+    }
+
+    const processed = upload.processedFilePath as Record<string, string> | null;
+    const primary =
+      processed?.webp || processed?.jpeg || processed?.mp4 || processed?.gif;
+
+    if (primary) {
+      return response.redirect(302, primary);
+    }
+
+    // Still processing or failed — raw files are private, never served.
+    response.status(404);
+    return { errors: ["Media not available"] };
+  }
+
+  /**
    * Callback from the formatting Lambda when media processing completes.
-   * POST /api/uploads/media-format-callback
+   * POST /uploads/media-format-callback
    */
   async mediaFormatCallback(
     request: Request,
     response: Response,
     _next: NextFunction
   ) {
+    if (
+      request.headers["x-callback-secret"] !== process.env.MEDIA_CALLBACK_SECRET
+    ) {
+      response.status(401);
+      return { errors: ["Unauthorized"] };
+    }
+
     const { id, processed_file_path, status } = request.body || {};
 
     if (!id || !status) {
@@ -149,15 +207,15 @@ export class UploadsController {
     upload.mediaStatus = status === "ready" ? "ready" : "failed";
 
     if (processed_file_path) {
-      upload.processedFilePath = processed_file_path;
-      // file_path → primary processed output
-      const primary =
-        processed_file_path.webp ||
-        processed_file_path.jpeg ||
-        processed_file_path.mp4;
-      if (primary) {
-        upload.filePath = primary.replace(/^https?:\/\/[^/]+\//, "");
-      }
+      // Preserve jobId so duplicate MediaConvert events still resolve.
+      const priorJobId = (upload.processedFilePath as Record<
+        string,
+        string
+      > | null)?.jobId;
+      upload.processedFilePath = {
+        ...processed_file_path,
+        ...(priorJobId ? { jobId: priorJobId } : {}),
+      };
     }
 
     await upload.save();

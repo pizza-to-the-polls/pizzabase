@@ -70,6 +70,18 @@ export async function handler(event: S3Event): Promise<void> {
       continue;
     }
 
+    // Idempotency guard: duplicate S3 events must not re-encode.
+    const priorOutput = upload.processedFilePath as Record<
+      string,
+      string
+    > | null;
+    if (upload.mediaStatus === "ready" && priorOutput?.webp) {
+      console.log(
+        `[on-media-format] Already processed upload ${upload.id}, skipping`
+      );
+      continue;
+    }
+
     try {
       upload.mediaStatus = "processing";
       await upload.save();
@@ -77,13 +89,8 @@ export async function handler(event: S3Event): Promise<void> {
       if (IMAGE_EXTENSIONS.has(fileExt)) {
         const result = await processImage(key, upload.id);
         upload.processedFilePath = result;
-        // file_path → primary processed output (webp for images)
-        if (result.webp) {
-          upload.filePath = result.webp.replace(
-            `https://${PROCESSED_BUCKET}.s3.amazonaws.com/`,
-            ""
-          );
-        }
+        // sharp re-encode strips all metadata — this is the scrub event.
+        upload.exifScrubbed = true;
         upload.mediaStatus = "ready";
         await upload.save();
         console.log(
@@ -92,7 +99,10 @@ export async function handler(event: S3Event): Promise<void> {
         );
       } else if (VIDEO_EXTENSIONS.has(fileExt)) {
         await transcodeVideo(key, upload.id);
-        // MediaConvert is async — on-mediaconvert-complete will update status
+        // Transcoded MP4 carries no source metadata.
+        upload.exifScrubbed = true;
+        await upload.save();
+        // media_status flips to ready in on-mediaconvert-complete
         console.log(`[on-media-format] MediaConvert job started for ${key}`);
       } else {
         console.warn(
@@ -285,7 +295,8 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
                     QualityTuningLevel: "SINGLE_PASS",
                   },
                 },
-                Width: 1920,
+                // Height only — Width omitted so MediaConvert preserves
+                // aspect ratio (portrait phone videos stay portrait).
                 Height: 1080,
                 RespondToAfd: "NONE",
                 ScalingBehavior: "DEFAULT",

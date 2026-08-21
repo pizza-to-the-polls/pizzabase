@@ -38,16 +38,20 @@ export class AddMediaPipeline1766200000000 implements MigrationInterface {
       `ALTER TABLE "uploads" ADD COLUMN "moderation_score" double precision`
     );
     await queryRunner.query(
-      `ALTER TABLE "uploads" ADD COLUMN "raw_bucket" character varying NOT NULL DEFAULT 'raw.polls.pizza'`
+      `ALTER TABLE "uploads" ADD COLUMN "raw_bucket" character varying`
     );
 
-    // Backfill raw_file_path from existing file_path
+    // Index for S3-event lookups by key (both processing Lambdas query this).
     await queryRunner.query(
-      `UPDATE "uploads" SET "raw_file_path" = "file_path"`
+      `CREATE INDEX "IDX_uploads_raw_file_path" ON "uploads" ("raw_file_path")`
     );
+
+    // NOTE: no backfill. Rows that predate the pipeline keep raw_file_path
+    // NULL — that's the marker used to route them to the public bucket.
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
+    await queryRunner.query(`DROP INDEX IF EXISTS "IDX_uploads_raw_file_path"`);
     await queryRunner.query(`ALTER TABLE "uploads" DROP COLUMN "raw_bucket"`);
     await queryRunner.query(
       `ALTER TABLE "uploads" DROP COLUMN "moderation_score"`

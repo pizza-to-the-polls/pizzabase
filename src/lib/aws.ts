@@ -23,8 +23,7 @@ export const presignUpload = async (upload: Upload): Promise<Presigned> => {
 
   const s3Params = {
     Bucket: RAW_UPLOADS_BUCKET,
-    Expires: 60,
-    ACL: "private",
+    Expires: 300,
     Fields: {
       key: filePath,
       "x-amz-meta-upload-id": String(id),
@@ -32,8 +31,6 @@ export const presignUpload = async (upload: Upload): Promise<Presigned> => {
     Conditions: [
       ["content-length-range", 0, MAX_FILE_BYTES],
       ["eq", "$x-amz-meta-upload-id", String(id)],
-      ["eq", "$x-amz-acl", "private"],
-      ["eq", "$ACL", "private"],
     ],
     ContentType: UPLOAD_CONTENT_TYPES[fileExt],
   };

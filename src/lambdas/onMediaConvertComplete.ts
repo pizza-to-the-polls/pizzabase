@@ -18,11 +18,11 @@ const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 interface MediaConvertDetail {
   status: "COMPLETE" | "ERROR" | "CANCELED";
   jobId: string;
-  outputGroupDetails?: Array<{
-    outputDetails: Array<{
+  outputGroupDetails?: {
+    outputDetails: {
       outputFilePaths: string[];
-    }>;
-  }>;
+    }[];
+  }[];
 }
 
 interface EventBridgeEvent {
@@ -40,13 +40,10 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
 
   await initializeDataSource();
 
-  // Find upload by job ID stored in processed_file_path
-  const uploads = await Upload.find();
-  const upload = uploads.find(
-    (u) =>
-      u.processedFilePath &&
-      (u.processedFilePath as Record<string, string>).jobId === jobId
-  );
+  // Find upload by job ID via jsonb query — no full table scan.
+  const upload = await Upload.createQueryBuilder("u")
+    .where("u.processed_file_path ->> 'jobId' = :jobId", { jobId })
+    .getOne();
 
   if (!upload) {
     console.warn(`[on-mediaconvert-complete] No upload found for job ${jobId}`);
@@ -62,9 +59,8 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
       // MediaConvert outputs full S3 paths like s3://bucket/key_transcoded.mp4
       const key = mp4Path.replace(`s3://${PROCESSED_BUCKET}/`, "");
       const mp4Url = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${key}`;
-      upload.processedFilePath = { mp4: mp4Url };
-      // file_path → primary processed output (mp4 for videos)
-      upload.filePath = key;
+      // Keep jobId so redelivered events still resolve.
+      upload.processedFilePath = { mp4: mp4Url, jobId };
       console.log(
         `[on-mediaconvert-complete] Upload ${upload.id} ready: ${mp4Url}`
       );
