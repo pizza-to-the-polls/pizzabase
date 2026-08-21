@@ -39,19 +39,19 @@ export async function handler(): Promise<{
   if (!current) {
     throw new Error(
       "No Threads access token found in DB — cannot refresh. " +
-        "Seed a token first via POST /threads-token."
+        "Seed a token first via POST /threads-token.",
     );
   }
 
   const res = await fetch(
     "https://graph.threads.net/v1.0/refresh_access_token?" +
       "grant_type=th_refresh_token&access_token=" +
-      encodeURIComponent(current)
+      encodeURIComponent(current),
   );
 
   if (!res.ok) {
     const err = new Error(
-      `Threads token refresh failed: ${res.status} ${await res.text()}`
+      `Threads token refresh failed: ${res.status} ${await res.text()}`,
     );
     notifyBugsnag(err);
     throw err;

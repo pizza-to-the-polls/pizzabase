@@ -38,7 +38,7 @@ async function createTestOrder(
     city: string;
     state: string;
     fullAddress: string;
-  }> = {}
+  }> = {},
 ): Promise<Order> {
   const {
     quantity = 5,
@@ -68,7 +68,7 @@ async function createTestOrder(
 function threadsFetchCalls(): [string, RequestInit][] {
   return (global.fetch as jest.Mock).mock.calls.filter(
     ([url]: [string]) =>
-      typeof url === "string" && url.includes("graph.threads.net")
+      typeof url === "string" && url.includes("graph.threads.net"),
   );
 }
 
@@ -269,7 +269,7 @@ describe("threadsPost", () => {
       expect(calls[0][0]).toContain("/test-threads-user-id/threads");
       expect(containerBody.media_type).toBe("IMAGE");
       expect(containerBody.image_url).toContain(
-        "polls.pizza/uploads/chicago-il-threads-test.jpg"
+        "polls.pizza/uploads/chicago-il-threads-test.jpg",
       );
       expect(containerBody.alt_text).toContain("123 Main St");
       expect(containerBody.text).toBeTruthy();
@@ -499,7 +499,7 @@ describe("threadsPost", () => {
   describe("error handling", () => {
     it("does not throw when all Threads API calls fail", async () => {
       (global.fetch as jest.Mock).mockRejectedValue(
-        new Error("Network failure")
+        new Error("Network failure"),
       );
 
       const order = await createTestOrder();
@@ -651,7 +651,7 @@ describe("threadsPost", () => {
       expect(containerBody.text).toBe("Shared template text");
       expect(containerBody.media_type).toBe("VIDEO");
       expect(containerBody.video_url).toBe(
-        "https://example.com/shared-video.mp4"
+        "https://example.com/shared-video.mp4",
       );
     });
   });

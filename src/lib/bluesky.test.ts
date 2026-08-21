@@ -14,7 +14,7 @@ function mockRes(
     json?: any;
     text?: string;
     headers?: Record<string, string>;
-  } = {}
+  } = {},
 ) {
   return {
     ok: overrides.ok !== false,
@@ -23,7 +23,7 @@ function mockRes(
     text: () => Promise.resolve(overrides.text ?? ""),
     arrayBuffer: () =>
       Promise.resolve(
-        new ArrayBuffer(overrides.json?._arrayBufferLength ?? 100)
+        new ArrayBuffer(overrides.json?._arrayBufferLength ?? 100),
       ),
     headers: {
       get: (name: string) =>
@@ -114,7 +114,7 @@ async function buildOrder(
     restaurant: string;
     city: string;
     state: string;
-  }> = {}
+  }> = {},
 ): Promise<Order> {
   const location = await Location.createFromAddress({
     latitude: 41.79907,
@@ -135,7 +135,7 @@ async function buildOrder(
       restaurant: overrides.restaurant ?? "Lou Malnati's",
       orderType: overrides.orderType ?? OrderTypes.pizzas,
     },
-    location
+    location,
   );
 }
 
@@ -152,7 +152,7 @@ describe("blueskyPost", () => {
 
       // Verify createSession was called
       const createCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.server.createSession")
+        (c: any[]) => c[0].includes("com.atproto.server.createSession"),
       );
       expect(createCalls.length).toBe(1);
 
@@ -184,19 +184,19 @@ describe("blueskyPost", () => {
 
       // Should NOT have called createSession
       const createCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.server.createSession")
+        (c: any[]) => c[0].includes("com.atproto.server.createSession"),
       );
       expect(createCalls.length).toBe(0);
 
       // Should have called getSession to validate
       const getCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.server.getSession")
+        (c: any[]) => c[0].includes("com.atproto.server.getSession"),
       );
       expect(getCalls.length).toBe(1);
 
       // createRecord should use the cached access token
       const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.repo.createRecord")
+        (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
       );
       expect(recordCalls.length).toBe(1);
       // Authorization header should have the cached token
@@ -224,7 +224,7 @@ describe("blueskyPost", () => {
             ok: false,
             status: 401,
           }),
-        })
+        }),
       );
 
       const order = await buildOrder();
@@ -232,13 +232,13 @@ describe("blueskyPost", () => {
 
       // refreshSession should have been called
       const refreshCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.server.refreshSession")
+        (c: any[]) => c[0].includes("com.atproto.server.refreshSession"),
       );
       expect(refreshCalls.length).toBe(1);
 
       // createRecord should use the new access token
       const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.repo.createRecord")
+        (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
       );
       const authHeader = recordCalls[0][1].headers?.Authorization;
       expect(authHeader).toContain("tok-access-new");
@@ -273,7 +273,7 @@ describe("blueskyPost", () => {
             ok: false,
             status: 400,
           }),
-        })
+        }),
       );
 
       const order = await buildOrder();
@@ -281,7 +281,7 @@ describe("blueskyPost", () => {
 
       // createSession should have been called (re-auth)
       const createCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.server.createSession")
+        (c: any[]) => c[0].includes("com.atproto.server.createSession"),
       );
       expect(createCalls.length).toBe(1);
 
@@ -292,7 +292,7 @@ describe("blueskyPost", () => {
 
       // Post should still succeed
       const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(
-        (c: any[]) => c[0].includes("com.atproto.repo.createRecord")
+        (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
       );
       expect(recordCalls.length).toBe(1);
     });
@@ -318,7 +318,7 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       const order = await buildOrder({
@@ -343,7 +343,7 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       const order = await buildOrder({
@@ -366,7 +366,7 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       const order = await buildOrder({ restaurant: "" });
@@ -384,7 +384,7 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       const order = await buildOrder();
@@ -418,8 +418,9 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-          "https://polls.pizza/uploads/chicago-il-abc123.jpg": mediaDownloadRes(),
-        })
+          "https://polls.pizza/uploads/chicago-il-abc123.jpg":
+            mediaDownloadRes(),
+        }),
       );
 
       await blueskyPost(order);
@@ -428,7 +429,7 @@ describe("blueskyPost", () => {
       expect(recordBody.record.embed.$type).toBe("app.bsky.embed.images");
       expect(recordBody.record.embed.images).toHaveLength(1);
       expect(recordBody.record.embed.images[0].alt).toContain(
-        "5335 S Kimbark Ave"
+        "5335 S Kimbark Ave",
       );
     });
 
@@ -452,7 +453,7 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -479,7 +480,7 @@ describe("blueskyPost", () => {
           // HEAD to original URL returns size > 976KB
           "https://polls.pizza/uploads/chicago-il-large.jpg": (
             url: string,
-            opts?: any
+            opts?: any,
           ) => {
             if (opts?.method === "HEAD") {
               return mockRes({
@@ -499,7 +500,7 @@ describe("blueskyPost", () => {
             downloadUrlCalled = url;
             return mediaDownloadRes("image/jpeg", 70000);
           },
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -533,7 +534,7 @@ describe("blueskyPost", () => {
           // HEAD to original URL returns size > 976KB
           "https://polls.pizza/uploads/chicago-il-toobig.jpg": (
             _url: string,
-            opts?: any
+            opts?: any,
           ) => {
             if (opts?.method === "HEAD") {
               return mockRes({
@@ -551,7 +552,7 @@ describe("blueskyPost", () => {
             }
             return mediaDownloadRes();
           },
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -580,7 +581,7 @@ describe("blueskyPost", () => {
             recordBody = JSON.parse(opts.body);
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -624,7 +625,7 @@ describe("blueskyPost", () => {
           }),
           "https://polls.pizza/uploads/chicago-il-vid.mp4": (
             _url: string,
-            opts?: any
+            opts?: any,
           ) => {
             if (opts?.method === "HEAD") {
               return mockRes({
@@ -642,7 +643,7 @@ describe("blueskyPost", () => {
               json: { _arrayBufferLength: 5000000 },
             });
           },
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -675,7 +676,7 @@ describe("blueskyPost", () => {
           },
           "https://polls.pizza/uploads/chicago-il-huge.mp4": (
             _url: string,
-            opts?: any
+            opts?: any,
           ) => {
             if (opts?.method === "HEAD") {
               return mockRes({
@@ -687,7 +688,7 @@ describe("blueskyPost", () => {
             }
             return mediaDownloadRes("video/mp4", 51 * 1024 * 1024);
           },
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -733,7 +734,7 @@ describe("blueskyPost", () => {
           }),
           "https://polls.pizza/uploads/chicago-il-vid2.mp4": (
             _url: string,
-            opts?: any
+            opts?: any,
           ) => {
             if (opts?.method === "HEAD") {
               return mockRes({
@@ -752,7 +753,7 @@ describe("blueskyPost", () => {
             });
           },
           "https://polls.pizza/uploads/chicago-il-pic.jpg": mediaDownloadRes(),
-        })
+        }),
       );
 
       await blueskyPost(order);
@@ -786,7 +787,7 @@ describe("blueskyPost", () => {
 
         // No AT Protocol API calls should have been made
         const xrpcCalls = (global.fetch as jest.Mock).mock.calls.filter(
-          (c: any[]) => typeof c[0] === "string" && c[0].includes("xrpc")
+          (c: any[]) => typeof c[0] === "string" && c[0].includes("xrpc"),
         );
         expect(xrpcCalls).toHaveLength(0);
 
@@ -823,7 +824,7 @@ describe("blueskyPost", () => {
         await blueskyPost(order);
 
         const xrpcCalls = (global.fetch as jest.Mock).mock.calls.filter(
-          (c: any[]) => typeof c[0] === "string" && c[0].includes("xrpc")
+          (c: any[]) => typeof c[0] === "string" && c[0].includes("xrpc"),
         );
         expect(xrpcCalls).toHaveLength(0);
         expect(errorSpy).not.toHaveBeenCalled();
@@ -840,7 +841,7 @@ describe("blueskyPost", () => {
     it("does not throw when all BlueSky calls fail", async () => {
       // All fetches fail
       (global.fetch as jest.Mock).mockRejectedValue(
-        new Error("Network failure")
+        new Error("Network failure"),
       );
 
       const order = await buildOrder();
@@ -870,7 +871,7 @@ describe("blueskyPost", () => {
             status: 400,
             text: "Bad Request",
           }),
-        })
+        }),
       );
 
       const order = await buildOrder();
@@ -888,7 +889,7 @@ describe("blueskyPost", () => {
             }
             return BS_CREATE_RECORD;
           },
-        })
+        }),
       );
 
       const order = await buildOrder();
@@ -920,7 +921,7 @@ describe("blueskyPost", () => {
           }),
           "https://polls.pizza/uploads/chicago-il-bad.jpg": (
             _url: string,
-            opts?: any
+            opts?: any,
           ) => {
             if (opts?.method === "HEAD") {
               return mockRes({
@@ -932,7 +933,7 @@ describe("blueskyPost", () => {
             }
             return mediaDownloadRes();
           },
-        })
+        }),
       );
 
       await blueskyPost(order);

@@ -29,18 +29,18 @@ export async function socialPost(order: Order): Promise<void> {
   const enabled = socialEnabled();
   if (enabled.bluesky) {
     blueskyPost(order, text, mediaUrls).catch((err) =>
-      console.error("BlueSky post failed:", err)
+      console.error("BlueSky post failed:", err),
     );
   }
   if (enabled.twitter) {
     twitterPost(order, text, mediaUrls).catch((err) =>
-      console.error("Twitter post failed:", err)
+      console.error("Twitter post failed:", err),
     );
   }
   // Threads is NOT gated on env vars here: its access token lives in the DB
   // (refreshed by the scheduled job — see #199), so socialEnabled() cannot
   // see it. threadsPost self-gates via getAccessToken() at runtime.
   threadsPost(order, text, mediaUrls).catch((err) =>
-    console.error("Threads post failed:", err)
+    console.error("Threads post failed:", err),
   );
 }

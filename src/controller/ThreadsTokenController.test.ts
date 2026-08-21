@@ -15,7 +15,7 @@ describe("#update", () => {
         body: { accessToken: "new-token" },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(401);
@@ -30,7 +30,7 @@ describe("#update", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(422);
@@ -48,7 +48,7 @@ describe("#update", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(200);
@@ -74,7 +74,7 @@ describe("#update", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({ success: true });

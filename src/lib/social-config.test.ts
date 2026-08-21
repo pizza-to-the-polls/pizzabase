@@ -6,7 +6,7 @@ import { socialEnabled } from "./social-config";
  */
 function withEnv(
   overrides: Record<string, string | undefined>,
-  fn: () => void
+  fn: () => void,
 ): void {
   const saved = new Map<string, string | undefined>();
   for (const key of Object.keys(overrides)) {
@@ -59,9 +59,9 @@ describe("socialEnabled", () => {
           },
           () => {
             expect(socialEnabled().bluesky).toBe(true);
-          }
+          },
         );
-      }
+      },
     );
   });
 
@@ -99,7 +99,7 @@ describe("socialEnabled", () => {
           twitter: false,
           threads: false,
         });
-      }
+      },
     );
   });
 });

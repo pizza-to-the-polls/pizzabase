@@ -42,7 +42,7 @@ function getUserId(): string {
 async function threadsApi(
   endpoint: string,
   body: Record<string, unknown>,
-  retryOnTransient: boolean = true
+  retryOnTransient: boolean = true,
 ): Promise<Response> {
   const accessToken = await getAccessToken();
   if (!accessToken) {
@@ -86,8 +86,8 @@ async function postTextOnly(text: string): Promise<void> {
     const errorBody = await response.json().catch(() => ({}));
     throw new Error(
       `Threads text post failed: ${response.status} ${JSON.stringify(
-        errorBody
-      )}`
+        errorBody,
+      )}`,
     );
   }
 
@@ -109,7 +109,7 @@ async function postTextOnly(text: string): Promise<void> {
 async function waitForContainerReady(
   creationId: string,
   maxAttempts: number = 8,
-  intervalMs: number = 2000
+  intervalMs: number = 2000,
 ): Promise<boolean> {
   const accessToken = await getAccessToken();
   if (!accessToken) return false;
@@ -117,8 +117,8 @@ async function waitForContainerReady(
   for (let attempt = 0; attempt < maxAttempts; attempt++) {
     const res = await fetch(
       `${THREADS_API_BASE}/${creationId}?fields=status&access_token=${encodeURIComponent(
-        accessToken
-      )}`
+        accessToken,
+      )}`,
     );
 
     if (!res.ok) {
@@ -137,7 +137,7 @@ async function waitForContainerReady(
   }
 
   console.error(
-    `Threads container ${creationId} not ready after ${maxAttempts} polls`
+    `Threads container ${creationId} not ready after ${maxAttempts} polls`,
   );
   return false;
 }
@@ -156,7 +156,7 @@ async function postMedia(
   text: string,
   imageUrls: string[],
   videoUrls: string[],
-  altText: string
+  altText: string,
 ): Promise<void> {
   // Try video first, then images (match existing platform preference)
   const allMedia = [
@@ -188,7 +188,7 @@ async function postMedia(
         const errBody = await containerResponse.json().catch(() => ({}));
         console.error(
           `Threads media container creation failed: ${containerResponse.status}`,
-          JSON.stringify(errBody)
+          JSON.stringify(errBody),
         );
         continue;
       }
@@ -207,7 +207,7 @@ async function postMedia(
         const ready = await waitForContainerReady(creationId);
         if (!ready) {
           console.error(
-            `Threads video container ${creationId} not publishable; trying next media`
+            `Threads video container ${creationId} not publishable; trying next media`,
           );
           continue;
         }
@@ -222,7 +222,7 @@ async function postMedia(
         const errBody = await publishResponse.json().catch(() => ({}));
         console.error(
           `Threads media publish failed: ${publishResponse.status}`,
-          JSON.stringify(errBody)
+          JSON.stringify(errBody),
         );
         continue;
       }
@@ -269,7 +269,7 @@ async function postMedia(
 export async function threadsPost(
   order: Order,
   text?: string,
-  mediaUrls?: MediaUrls
+  mediaUrls?: MediaUrls,
 ): Promise<void> {
   // Skip if Threads is not configured (token retrieved from SSM at runtime)
   const accessToken = await getAccessToken();
@@ -280,7 +280,7 @@ export async function threadsPost(
   try {
     const finalText = truncateMessage(
       text ?? renderMessage(order),
-      MAX_THREADS_LENGTH
+      MAX_THREADS_LENGTH,
     );
     const urls = mediaUrls ?? (await collectMedia(order));
 

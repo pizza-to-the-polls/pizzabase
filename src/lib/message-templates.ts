@@ -111,7 +111,7 @@ export function truncateMessage(text: string, maxLength: number): string {
  */
 export function renderAndTruncate(
   order: MessageOrder,
-  platform: "bluesky" | "twitter"
+  platform: "bluesky" | "twitter",
 ): string {
   const text = renderMessage(order);
   const limit = platform === "bluesky" ? MAX_BLUESKY_LENGTH : MAX_TWEET_LENGTH;

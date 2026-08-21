@@ -86,7 +86,7 @@ async function apiCall(
   endpoint: string,
   body?: any,
   headers?: Record<string, string>,
-  retryOnTransient: boolean = true
+  retryOnTransient: boolean = true,
 ): Promise<Response> {
   const url = `${pdsUrl}/xrpc/${endpoint}`;
   const defaultHeaders: Record<string, string> = {
@@ -113,7 +113,7 @@ async function apiCall(
 async function createSession(
   pdsUrl: string,
   handle: string,
-  appPassword: string
+  appPassword: string,
 ): Promise<SessionData> {
   const response = await fetch(
     `${pdsUrl}/xrpc/com.atproto.server.createSession`,
@@ -121,13 +121,13 @@ async function createSession(
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ identifier: handle, password: appPassword }),
-    }
+    },
   );
 
   if (!response.ok) {
     const body = await response.text();
     throw new Error(
-      `Failed to create BlueSky session: ${response.status} ${body}`
+      `Failed to create BlueSky session: ${response.status} ${body}`,
     );
   }
 
@@ -146,14 +146,14 @@ async function createSession(
 
 async function refreshSession(
   pdsUrl: string,
-  refreshJwt: string
+  refreshJwt: string,
 ): Promise<{ accessJwt: string; refreshJwt: string }> {
   const response = await fetch(
     `${pdsUrl}/xrpc/com.atproto.server.refreshSession`,
     {
       method: "POST",
       headers: { Authorization: `Bearer ${refreshJwt}` },
-    }
+    },
   );
 
   if (!response.ok) {
@@ -222,7 +222,7 @@ async function getOrCreateSession(): Promise<SessionData> {
   try {
     const refreshed = await refreshSession(
       pdsUrl,
-      sessionRow.credentials.refreshJwt
+      sessionRow.credentials.refreshJwt,
     );
     sessionRow.credentials = {
       ...sessionRow.credentials,
@@ -262,7 +262,7 @@ async function getOrCreateSession(): Promise<SessionData> {
  * Download a blob from a URL and return as a Buffer along with the content type.
  */
 async function downloadBlob(
-  url: string
+  url: string,
 ): Promise<{ buffer: Buffer; contentType: string }> {
   const response = await fetch(url);
   if (!response.ok) {
@@ -284,7 +284,7 @@ async function uploadBlob(
   pdsUrl: string,
   accessJwt: string,
   buffer: Buffer,
-  mimeType: string
+  mimeType: string,
 ): Promise<BlobRef> {
   const url = `${pdsUrl}/xrpc/com.atproto.repo.uploadBlob`;
 
@@ -329,7 +329,7 @@ async function uploadBlob(
   if (!response.ok) {
     const text = await response.text();
     throw new Error(
-      `Failed to upload blob to BlueSky: ${response.status} ${text}`
+      `Failed to upload blob to BlueSky: ${response.status} ${text}`,
     );
   }
 
@@ -378,7 +378,7 @@ function buildCloudFrontResizeUrl(imageUrl: string): string {
   // padded base64. Do NOT switch to base64url — the CloudFront image handler
   // expects the exact encoding the Zapier integration used.
   const encodedParams = Buffer.from(JSON.stringify(resizeParams)).toString(
-    "base64"
+    "base64",
   );
   return `https://d120oba23kfdpx.cloudfront.net/${encodedParams}`;
 }
@@ -389,7 +389,7 @@ function buildCloudFrontResizeUrl(imageUrl: string): string {
 async function uploadImage(
   pdsUrl: string,
   accessJwt: string,
-  imageUrl: string
+  imageUrl: string,
 ): Promise<{ blob: BlobRef } | null> {
   let size = await getBlobSize(imageUrl);
 
@@ -397,7 +397,7 @@ async function uploadImage(
   if (size > BLUESKY_BLOB_LIMIT && isPollsPizzaUpload(imageUrl)) {
     const resizedUrl = buildCloudFrontResizeUrl(imageUrl);
     console.log(
-      `Image too large (${size} bytes), resizing via CloudFront: ${resizedUrl}`
+      `Image too large (${size} bytes), resizing via CloudFront: ${resizedUrl}`,
     );
     size = await getBlobSize(resizedUrl);
     if (size <= BLUESKY_BLOB_LIMIT || size === -1) {
@@ -408,7 +408,7 @@ async function uploadImage(
   // If still too large after resize (or not on polls.pizza), skip
   if (size > BLUESKY_BLOB_LIMIT) {
     console.warn(
-      `Image at ${imageUrl} exceeds BlueSky blob limit (${size} > ${BLUESKY_BLOB_LIMIT}), skipping`
+      `Image at ${imageUrl} exceeds BlueSky blob limit (${size} > ${BLUESKY_BLOB_LIMIT}), skipping`,
     );
     return null;
   }
@@ -421,12 +421,12 @@ async function uploadImage(
       if (isPollsPizzaUpload(imageUrl)) {
         // Already resized; give up
         console.warn(
-          `Resized image still exceeds BlueSky blob limit (${buffer.byteLength} bytes), skipping`
+          `Resized image still exceeds BlueSky blob limit (${buffer.byteLength} bytes), skipping`,
         );
         return null;
       }
       console.warn(
-        `Image at ${imageUrl} exceeds BlueSky blob limit (${buffer.byteLength} bytes), skipping`
+        `Image at ${imageUrl} exceeds BlueSky blob limit (${buffer.byteLength} bytes), skipping`,
       );
       return null;
     }
@@ -454,7 +454,7 @@ async function uploadVideoBlob(
   pdsUrl: string,
   accessJwt: string,
   videoUrl: string,
-  alt?: string
+  alt?: string,
 ): Promise<{
   blob: BlobRef;
   alt?: string;
@@ -463,7 +463,7 @@ async function uploadVideoBlob(
 
   if (size > BLUESKY_VIDEO_LIMIT) {
     console.warn(
-      `Video at ${videoUrl} exceeds BlueSky limit (${size} > ${BLUESKY_VIDEO_LIMIT}), skipping`
+      `Video at ${videoUrl} exceeds BlueSky limit (${size} > ${BLUESKY_VIDEO_LIMIT}), skipping`,
     );
     return null;
   }
@@ -478,7 +478,7 @@ async function uploadVideoBlob(
 
     if (buffer.byteLength > BLUESKY_VIDEO_LIMIT) {
       console.warn(
-        `Video exceeds BlueSky limit (${buffer.byteLength} bytes), skipping`
+        `Video exceeds BlueSky limit (${buffer.byteLength} bytes), skipping`,
       );
       return null;
     }
@@ -498,7 +498,7 @@ async function uploadVideoBlob(
 async function buildEmbed(
   pdsUrl: string,
   accessJwt: string,
-  mediaUrls: MediaUrls
+  mediaUrls: MediaUrls,
 ): Promise<ImageEmbed | VideoEmbed | undefined> {
   const { images, videos, alt } = mediaUrls;
 
@@ -547,7 +547,7 @@ async function createPost(
   accessJwt: string,
   did: string,
   text: string,
-  mediaUrls: MediaUrls
+  mediaUrls: MediaUrls,
 ): Promise<void> {
   const embed = await buildEmbed(pdsUrl, accessJwt, mediaUrls);
 
@@ -574,13 +574,13 @@ async function createPost(
     "com.atproto.repo.createRecord",
     body,
     undefined,
-    true
+    true,
   );
 
   if (!response.ok) {
     const responseBody = await response.text();
     throw new Error(
-      `Failed to create BlueSky post: ${response.status} ${responseBody}`
+      `Failed to create BlueSky post: ${response.status} ${responseBody}`,
     );
   }
 }
@@ -597,7 +597,7 @@ async function createPost(
 export async function blueskyPost(
   order: Order,
   text?: string,
-  mediaUrls?: MediaUrls
+  mediaUrls?: MediaUrls,
 ): Promise<void> {
   if (!socialEnabled().bluesky) {
     return; // not configured — clean no-op
@@ -607,7 +607,7 @@ export async function blueskyPost(
     const session = await getOrCreateSession();
     const finalText = truncateMessage(
       text ?? renderMessage(order),
-      MAX_BLUESKY_LENGTH
+      MAX_BLUESKY_LENGTH,
     );
     const urls = mediaUrls ?? (await collectMedia(order));
     await createPost(
@@ -615,7 +615,7 @@ export async function blueskyPost(
       session.accessJwt,
       session.did,
       finalText,
-      urls
+      urls,
     );
     console.log(`BlueSky post created for order ${order.id}`);
   } catch (err) {

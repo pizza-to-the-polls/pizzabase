@@ -10,7 +10,7 @@ export class AddIntegrationSessions1766200000000 implements MigrationInterface {
         "credentials" text NOT NULL,
         "updated_at" TIMESTAMP NOT NULL DEFAULT now(),
         CONSTRAINT "PK_integration_sessions" PRIMARY KEY ("service")
-      )`
+      )`,
     );
   }
 

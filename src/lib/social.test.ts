@@ -80,17 +80,17 @@ describe("socialPost", () => {
     expect(blueskyPost).toHaveBeenCalledWith(
       mockOrder,
       "Shared post text",
-      expectedMedia
+      expectedMedia,
     );
     expect(twitterPost).toHaveBeenCalledWith(
       mockOrder,
       "Shared post text",
-      expectedMedia
+      expectedMedia,
     );
     expect(threadsPost).toHaveBeenCalledWith(
       mockOrder,
       "Shared post text",
-      expectedMedia
+      expectedMedia,
     );
   });
 

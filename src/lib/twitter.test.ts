@@ -33,7 +33,7 @@ async function createTestOrder(
     city: string;
     state: string;
     fullAddress: string;
-  }> = {}
+  }> = {},
 ): Promise<Order> {
   const {
     quantity = 32,
@@ -84,7 +84,7 @@ describe("twitterPost", () => {
     const twitterCalls = calls.filter(
       ([url]: [string]) =>
         typeof url === "string" &&
-        (url.includes("api.twitter.com") || url.includes("upload.twitter.com"))
+        (url.includes("api.twitter.com") || url.includes("upload.twitter.com")),
     );
     expect(twitterCalls).toHaveLength(0);
   });
@@ -101,7 +101,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
 
@@ -125,7 +125,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
 
@@ -152,7 +152,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
 
@@ -180,7 +180,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
 
@@ -281,7 +281,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(2);
   });
@@ -305,7 +305,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(2);
 
@@ -317,7 +317,7 @@ describe("twitterPost", () => {
 
   it("does not throw on network errors", async () => {
     (global.fetch as jest.Mock).mockRejectedValueOnce(
-      new Error("Network error")
+      new Error("Network error"),
     );
 
     const order = await createTestOrder();
@@ -334,7 +334,7 @@ describe("twitterPost", () => {
     await twitterPost(order);
 
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
 
@@ -342,10 +342,10 @@ describe("twitterPost", () => {
     expect(headers.Authorization).toBeDefined();
     expect(headers.Authorization).toMatch(/^OAuth /);
     expect(headers.Authorization).toContain(
-      'oauth_consumer_key="test-api-key"'
+      'oauth_consumer_key="test-api-key"',
     );
     expect(headers.Authorization).toContain(
-      'oauth_signature_method="HMAC-SHA1"'
+      'oauth_signature_method="HMAC-SHA1"',
     );
     expect(headers.Authorization).toContain('oauth_version="1.0"');
     expect(headers.Authorization).toContain("oauth_signature=");
@@ -384,7 +384,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 10, orderType: OrderTypes.pizzas, cost: 100 },
-      location
+      location,
     );
 
     // Mock S3 download + Twitter media upload + metadata + tweet
@@ -419,20 +419,20 @@ describe("twitterPost with media", () => {
     // Verify media upload call
     const mediaCalls = (global.fetch as jest.Mock).mock.calls.filter(
       ([url]: [string]) =>
-        url === "https://upload.twitter.com/1.1/media/upload.json"
+        url === "https://upload.twitter.com/1.1/media/upload.json",
     );
     expect(mediaCalls.length).toBeGreaterThanOrEqual(1);
 
     // Verify alt text call
     const altCalls = (global.fetch as jest.Mock).mock.calls.filter(
       ([url]: [string]) =>
-        url === "https://upload.twitter.com/1.1/media/metadata/create.json"
+        url === "https://upload.twitter.com/1.1/media/metadata/create.json",
     );
     expect(altCalls).toHaveLength(1);
 
     // Verify tweet includes media_ids
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
@@ -459,7 +459,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 5, orderType: OrderTypes.pizzas, cost: 50 },
-      location
+      location,
     );
 
     (global.fetch as jest.Mock)
@@ -507,32 +507,33 @@ describe("twitterPost with media", () => {
     const initCall = allCalls.find(
       ([_url, opts]: [string, any]) =>
         opts?.body?.includes?.("command=INIT") ||
-        (typeof opts?.body === "string" && opts.body.includes("command=INIT"))
+        (typeof opts?.body === "string" && opts.body.includes("command=INIT")),
     );
     expect(initCall).toBeTruthy();
 
     // Check APPEND call (Buffer body with multipart video data)
     const uploadCalls = allCalls.filter(
       ([url]: [string]) =>
-        url === "https://upload.twitter.com/1.1/media/upload.json"
+        url === "https://upload.twitter.com/1.1/media/upload.json",
     );
     // INIT (URLSearchParams) + APPEND (Buffer) + FINALIZE (URLSearchParams) = 3
     expect(uploadCalls.length).toBeGreaterThanOrEqual(3);
     const bufferCalls = uploadCalls.filter(
-      ([_url, opts]: [string, any]) => opts?.body instanceof Buffer
+      ([_url, opts]: [string, any]) => opts?.body instanceof Buffer,
     );
     expect(bufferCalls.length).toBeGreaterThanOrEqual(1);
 
     // Check FINALIZE call
     const finalizeCall = allCalls.find(
       ([_url, opts]: [string, any]) =>
-        typeof opts?.body === "string" && opts.body.includes("command=FINALIZE")
+        typeof opts?.body === "string" &&
+        opts.body.includes("command=FINALIZE"),
     );
     expect(finalizeCall).toBeTruthy();
 
     // Check tweet has media
     const tweetCalls = allCalls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
@@ -559,7 +560,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 1, orderType: OrderTypes.pizzas, cost: 10 },
-      location
+      location,
     );
 
     // S3 download returns huge buffer (> 512 MB)
@@ -582,12 +583,12 @@ describe("twitterPost with media", () => {
 
     // Should have warned about large video
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("video too large")
+      expect.stringContaining("video too large"),
     );
 
     // Tweet should NOT include media (video was skipped)
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
@@ -616,7 +617,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 2, orderType: OrderTypes.pizzas, cost: 20 },
-      location
+      location,
     );
 
     // S3 download returns buffer > 5 MB
@@ -638,12 +639,12 @@ describe("twitterPost with media", () => {
     await twitterPost(order);
 
     expect(warnSpy).toHaveBeenCalledWith(
-      expect.stringContaining("image too large")
+      expect.stringContaining("image too large"),
     );
 
     // Tweet should NOT include media
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
@@ -672,7 +673,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 3, orderType: OrderTypes.pizzas, cost: 30 },
-      location
+      location,
     );
 
     (global.fetch as jest.Mock)
@@ -701,12 +702,12 @@ describe("twitterPost with media", () => {
     // Should log the media upload failure
     expect(errorSpy).toHaveBeenCalledWith(
       expect.stringContaining("failed to upload media"),
-      expect.anything()
+      expect.anything(),
     );
 
     // Tweet should still be posted (without media)
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
@@ -735,7 +736,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 4, orderType: OrderTypes.pizzas, cost: 40 },
-      location
+      location,
     );
 
     (global.fetch as jest.Mock)
@@ -805,13 +806,13 @@ describe("twitterPost with media", () => {
       ([url]: [string]) =>
         typeof url === "string" &&
         url.includes("command=STATUS") &&
-        url.includes("222222222")
+        url.includes("222222222"),
     );
     expect(statusCalls).toHaveLength(2);
 
     // Tweet should have the media
     const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
-      ([url]: [string]) => url === "https://api.twitter.com/2/tweets"
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
     );
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
@@ -838,7 +839,7 @@ describe("twitterPost with media", () => {
 
     const order = await Order.placeOrder(
       { quantity: 7, orderType: OrderTypes.pizzas, cost: 70 },
-      location
+      location,
     );
 
     (global.fetch as jest.Mock)
@@ -869,7 +870,7 @@ describe("twitterPost with media", () => {
     // Verify alt text was set
     const altCall = (global.fetch as jest.Mock).mock.calls.find(
       ([url]: [string]) =>
-        url === "https://upload.twitter.com/1.1/media/metadata/create.json"
+        url === "https://upload.twitter.com/1.1/media/metadata/create.json",
     );
     expect(altCall).toBeTruthy();
     const altBody = JSON.parse(altCall[1].body);

@@ -67,7 +67,7 @@ function percentEncode(str: string): string {
 function generateOAuthHeader(
   method: string,
   baseUrl: string,
-  params: Record<string, string> = {}
+  params: Record<string, string> = {},
 ): string {
   const oauthParams: Record<string, string> = {
     oauth_consumer_key: process.env.TWITTER_API_KEY!,
@@ -94,7 +94,7 @@ function generateOAuthHeader(
 
   // Signing key: consumer_secret & token_secret
   const signingKey = `${percentEncode(
-    process.env.TWITTER_API_SECRET!
+    process.env.TWITTER_API_SECRET!,
   )}&${percentEncode(process.env.TWITTER_ACCESS_SECRET!)}`;
 
   const signature = crypto
@@ -169,7 +169,7 @@ async function uploadImage(media: MediaItem): Promise<string | null> {
   const downloadResponse = await fetch(media.url);
   if (!downloadResponse.ok) {
     throw new Error(
-      `Failed to download image: ${downloadResponse.status} ${downloadResponse.statusText}`
+      `Failed to download image: ${downloadResponse.status} ${downloadResponse.statusText}`,
     );
   }
   const buffer = Buffer.from(await downloadResponse.arrayBuffer());
@@ -177,7 +177,7 @@ async function uploadImage(media: MediaItem): Promise<string | null> {
   // Max image size: 5 MB — skip without throwing so other media can proceed
   if (buffer.length > 5 * 1024 * 1024) {
     console.warn(
-      `Twitter: image too large (${buffer.length} bytes), skipping: ${media.url}`
+      `Twitter: image too large (${buffer.length} bytes), skipping: ${media.url}`,
     );
     return null;
   }
@@ -209,12 +209,13 @@ async function uploadImage(media: MediaItem): Promise<string | null> {
     const errBody = await uploadResponse.json().catch(() => ({}));
     throw new Error(
       `Twitter image upload failed: ${uploadResponse.status} ${JSON.stringify(
-        errBody
-      )}`
+        errBody,
+      )}`,
     );
   }
 
-  const uploadData = (await uploadResponse.json()) as TwitterMediaUploadResponse;
+  const uploadData =
+    (await uploadResponse.json()) as TwitterMediaUploadResponse;
 
   // Set alt text (best-effort)
   await setAltText(uploadData.media_id_string, media.altText);
@@ -231,7 +232,7 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
   const downloadResponse = await fetch(media.url);
   if (!downloadResponse.ok) {
     throw new Error(
-      `Failed to download video: ${downloadResponse.status} ${downloadResponse.statusText}`
+      `Failed to download video: ${downloadResponse.status} ${downloadResponse.statusText}`,
     );
   }
   const buffer = Buffer.from(await downloadResponse.arrayBuffer());
@@ -239,7 +240,7 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
   // Max video size: 512 MB
   if (buffer.length > 512 * 1024 * 1024) {
     console.warn(
-      `Twitter: video too large (${buffer.length} bytes), skipping: ${media.url}`
+      `Twitter: video too large (${buffer.length} bytes), skipping: ${media.url}`,
     );
     return null;
   }
@@ -270,8 +271,8 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
     const errBody = await initResponse.json().catch(() => ({}));
     throw new Error(
       `Twitter video INIT failed: ${initResponse.status} ${JSON.stringify(
-        errBody
-      )}`
+        errBody,
+      )}`,
     );
   }
 
@@ -306,8 +307,8 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
     const errBody = await appendResponse.json().catch(() => ({}));
     throw new Error(
       `Twitter video APPEND failed: ${appendResponse.status} ${JSON.stringify(
-        errBody
-      )}`
+        errBody,
+      )}`,
     );
   }
 
@@ -320,7 +321,7 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
   const finalizeOAuth = generateOAuthHeader(
     "POST",
     finalizeBaseUrl,
-    finalizeParams
+    finalizeParams,
   );
 
   const finalizeResponse = await fetch(finalizeBaseUrl, {
@@ -337,11 +338,12 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
     throw new Error(
       `Twitter video FINALIZE failed: ${
         finalizeResponse.status
-      } ${JSON.stringify(errBody)}`
+      } ${JSON.stringify(errBody)}`,
     );
   }
 
-  const finalizeData = (await finalizeResponse.json()) as TwitterMediaUploadResponse;
+  const finalizeData =
+    (await finalizeResponse.json()) as TwitterMediaUploadResponse;
 
   // --- STEP 4: Poll STATUS if processing ---
   if (
@@ -359,7 +361,7 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
 
 async function waitForProcessing(
   mediaId: string,
-  maxRetries: number = 10
+  maxRetries: number = 10,
 ): Promise<void> {
   for (let i = 0; i < maxRetries; i++) {
     const statusParams: Record<string, string> = {
@@ -376,17 +378,18 @@ async function waitForProcessing(
         headers: {
           Authorization: statusOAuth,
         },
-      }
+      },
     );
 
     if (!statusResponse.ok) {
       console.warn(
-        `Twitter: video STATUS check failed: ${statusResponse.status}`
+        `Twitter: video STATUS check failed: ${statusResponse.status}`,
       );
       return;
     }
 
-    const statusData = (await statusResponse.json()) as TwitterMediaUploadResponse;
+    const statusData =
+      (await statusResponse.json()) as TwitterMediaUploadResponse;
     const state = statusData.processing_info?.state;
 
     if (state === "succeeded") {
@@ -395,8 +398,8 @@ async function waitForProcessing(
     if (state === "failed") {
       console.warn(
         `Twitter: video processing failed: ${JSON.stringify(
-          statusData.processing_info?.error
-        )}`
+          statusData.processing_info?.error,
+        )}`,
       );
       return;
     }
@@ -407,7 +410,7 @@ async function waitForProcessing(
   }
 
   console.warn(
-    `Twitter: video processing status polling exhausted for media ${mediaId}`
+    `Twitter: video processing status polling exhausted for media ${mediaId}`,
   );
 }
 
@@ -433,7 +436,7 @@ async function setAltText(mediaId: string, altText: string): Promise<void> {
 
   if (!response.ok) {
     console.warn(
-      `Twitter: failed to set alt text for ${mediaId}: ${response.status}`
+      `Twitter: failed to set alt text for ${mediaId}: ${response.status}`,
     );
     // Don't throw — alt text is best-effort
   }
@@ -446,7 +449,7 @@ async function setAltText(mediaId: string, altText: string): Promise<void> {
 async function postTweet(
   text: string,
   mediaIds: string[],
-  retryCount: number = 0
+  retryCount: number = 0,
 ): Promise<void> {
   const body: Record<string, unknown> = { text };
   if (mediaIds.length > 0) {
@@ -477,7 +480,7 @@ async function postTweet(
     response.status,
     text,
     mediaIds,
-    retryCount
+    retryCount,
   );
 }
 
@@ -490,7 +493,7 @@ async function handleTwitterError(
   statusCode: number,
   originalText: string,
   mediaIds: string[],
-  retryCount: number
+  retryCount: number,
 ): Promise<void> {
   const errors = errorBody?.errors || [];
 
@@ -523,7 +526,7 @@ async function handleTwitterError(
         // Auth issues — cannot recover without new tokens
         console.error(
           "Twitter: authentication error, cannot recover",
-          JSON.stringify(errorBody)
+          JSON.stringify(errorBody),
         );
         return;
 
@@ -540,7 +543,7 @@ async function handleTwitterError(
 
   // Non-retriable error
   throw new Error(
-    `Twitter API error: ${statusCode} ${JSON.stringify(errorBody)}`
+    `Twitter API error: ${statusCode} ${JSON.stringify(errorBody)}`,
   );
 }
 
@@ -565,7 +568,7 @@ async function handleTwitterError(
 export async function twitterPost(
   order: Order,
   text?: string,
-  mediaUrls?: MediaUrls
+  mediaUrls?: MediaUrls,
 ): Promise<void> {
   // Skip if Twitter is not configured
   if (!socialEnabled().twitter) {
@@ -575,7 +578,7 @@ export async function twitterPost(
   try {
     const finalText = truncateMessage(
       text ?? renderMessage(order),
-      MAX_TWEET_LENGTH
+      MAX_TWEET_LENGTH,
     );
     const items = mediaUrls
       ? urlsToMediaItems(mediaUrls)
