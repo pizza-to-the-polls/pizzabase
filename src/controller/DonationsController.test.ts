@@ -285,7 +285,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const donation = await Donation.findOne({ where: { email } });
     expect(donation).toBeTruthy();
@@ -316,7 +316,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const donation = await Donation.findOne({ where: { email: "" } });
     expect(donation).toBeTruthy();
@@ -348,7 +348,7 @@ describe("#webhook", () => {
         headers: { "stripe-signature": "yip" },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const donation = await Donation.findOne({ where: { email: "" } });
     expect(donation).toBeTruthy();
