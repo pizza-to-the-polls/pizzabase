@@ -13,7 +13,7 @@ import { socialEnabled } from "./social-config";
  * so that the quirky template text is consistent on Twitter, BlueSky, and
  * any future social network.
  *
- * Posts to both BlueSky and Twitter concurrently, without blocking the
+ * Posts to all configured platforms concurrently, without blocking the
  * response. Individual failures are logged but never propagated.
  */
 export async function socialPost(order: Order): Promise<void> {
@@ -37,9 +37,10 @@ export async function socialPost(order: Order): Promise<void> {
       console.error("Twitter post failed:", err)
     );
   }
-  if (enabled.threads) {
-    threadsPost(order, text, mediaUrls).catch((err) =>
-      console.error("Threads post failed:", err)
-    );
-  }
+  // Threads is NOT gated on env vars here: its access token lives in the DB
+  // (refreshed by the scheduled job — see #199), so socialEnabled() cannot
+  // see it. threadsPost self-gates via getAccessToken() at runtime.
+  threadsPost(order, text, mediaUrls).catch((err) =>
+    console.error("Threads post failed:", err)
+  );
 }

@@ -8,6 +8,9 @@ export interface MediaUrls {
 
 const SUPPORTED_VIDEO_FORMATS = ["mp4", "mpeg", "webm", "mov"];
 const MAX_IMAGES = 4;
+// Twitter allows a single video per tweet and BlueSky embeds one — collecting
+// more would cause the whole post to fail at the API layer.
+const MAX_VIDEOS = 1;
 
 /**
  * Collect media (images and videos) associated with an order.
@@ -23,10 +26,12 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
   const address = order.location.address;
   const alt = `Long line at ${address}`;
 
-  // Uploads from location
+  // Uploads from location. Media must be publicly reachable — platforms
+  // (Threads especially) download it server-side.
+  const mediaBase = process.env.STATIC_SITE || "https://polls.pizza";
   const uploads = await order.location.uploads;
   for (const upload of uploads) {
-    const url = `https://polls.pizza/${upload.filePath}`;
+    const url = `${mediaBase}/${upload.filePath}`;
     const ext = upload.filePath.split(".").pop()?.toLowerCase() || "";
     if (SUPPORTED_VIDEO_FORMATS.includes(ext)) {
       videos.push(url);
@@ -52,5 +57,9 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
     }
   }
 
-  return { images: images.slice(0, MAX_IMAGES), videos, alt };
+  return {
+    images: images.slice(0, MAX_IMAGES),
+    videos: videos.slice(0, MAX_VIDEOS),
+    alt,
+  };
 }

@@ -150,23 +150,23 @@ describe("socialPost", () => {
     // Should not throw — fire-and-forget semantics
   });
 
-  it("does not call any platform when none are configured", async () => {
+  it("does not call bluesky or twitter when they are not configured", async () => {
     const origBlueskyHandle = process.env.BSKY_HANDLE;
     const origBlueskyPassword = process.env.BSKY_APP_PASSWORD;
     const origTwitterKey = process.env.TWITTER_API_KEY;
-    const origThreadsToken = process.env.THREADS_ACCESS_TOKEN;
 
     delete process.env.BSKY_HANDLE;
     delete process.env.BSKY_APP_PASSWORD;
     delete process.env.TWITTER_API_KEY;
-    delete process.env.THREADS_ACCESS_TOKEN;
 
     try {
       await socialPost(mockOrder);
 
       expect(blueskyPost).not.toHaveBeenCalled();
       expect(twitterPost).not.toHaveBeenCalled();
-      expect(threadsPost).not.toHaveBeenCalled();
+      // Threads is called unconditionally — it self-gates on its DB-stored
+      // token at runtime (#199), which env vars cannot reflect here.
+      expect(threadsPost).toHaveBeenCalled();
     } finally {
       if (origBlueskyHandle === undefined) {
         delete process.env.BSKY_HANDLE;
@@ -182,11 +182,6 @@ describe("socialPost", () => {
         delete process.env.TWITTER_API_KEY;
       } else {
         process.env.TWITTER_API_KEY = origTwitterKey;
-      }
-      if (origThreadsToken === undefined) {
-        delete process.env.THREADS_ACCESS_TOKEN;
-      } else {
-        process.env.THREADS_ACCESS_TOKEN = origThreadsToken;
       }
     }
   });
