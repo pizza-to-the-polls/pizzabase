@@ -44,7 +44,7 @@ export async function handler(event: S3Event): Promise<void> {
     const upload = await Upload.findOne({ where: { rawFilePath: key } as any });
     if (!upload) {
       console.log(
-        `[on-s3-upload-process-exif] No upload record for ${key} — may not be submitted yet`
+        `[on-s3-upload-process-exif] No upload record for ${key} — may not be submitted yet`,
       );
       continue;
     }
@@ -52,7 +52,7 @@ export async function handler(event: S3Event): Promise<void> {
     // Already processed? Idempotency guard.
     if (upload.exifExtracted) {
       console.log(
-        `[on-s3-upload-process-exif] EXIF already extracted for upload ${upload.id}`
+        `[on-s3-upload-process-exif] EXIF already extracted for upload ${upload.id}`,
       );
       continue;
     }
@@ -87,12 +87,12 @@ export async function handler(event: S3Event): Promise<void> {
           upload.exifData = exifData;
           console.log(
             `[on-s3-upload-process-exif] EXIF extracted for upload ${upload.id}:`,
-            JSON.stringify(exifData).slice(0, 200)
+            JSON.stringify(exifData).slice(0, 200),
           );
         } catch (parseErr) {
           console.error(
             `[on-s3-upload-process-exif] Failed to parse EXIF for ${key}:`,
-            parseErr
+            parseErr,
           );
         }
       } else {

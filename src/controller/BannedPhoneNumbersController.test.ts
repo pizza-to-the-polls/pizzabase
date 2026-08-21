@@ -3,7 +3,6 @@ import * as http_mocks from "node-mocks-http";
 import { BannedPhoneNumbersController } from "./BannedPhoneNumbersController";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 
-// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type JsonResponse = Record<string, any>;
 
 const controller = new BannedPhoneNumbersController();

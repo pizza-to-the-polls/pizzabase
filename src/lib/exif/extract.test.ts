@@ -830,7 +830,7 @@ describe("extractExifWithRetry (HEIF)", () => {
  */
 function buildMinimalMp4(
   exifTiff: Buffer,
-  brand: string = "mp42"
+  brand: string = "mp42",
 ): { buffer: Buffer; tiffOffset: number } {
   // ---- ftyp box (24 bytes) ----
   const ftypBrand = Buffer.from(brand, "ascii");

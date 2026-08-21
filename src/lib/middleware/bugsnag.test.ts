@@ -43,14 +43,12 @@ describe("initBugSnagMiddleware", () => {
 
   // Resolve the mock AFTER jest.resetModules() so tests observe the same
   // jest.fn() instances that the freshly-required ./bugsnag module receives.
-  /* eslint-disable @typescript-eslint/no-var-requires */
+
   const loadModule = () => {
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
     const bugsnag = require("@bugsnag/js") as any;
     const mod = require("./bugsnag") as typeof import("./bugsnag");
     return { bugsnag: bugsnag.default ?? bugsnag, mod };
   };
-  /* eslint-enable @typescript-eslint/no-var-requires */
 
   it("starts Bugsnag with autoTrackSessions disabled (BUG-006)", () => {
     process.env.BUGSNAG_KEY = "test-api-key";

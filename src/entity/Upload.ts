@@ -81,8 +81,8 @@ export class Upload extends BaseEntity {
   @Column({ name: "moderation_score", type: "float", nullable: true })
   moderationScore: number | null;
 
-  @Column({ name: "raw_bucket", default: "raw.polls.pizza" })
-  rawBucket: string;
+  @Column({ name: "raw_bucket", type: "varchar", nullable: true })
+  rawBucket: string | null;
 
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;

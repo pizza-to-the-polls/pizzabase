@@ -35,6 +35,7 @@ beforeAll(async () => {
 
   process.env.STATIC_SITE = "https://polls.pizza";
   process.env.UPLOAD_S3_BUCKET = "reports.polls.pizza";
+  process.env.MEDIA_CALLBACK_SECRET = "test-callback-secret";
 });
 afterEach(async () => {
   await dbHelper.cleanAll();

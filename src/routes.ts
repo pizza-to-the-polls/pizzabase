@@ -140,6 +140,12 @@ export const Routes = [
   },
   {
     method: "get",
+    route: "/uploads/:fileName",
+    controller: UploadsController,
+    action: "showMedia",
+  },
+  {
+    method: "get",
     route: "/uploads/:fileName/sightengine",
     controller: SightEngineController,
     action: "getSightEngineScore",
