@@ -39,8 +39,7 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
   let floor: Date | null = null;
   if (reports.length > 0) {
     const earliest = Math.min(...reports.map((r) => r.createdAt.getTime()));
-    // Small lead buffer: a photo can land moments before its report.
-    floor = new Date(earliest - 5 * 60 * 1000);
+    floor = new Date(earliest);
   }
 
   const uploads = (await order.location.uploads)
