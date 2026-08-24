@@ -27,9 +27,13 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
   const alt = `Long line at ${address}`;
 
   // Uploads from location. Media must be publicly reachable — platforms
-  // (Threads especially) download it server-side.
+  // (Threads especially) download it server-side. An order attaches the
+  // location's open reports, whose photos are these uploads — take them
+  // newest-first so the freshest evidence of the line leads.
   const mediaBase = process.env.STATIC_SITE || "https://polls.pizza";
-  const uploads = await order.location.uploads;
+  const uploads = (await order.location.uploads).sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
   for (const upload of uploads) {
     const url = `${mediaBase}/${upload.filePath}`;
     const ext = upload.filePath.split(".").pop()?.toLowerCase() || "";
