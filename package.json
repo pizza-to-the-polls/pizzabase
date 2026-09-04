@@ -42,7 +42,7 @@
     "pg": "^8.23.0",
     "reflect-metadata": "^0.2.2",
     "serverless": "^4.38.1",
-    "serverless-http": "^2.7.0",
+    "serverless-http": "^4.0.0",
     "stripe": "^17.6.0",
     "typeorm": "^0.3.31",
     "typeorm-aurora-data-api-driver": "^3.0.2",
