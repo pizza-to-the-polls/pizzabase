@@ -278,6 +278,7 @@ export async function threadsPost(
   }
 
   try {
+    console.log(`threadsPost: starting for order ${order.id}`);
     const finalText = truncateMessage(
       text ?? renderMessage(order),
       MAX_THREADS_LENGTH,

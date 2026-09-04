@@ -17,30 +17,59 @@ import { socialEnabled } from "./social-config";
  * response. Individual failures are logged but never propagated.
  */
 export async function socialPost(order: Order): Promise<void> {
+  const diag = {
+    bluesky: "unknown",
+    twitter: "unknown",
+    threads: "unknown",
+  };
+  console.log(`socialPost: starting for order ${order.id}`);
+
   const text = renderMessage(order);
+  console.log(`socialPost: rendered message (${text.length} chars)`);
 
   let mediaUrls = { images: [] as string[], videos: [] as string[], alt: "" };
   try {
     mediaUrls = await collectMedia(order);
+    console.log(
+      `socialPost: collected media — ${mediaUrls.images.length} images, ${mediaUrls.videos.length} videos`,
+    );
   } catch (err) {
-    console.error("Failed to collect media for order:", err);
+    console.error("socialPost: failed to collect media:", err);
   }
 
   const enabled = socialEnabled();
+  console.log(
+    `socialPost: enabled gates — bluesky=${enabled.bluesky}, twitter=${enabled.twitter}, threads=always`,
+  );
+
   if (enabled.bluesky) {
-    blueskyPost(order, text, mediaUrls).catch((err) =>
-      console.error("BlueSky post failed:", err),
-    );
+    diag.bluesky = "attempting…";
+    console.log(`socialPost: bluesky → ${diag.bluesky}`);
+    blueskyPost(order, text, mediaUrls)
+      .then(() => console.log("socialPost: bluesky → completed"))
+      .catch((err) => console.error(`socialPost: bluesky → FAILED (${err})`));
+  } else {
+    diag.bluesky = "skipped (not configured)";
+    console.log(`socialPost: bluesky → ${diag.bluesky}`);
   }
+
   if (enabled.twitter) {
-    twitterPost(order, text, mediaUrls).catch((err) =>
-      console.error("Twitter post failed:", err),
-    );
+    diag.twitter = "attempting…";
+    console.log(`socialPost: twitter → ${diag.twitter}`);
+    twitterPost(order, text, mediaUrls)
+      .then(() => console.log("socialPost: twitter → completed"))
+      .catch((err) => console.error(`socialPost: twitter → FAILED (${err})`));
+  } else {
+    diag.twitter = "skipped (not configured)";
+    console.log(`socialPost: twitter → ${diag.twitter}`);
   }
+
   // Threads is NOT gated on env vars here: its access token lives in the DB
   // (refreshed by the scheduled job — see #199), so socialEnabled() cannot
   // see it. threadsPost self-gates via getAccessToken() at runtime.
-  threadsPost(order, text, mediaUrls).catch((err) =>
-    console.error("Threads post failed:", err),
-  );
+  diag.threads = "attempting…";
+  console.log(`socialPost: threads → ${diag.threads}`);
+  threadsPost(order, text, mediaUrls)
+    .then(() => console.log("socialPost: threads → completed"))
+    .catch((err) => console.error(`socialPost: threads → FAILED (${err})`));
 }
