@@ -167,8 +167,12 @@ export class LocationsController {
     const placedOrder = await Order.placeOrder(order, location);
     await zapNewOrder(placedOrder);
 
-    // Fire-and-forget: social posting never blocks the response
-    socialPost(placedOrder);
+    // Fire-and-forget: social posting never blocks the response.
+    // The .catch handler keeps the promise chain alive — without it Lambda
+    // freezes the context before collectMedia's first DB await resolves.
+    socialPost(placedOrder).catch((err) =>
+      console.error("socialPost crashed:", err),
+    );
 
     return { success: true };
   }
