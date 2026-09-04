@@ -134,7 +134,11 @@ export const installAuroraCompatibilityPatches = (
     const queryRunner = originalCreateQueryRunner(mode);
     const originalQuery = queryRunner.query.bind(queryRunner);
 
-    queryRunner.query = ((query: string, parameters?: any[], useStructuredResult?: boolean) => {
+    queryRunner.query = ((
+      query: string,
+      parameters?: any[],
+      useStructuredResult?: boolean,
+    ) => {
       const sanitized = sanitizeQueryParameters(parameters);
       return withDatabaseResumeRetry(
         () => originalQuery(query, sanitized, useStructuredResult),
