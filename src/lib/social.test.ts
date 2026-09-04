@@ -206,7 +206,9 @@ describe("socialPost", () => {
     // Wait for microtask to flush the .catch handler
     await new Promise(setImmediate);
 
-    expect(console.error).toHaveBeenCalledWith("socialPost: bluesky → FAILED (Error: BlueSky error)");
+    expect(console.error).toHaveBeenCalledWith(
+      "socialPost: bluesky → FAILED (Error: BlueSky error)",
+    );
   });
 
   it("logs errors when twitterPost rejects", async () => {
@@ -219,7 +221,9 @@ describe("socialPost", () => {
 
     await new Promise(setImmediate);
 
-    expect(console.error).toHaveBeenCalledWith("socialPost: twitter → FAILED (Error: Twitter error)");
+    expect(console.error).toHaveBeenCalledWith(
+      "socialPost: twitter → FAILED (Error: Twitter error)",
+    );
   });
 
   it("logs errors when threadsPost rejects", async () => {
@@ -232,6 +236,8 @@ describe("socialPost", () => {
 
     await new Promise(setImmediate);
 
-    expect(console.error).toHaveBeenCalledWith("socialPost: threads → FAILED (Error: Threads error)");
+    expect(console.error).toHaveBeenCalledWith(
+      "socialPost: threads → FAILED (Error: Threads error)",
+    );
   });
 });
