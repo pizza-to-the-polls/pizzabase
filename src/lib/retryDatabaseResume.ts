@@ -25,13 +25,19 @@ export const DATABASE_RESUMING_MESSAGE = "resuming after being auto-paused";
 /**
  * Default backoff delays in milliseconds.
  *
- * Strategy: mostly flat, small exponential tail.
+ * Strategy: flat then stair-stepped to stay under the 30s Lambda timeout
+ * while covering Aurora Serverless v1 resume times (up to ~25s).
  *   - First 5 retries: 1s each (covers the typical ~5s resume window)
- *   - Then: 2s, 4s (tail for the rare slow wake-up)
- *   - 7 retries total, ~11s total sleep time
+ *   - Next 3: 2s each (slower wake-up)
+ *   - Next 3: 3s each (rare slow resume)
+ *   - Final: 4s (worst-case tail)
+ *   - 12 retries total, ~21s total sleep time
+ *
+ * With ~5s of execution overhead the worst-case path finishes under
+ * the 30s Lambda timeout.
  */
 export const DEFAULT_RETRY_DELAYS_MS = [
-  1000, 1000, 1000, 1000, 1000, 2000, 4000,
+  1000, 1000, 1000, 1000, 1000, 2000, 2000, 2000, 3000, 3000, 3000, 4000,
 ];
 
 // ── Error detection ────────────────────────────────────────────────
