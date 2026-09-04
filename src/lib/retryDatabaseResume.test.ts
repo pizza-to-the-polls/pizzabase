@@ -94,7 +94,7 @@ describe("withDatabaseResumeRetry", () => {
     expect(fn).toHaveBeenCalledTimes(3);
   });
 
-  it("uses correct delays: 1s × 5, 2s, 4s", async () => {
+  it("uses correct delays: 1s×5, 2s×3, 3s×3, 4s", async () => {
     const delays: number[] = [];
 
     // A function that always throws resume errors so we exercise every retry.
@@ -108,8 +108,10 @@ describe("withDatabaseResumeRetry", () => {
       }),
     ).rejects.toThrow(DATABASE_RESUMING_MESSAGE);
 
-    expect(delays).toEqual([1000, 1000, 1000, 1000, 1000, 2000, 4000]);
-    // Called once initially + one per retry delay = 8 times total.
+    expect(delays).toEqual([
+      1000, 1000, 1000, 1000, 1000, 2000, 2000, 2000, 3000, 3000, 3000, 4000,
+    ]);
+    // Called once initially + one per retry delay = 13 times total.
     expect(fn).toHaveBeenCalledTimes(DEFAULT_RETRY_DELAYS_MS.length + 1);
   });
 

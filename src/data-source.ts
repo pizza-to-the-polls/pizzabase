@@ -112,7 +112,7 @@ export const sanitizeQueryParameters = (
 // ── Aurora Serverless resume retry & parameter sanitizer patch ─────
 // When the Aurora DB auto-pauses, queries during the resume window throw
 // "resuming after being auto-paused". Wrap every query runner's query()
-// method with retry+backoff so the request survives the resume window.
+// and transaction methods with retry+backoff so the request survives.
 //
 // Also sanitizes undefined→null in query parameters so the Aurora Data
 // API driver doesn't throw "'param_N' is an invalid type".
@@ -126,6 +126,7 @@ export const installAuroraCompatibilityPatches = (
   sleep?: (ms: number) => Promise<void>,
 ): void => {
   const originalCreateQueryRunner = driver.createQueryRunner.bind(driver);
+  const retryOpts = sleep ? { sleep } : undefined;
 
   // Cast through any — monkey-patching the driver instance doesn't match
   // TypeORM's narrow Driver interface, but the runtime prototype is correct.
@@ -133,17 +134,44 @@ export const installAuroraCompatibilityPatches = (
     const queryRunner = originalCreateQueryRunner(mode);
     const originalQuery = queryRunner.query.bind(queryRunner);
 
-    queryRunner.query = ((
-      query: string,
-      parameters?: any[],
-      useStructuredResult?: boolean,
-    ) => {
+    queryRunner.query = ((query: string, parameters?: any[], useStructuredResult?: boolean) => {
       const sanitized = sanitizeQueryParameters(parameters);
       return withDatabaseResumeRetry(
         () => originalQuery(query, sanitized, useStructuredResult),
-        sleep ? { sleep } : undefined,
+        retryOpts,
       );
     }) as any;
+
+    // ── Patch transaction methods ────────────────────────────────
+    // TypeORM's AuroraPostgresQueryRunner.startTransaction / commitTransaction /
+    // rollbackTransaction call the RDS Data API directly (BeginTransactionCommand
+    // etc.) without going through query(). If the DB is resuming when a transaction
+    // begins or ends, the error propagates unhandled and reaches Bugsnag.
+    // Wrapping them in the same retry logic closes this gap.
+
+    const wrapTransactionMethod = <T extends (...args: any[]) => Promise<any>>(
+      original: T,
+    ): T => {
+      return (async (...args: any[]) => {
+        return withDatabaseResumeRetry(() => original(...args), retryOpts);
+      }) as T;
+    };
+
+    if (typeof queryRunner.startTransaction === "function") {
+      queryRunner.startTransaction = wrapTransactionMethod(
+        queryRunner.startTransaction.bind(queryRunner),
+      );
+    }
+    if (typeof queryRunner.commitTransaction === "function") {
+      queryRunner.commitTransaction = wrapTransactionMethod(
+        queryRunner.commitTransaction.bind(queryRunner),
+      );
+    }
+    if (typeof queryRunner.rollbackTransaction === "function") {
+      queryRunner.rollbackTransaction = wrapTransactionMethod(
+        queryRunner.rollbackTransaction.bind(queryRunner),
+      );
+    }
 
     return queryRunner;
   };
