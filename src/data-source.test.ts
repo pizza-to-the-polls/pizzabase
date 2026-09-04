@@ -24,7 +24,8 @@ function fakeSleep(): Promise<void> {
 /**
  * Builds a minimal fake driver that records params when query() is called.
  * The fake's createQueryRunner returns a queryRunner stub that stores
- * every (query, parameters, useStructuredResult) triple in recordedCalls.
+ * every (query, parameters, useStructuredResult) triple in recordedCalls
+ * and tracks transaction method calls.
  */
 function fakeDriver() {
   const recordedCalls: Array<{
@@ -44,6 +45,9 @@ function fakeDriver() {
         recordedCalls.push({ query, parameters, useStructuredResult });
         return Promise.resolve();
       },
+      startTransaction: () => Promise.resolve(),
+      commitTransaction: () => Promise.resolve(),
+      rollbackTransaction: () => Promise.resolve(),
     }),
   };
 }
@@ -212,5 +216,148 @@ describe("installAuroraCompatibilityPatches", () => {
 
     expect(recordedCalls).toHaveLength(1);
     expect(recordedCalls[0].parameters).toEqual([]);
+  });
+});
+
+// ── installAuroraCompatibilityPatches: transaction methods ────────
+
+describe("installAuroraCompatibilityPatches — transaction methods", () => {
+  it("retries startTransaction on resume errors", async () => {
+    let calls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: () => Promise.resolve(),
+        startTransaction: async () => {
+          calls++;
+          if (calls < 3) throw resumeError();
+        },
+        commitTransaction: () => Promise.resolve(),
+        rollbackTransaction: () => Promise.resolve(),
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver, fakeSleep);
+
+    const qr = (driver as any).createQueryRunner();
+    await qr.startTransaction();
+
+    expect(calls).toBe(3);
+  });
+
+  it("retries commitTransaction on resume errors", async () => {
+    let calls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: () => Promise.resolve(),
+        startTransaction: () => Promise.resolve(),
+        commitTransaction: async () => {
+          calls++;
+          if (calls < 2) throw resumeError();
+        },
+        rollbackTransaction: () => Promise.resolve(),
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver, fakeSleep);
+
+    const qr = (driver as any).createQueryRunner();
+    await qr.commitTransaction();
+
+    expect(calls).toBe(2);
+  });
+
+  it("retries rollbackTransaction on resume errors", async () => {
+    let calls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: () => Promise.resolve(),
+        startTransaction: () => Promise.resolve(),
+        commitTransaction: () => Promise.resolve(),
+        rollbackTransaction: async () => {
+          calls++;
+          if (calls < 2) throw resumeError();
+        },
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver, fakeSleep);
+
+    const qr = (driver as any).createQueryRunner();
+    await qr.rollbackTransaction();
+
+    expect(calls).toBe(2);
+  });
+
+  it("does NOT retry non-resume errors on transaction methods", async () => {
+    let calls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: () => Promise.resolve(),
+        startTransaction: async () => {
+          calls++;
+          throw otherError();
+        },
+        commitTransaction: () => Promise.resolve(),
+        rollbackTransaction: () => Promise.resolve(),
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver);
+
+    const qr = (driver as any).createQueryRunner();
+    await expect(qr.startTransaction()).rejects.toThrow("does not exist");
+    expect(calls).toBe(1);
+  });
+
+  it("preserves query retry behavior alongside transaction patches", async () => {
+    let queryCalls = 0;
+    let txnCalls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: async () => {
+          queryCalls++;
+          if (queryCalls < 2) throw resumeError();
+          return "ok";
+        },
+        startTransaction: async () => {
+          txnCalls++;
+          if (txnCalls < 2) throw resumeError();
+        },
+        commitTransaction: () => Promise.resolve(),
+        rollbackTransaction: () => Promise.resolve(),
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver, fakeSleep);
+
+    const qr = (driver as any).createQueryRunner();
+    await qr.startTransaction();
+    const result = await qr.query("SELECT 1");
+    await qr.commitTransaction();
+
+    expect(txnCalls).toBe(2);
+    expect(queryCalls).toBe(2);
+    expect(result).toBe("ok");
+  });
+
+  it("passes arguments through wrapped transaction methods", async () => {
+    const receivedArgs: any[] = [];
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: () => Promise.resolve(),
+        startTransaction: async (isolationLevel?: string) => {
+          receivedArgs.push(isolationLevel);
+        },
+        commitTransaction: () => Promise.resolve(),
+        rollbackTransaction: () => Promise.resolve(),
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver);
+
+    const qr = (driver as any).createQueryRunner();
+    await qr.startTransaction("SERIALIZABLE");
+
+    expect(receivedArgs).toEqual(["SERIALIZABLE"]);
   });
 });
