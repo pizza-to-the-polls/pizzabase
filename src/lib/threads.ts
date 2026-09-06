@@ -76,7 +76,7 @@ async function threadsApi(
 /**
  * Post a simple text-only Thread.
  */
-async function postTextOnly(text: string): Promise<void> {
+async function postTextOnly(text: string): Promise<string | null> {
   const response = await threadsApi("threads", {
     text,
     media_type: "TEXT",
@@ -93,6 +93,7 @@ async function postTextOnly(text: string): Promise<void> {
 
   const data = (await response.json()) as { id: string };
   console.log(`Threads text post created: ${data.id}`);
+  return data.id ?? null;
 }
 
 // ---------------------------------------------------------------------------
@@ -157,7 +158,7 @@ async function postMedia(
   imageUrls: string[],
   videoUrls: string[],
   altText: string,
-): Promise<void> {
+): Promise<string | null> {
   // Try video first, then images (match existing platform preference)
   const allMedia = [
     ...videoUrls.map((url) => ({ url, mediaType: "VIDEO" as const })),
@@ -285,14 +286,17 @@ export async function threadsPost(
     );
     const urls = mediaUrls ?? (await collectMedia(order));
 
+    let postId: string | null = null;
     if (urls.images.length === 0 && urls.videos.length === 0) {
       // No media — simple text-only post
-      await postTextOnly(finalText);
+      postId = await postTextOnly(finalText);
     } else {
-      await postMedia(finalText, urls.images, urls.videos, urls.alt);
+      postId = await postMedia(finalText, urls.images, urls.videos, urls.alt);
     }
 
-    console.log(`Threads post completed for order ${order.id}`);
+    console.log(
+      `Threads post completed for order ${order.id} — id=${postId || "?"}`,
+    );
   } catch (err) {
     console.error(`Failed to post order ${order.id} to Threads:`, err);
     if (err instanceof Error) {
