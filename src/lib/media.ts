@@ -1,4 +1,6 @@
 import type { Order } from "../entity/Order";
+import { AppDataSource } from "../data-source";
+import { Upload } from "../entity/Upload";
 
 export interface MediaUrls {
   images: string[];
@@ -33,9 +35,10 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
   // to those reports are the uploads at this location — take them all,
   // newest-first, capped.
   const mediaBase = process.env.STATIC_SITE || "https://polls.pizza";
-  const uploads = (await order.location.uploads).sort(
-    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
-  );
+  const uploads = await AppDataSource.getRepository(Upload).find({
+    where: { location: { id: order.location.id } },
+    order: { createdAt: "DESC" },
+  });
   for (const upload of uploads) {
     const url = `${mediaBase}/${upload.filePath}`;
     const ext = upload.filePath.split(".").pop()?.toLowerCase() || "";
