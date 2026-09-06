@@ -1,7 +1,6 @@
 import { collectMedia } from "./media";
 import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
-import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
 import { AppDataSource } from "../data-source";
 
@@ -24,25 +23,6 @@ async function createTestOrder(): Promise<Order> {
     { quantity: 5, orderType: OrderTypes.pizzas, cost: 100 },
     location,
   );
-}
-
-async function addReport(
-  order: Order,
-  reportURL: string,
-  ageMinutes: number,
-): Promise<void> {
-  const report = new Report();
-  report.location = order.location;
-  report.order = order;
-  report.reportURL = reportURL;
-  report.contactInfo = "test@example.com";
-  await report.save();
-  if (ageMinutes > 0) {
-    await AppDataSource.getRepository(Report).update(
-      { id: report.id },
-      { createdAt: new Date(Date.now() - ageMinutes * 60 * 1000) as never },
-    );
-  }
 }
 
 async function addUpload(
@@ -69,10 +49,9 @@ async function addUpload(
 // ---------------------------------------------------------------------------
 
 describe("collectMedia", () => {
-  it("includes uploads filed in the open-reports window", async () => {
+  it("includes uploads attached to the location", async () => {
     const order = await createTestOrder();
-    await addReport(order, "https://twitter.com/1", 60); // report 60 min ago
-    await addUpload(order, "uploads/line.jpg", 55); // photo ~same time
+    await addUpload(order, "uploads/line.jpg", 5);
 
     const media = await collectMedia(order);
 
@@ -80,30 +59,8 @@ describe("collectMedia", () => {
     expect(media.images[0]).toContain("line.jpg");
   });
 
-  it("excludes uploads older than the earliest open report", async () => {
-    const order = await createTestOrder();
-    await addReport(order, "https://twitter.com/1", 60);
-    // Stale photo from hours before the report — should not be used
-    await addUpload(order, "uploads/old-line.jpg", 180);
-
-    const media = await collectMedia(order);
-
-    expect(media.images).toHaveLength(0);
-  });
-
-  it("falls back to all uploads when no reports are attached", async () => {
-    const order = await createTestOrder();
-    await addUpload(order, "uploads/no-report.jpg", 200);
-
-    const media = await collectMedia(order);
-
-    // No reports → no window → the upload is still used
-    expect(media.images).toHaveLength(1);
-  });
-
   it("sorts uploads newest first", async () => {
     const order = await createTestOrder();
-    await addReport(order, "https://twitter.com/1", 60);
     await addUpload(order, "uploads/older.jpg", 50);
     await addUpload(order, "uploads/newer.jpg", 40);
 
@@ -116,7 +73,6 @@ describe("collectMedia", () => {
 
   it("caps images at four and videos at one", async () => {
     const order = await createTestOrder();
-    await addReport(order, "https://twitter.com/1", 60);
     await addUpload(order, "uploads/p1.jpg", 50);
     await addUpload(order, "uploads/p2.jpg", 49);
     await addUpload(order, "uploads/p3.jpg", 48);

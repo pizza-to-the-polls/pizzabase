@@ -29,22 +29,13 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
   // Uploads from location. Media must be publicly reachable — platforms
   // (Threads especially) download it server-side.
   //
-  // Selection: an order is placed for the location's OPEN reports (Report
-  // .updateOpen links them), and those reports carry the evidence of the
-  // line. So pick the uploads filed in the same window as those reports —
-  // not a fixed decay, and never uploads tied to older/skipped reports.
+  // An order is placed for the location's open reports. The photos attached
+  // to those reports are the uploads at this location — take them all,
+  // newest-first, capped.
   const mediaBase = process.env.STATIC_SITE || "https://polls.pizza";
-
-  const reports = await order.reports;
-  let floor: Date | null = null;
-  if (reports.length > 0) {
-    const earliest = Math.min(...reports.map((r) => r.createdAt.getTime()));
-    floor = new Date(earliest);
-  }
-
-  const uploads = (await order.location.uploads)
-    .filter((upload) => !floor || upload.createdAt >= floor)
-    .sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  const uploads = (await order.location.uploads).sort(
+    (a, b) => b.createdAt.getTime() - a.createdAt.getTime(),
+  );
   for (const upload of uploads) {
     const url = `${mediaBase}/${upload.filePath}`;
     const ext = upload.filePath.split(".").pop()?.toLowerCase() || "";
