@@ -1,14 +1,13 @@
 import crypto from "crypto";
 import FormData from "form-data";
 import type { Order } from "../entity/Order";
-import { Upload } from "../entity/Upload";
 import { notifyBugsnag } from "./notifyBugsnag";
 import {
   renderMessage,
   truncateMessage,
   MAX_TWEET_LENGTH,
 } from "./message-templates";
-import type { MediaUrls } from "./media";
+import { collectMedia, MediaUrls } from "./media";
 import { socialEnabled } from "./social-config";
 
 const TWITTER_API_BASE = "https://api.twitter.com";
@@ -132,32 +131,6 @@ function urlsToMediaItems(urls: MediaUrls): MediaItem[] {
     });
   }
   return items;
-}
-
-/**
- * Fetch Upload records associated with the order's location, ordered by most
- * recent. Returns up to 4 items (Twitter's media-per-tweet limit).
- */
-async function fetchMediaForOrder(order: Order): Promise<MediaItem[]> {
-  try {
-    const uploads = await Upload.find({
-      where: { location: { id: order.location.id } },
-      order: { createdAt: "DESC" },
-      take: 4,
-    });
-
-    return uploads.map((upload) => ({
-      url: `https://${
-        process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza"
-      }.s3.us-west-2.amazonaws.com/${upload.filePath}`,
-      altText: `Line at ${order.location.address}, ${order.location.city}`,
-      isVideo:
-        upload.filePath.endsWith(".mp4") || upload.filePath.endsWith(".mov"),
-    }));
-  } catch (err) {
-    console.warn("Twitter: failed to fetch media for order:", err);
-    return [];
-  }
 }
 
 // ---------------------------------------------------------------------------
@@ -580,9 +553,8 @@ export async function twitterPost(
       text ?? renderMessage(order),
       MAX_TWEET_LENGTH,
     );
-    const items = mediaUrls
-      ? urlsToMediaItems(mediaUrls)
-      : await fetchMediaForOrder(order);
+    const urls = mediaUrls ?? (await collectMedia(order));
+    const items = urlsToMediaItems(urls);
     const mediaIds: string[] = [];
 
     for (const media of items) {
