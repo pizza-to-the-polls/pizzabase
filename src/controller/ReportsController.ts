@@ -1,6 +1,5 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
-import { Upload } from "../entity/Upload";
 import { Action } from "../entity/Action";
 import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
@@ -92,21 +91,6 @@ export class ReportsController {
         normalizedAddress,
         extra,
       );
-
-    // Link uploaded photo to this report
-    const uploadId = Number(request.body?.uploadId);
-    if (uploadId) {
-      const upload = await Upload.findOne({ where: { id: uploadId } });
-      if (upload) {
-        // Validate: the report url must contain the upload's filePath
-        const urlPath = reportURL.split("/").pop();
-        const uploadPath = upload.filePath.split("/").pop();
-        if (urlPath === uploadPath) {
-          report.upload = upload;
-          await report.save();
-        }
-      }
-    }
 
     if (authed) {
       await Action.log(report, "trusted report", request.body?.user);
