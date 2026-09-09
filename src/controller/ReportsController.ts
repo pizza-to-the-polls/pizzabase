@@ -102,10 +102,8 @@ export class ReportsController {
         const urlPath = reportURL.split("/").pop();
         const uploadPath = upload.filePath.split("/").pop();
         if (urlPath === uploadPath) {
-          if (!upload.report) {
-            upload.report = report;
-            await upload.save();
-          }
+          report.upload = upload;
+          await report.save();
         }
       }
     }

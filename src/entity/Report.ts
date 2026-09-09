@@ -14,6 +14,7 @@ import {
 import { Location } from "./Location";
 import { Order } from "./Order";
 import { Truck } from "./Truck";
+import { Upload } from "./Upload";
 import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
 
@@ -81,6 +82,11 @@ export class Report extends BaseEntity {
   @JoinColumn({ name: "truck_id" })
   @Index()
   truck: Truck;
+
+  @ManyToOne(() => Upload, { nullable: true })
+  @JoinColumn({ name: "upload_id" })
+  @Index()
+  upload: Upload | null;
 
   @Column({
     name: "skipped_at",
