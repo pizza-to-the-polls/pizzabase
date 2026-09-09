@@ -48,7 +48,7 @@ export class Upload extends BaseEntity {
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;
 
-  @ManyToOne(() => Report, (report) => report.uploads, { nullable: true })
+  @ManyToOne(() => Report, { nullable: true })
   @JoinColumn({ name: "report_id" })
   @Index()
   report: Report | null;

@@ -93,15 +93,19 @@ export class ReportsController {
         extra,
       );
 
-    // Link uploaded photos to this report
-    const uploadIds: number[] = (request.body?.uploadIds || []).map(Number);
-    if (uploadIds.length > 0) {
-      const uploads = await Upload.findByIds(uploadIds);
-      for (const upload of uploads) {
-        // Skip uploads already linked to another report
-        if (!upload.report) {
-          upload.report = report;
-          await upload.save();
+    // Link uploaded photo to this report
+    const uploadId = Number(request.body?.uploadId);
+    if (uploadId) {
+      const upload = await Upload.findOne({ where: { id: uploadId } });
+      if (upload) {
+        // Validate: the report url must contain the upload's filePath
+        const urlPath = reportURL.split("/").pop();
+        const uploadPath = upload.filePath.split("/").pop();
+        if (urlPath === uploadPath) {
+          if (!upload.report) {
+            upload.report = report;
+            await upload.save();
+          }
         }
       }
     }
