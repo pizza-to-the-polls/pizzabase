@@ -92,10 +92,10 @@ describe("#show", () => {
       orders: [
         {
           ...order.asJSON(),
-          reports: (await order.reports).map((rep) => rep.asJSON()),
+          reports: await Promise.all((await order.reports).map((rep) => rep.asJSON())),
         },
       ],
-      reports: [report.asJSON()],
+      reports: [await report.asJSON()],
       trucks: [],
     });
   });
@@ -295,7 +295,7 @@ describe("#validate", () => {
     expect(body).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_REPORT",
-        report: report.asJSONPrivate(),
+        report: await report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       }),
     );

@@ -5,6 +5,7 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -14,6 +15,7 @@ import {
 import { Location } from "./Location";
 import { Order } from "./Order";
 import { Truck } from "./Truck";
+import { Upload } from "./Upload";
 import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
 
@@ -82,6 +84,9 @@ export class Report extends BaseEntity {
   @Index()
   truck: Truck;
 
+  @OneToMany(() => Upload, (upload) => upload.report)
+  uploads: Promise<Upload[]>;
+
   @Column({
     name: "skipped_at",
     type: "timestamp with time zone",
@@ -95,15 +100,20 @@ export class Report extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
-  asJSON(showPrivate: boolean = false) {
-    if (showPrivate) return this.asJSONPrivate();
+  async asJSON(showPrivate: boolean = false) {
+    if (showPrivate) return await this.asJSONPrivate();
 
     const { createdAt, id, reportURL, waitTime } = this;
+    const uploads = (await this.uploads)?.map((u) => ({
+      id: u.id,
+      filePath: u.filePath,
+      createdAt: u.createdAt,
+    })) || [];
 
-    return { createdAt, id, reportURL, waitTime };
+    return { createdAt, id, reportURL, waitTime, uploads };
   }
 
-  asJSONPrivate() {
+  async asJSONPrivate() {
     const {
       contactInfo,
       contactFirstName,

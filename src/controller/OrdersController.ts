@@ -35,7 +35,9 @@ export class OrdersController {
     return {
       ...order.asJSON(),
       location: await order.location.asJSON(),
-      reports: (await order.reports).map((report) => report.asJSON()),
+      reports: await Promise.all(
+        (await order.reports).map((report) => report.asJSON()),
+      ),
     };
   }
 
@@ -77,7 +79,9 @@ export class OrdersController {
       orders.map(async (order) => ({
         ...order.asJSON(),
         location: await order.location.asJSON(),
-        reports: (await order.reports).map((report) => report.asJSON()),
+        reports: await Promise.all(
+          (await order.reports).map((report) => report.asJSON()),
+        ),
       })),
     );
     return { results, count };

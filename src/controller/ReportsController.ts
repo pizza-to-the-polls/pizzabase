@@ -1,5 +1,6 @@
 import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
+import { Upload } from "../entity/Upload";
 import { Action } from "../entity/Action";
 import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
@@ -17,7 +18,7 @@ export class ReportsController {
     if (!report) return;
 
     return {
-      ...report.asJSON(),
+      ...(await report.asJSON()),
       location: await report.location.asJSON(),
       order: (await report.order)?.asJSON(),
       truck: (await report.truck)?.asJSON(),
@@ -52,7 +53,7 @@ export class ReportsController {
     return {
       results: await Promise.all(
         reports.map(async (report) => ({
-          ...report.asJSON(),
+          ...(await report.asJSON()),
           location: await report.location.asJSON(),
           order: (await report.order)?.asJSON(),
           truck: (await report.truck)?.asJSON(),
@@ -91,6 +92,19 @@ export class ReportsController {
         normalizedAddress,
         extra,
       );
+
+    // Link uploaded photos to this report
+    const uploadIds: number[] = (request.body?.uploadIds || []).map(Number);
+    if (uploadIds.length > 0) {
+      const uploads = await Upload.findByIds(uploadIds);
+      for (const upload of uploads) {
+        // Skip uploads already linked to another report
+        if (!upload.report) {
+          upload.report = report;
+          await upload.save();
+        }
+      }
+    }
 
     if (authed) {
       await Action.log(report, "trusted report", request.body?.user);

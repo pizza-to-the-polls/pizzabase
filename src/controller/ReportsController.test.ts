@@ -172,7 +172,7 @@ describe("#create", () => {
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_LOCATION",
-        report: report.asJSONPrivate(),
+        report: await report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       }),
     );
@@ -230,7 +230,7 @@ describe("#create", () => {
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_REPORT",
-        report: report.asJSONPrivate(),
+        report: await report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       }),
     );
@@ -327,7 +327,7 @@ describe("#create", () => {
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_LOCATION",
-        report: report.asJSONPrivate(),
+        report: await report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       }),
     );
@@ -573,7 +573,7 @@ describe("#index", () => {
       results: await Promise.all(
         (await Report.find({ take: 5, order: { createdAt: "DESC" } })).map(
           async (report) => ({
-            ...report.asJSON(),
+            ...await report.asJSON(),
             location: await report.location.asJSON(),
             order: report.order?.asJSON(),
             truck: report.truck?.asJSON(),
@@ -605,7 +605,7 @@ describe("#index", () => {
             where: { truck: { id: truck.id } },
           })
         ).map(async (report) => ({
-          ...report.asJSON(),
+          ...await report.asJSON(),
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
@@ -635,7 +635,7 @@ describe("#index", () => {
             where: { location: { id: location.id } },
           })
         ).map(async (report) => ({
-          ...report.asJSON(),
+          ...await report.asJSON(),
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
@@ -662,7 +662,7 @@ describe("#index", () => {
             where: { order: { id: order.id } },
           })
         ).map(async (report) => ({
-          ...report.asJSON(),
+          ...await report.asJSON(),
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
@@ -685,7 +685,7 @@ describe("#show", () => {
     );
 
     expect(body).toEqual({
-      ...report.asJSON(),
+      ...await report.asJSON(),
       location: await report.location.asJSON(),
       order: report.order?.asJSON(),
       truck: report.truck?.asJSON(),
