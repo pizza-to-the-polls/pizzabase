@@ -92,7 +92,9 @@ describe("#show", () => {
       orders: [
         {
           ...order.asJSON(),
-          reports: await Promise.all((await order.reports).map((rep) => rep.asJSON())),
+          reports: await Promise.all(
+            (await order.reports).map((rep) => rep.asJSON()),
+          ),
         },
       ],
       reports: [await report.asJSON()],

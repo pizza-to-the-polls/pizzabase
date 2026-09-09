@@ -24,7 +24,9 @@ describe("#show", () => {
     expect(body).toEqual({
       ...order.asJSON(),
       location: await order.location.asJSON(),
-      reports: await Promise.all((await order.reports).map((report) => report.asJSON())),
+      reports: await Promise.all(
+        (await order.reports).map((report) => report.asJSON()),
+      ),
     });
   });
 });
@@ -74,7 +76,9 @@ describe("#index", () => {
         orders.map(async (order) => ({
           ...order.asJSON(),
           location: await order.location.asJSON(),
-          reports: await Promise.all((await order.reports).map((report) => report.asJSON())),
+          reports: await Promise.all(
+            (await order.reports).map((report) => report.asJSON()),
+          ),
         })),
       ),
     });
@@ -98,7 +102,9 @@ describe("#index", () => {
         orders.map(async (order) => ({
           ...order.asJSON(),
           location: await order.location.asJSON(),
-          reports: await Promise.all((await order.reports).map((report) => report.asJSON())),
+          reports: await Promise.all(
+            (await order.reports).map((report) => report.asJSON()),
+          ),
         })),
       ),
     });
