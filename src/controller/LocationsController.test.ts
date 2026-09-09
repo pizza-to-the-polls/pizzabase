@@ -97,7 +97,7 @@ describe("#show", () => {
           ),
         },
       ],
-      reports: [await report.asJSON()],
+      reports: [report.asJSON()],
       trucks: [],
     });
   });
@@ -297,7 +297,7 @@ describe("#validate", () => {
     expect(body).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_REPORT",
-        report: await report.asJSONPrivate(),
+        report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
       }),
     );

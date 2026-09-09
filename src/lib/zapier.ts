@@ -18,7 +18,7 @@ enum ZapHooks {
 const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
   zapAny(
     {
-      report: await report.asJSONPrivate(),
+      report: report.asJSONPrivate(),
       location: await report.location.asJSONPrivate(),
       order: report.order
         ? {

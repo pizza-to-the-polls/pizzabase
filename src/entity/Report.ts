@@ -101,15 +101,15 @@ export class Report extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
-  async asJSON(showPrivate: boolean = false) {
-    if (showPrivate) return await this.asJSONPrivate();
+  asJSON(showPrivate: boolean = false) {
+    if (showPrivate) return this.asJSONPrivate();
 
     const { createdAt, id, reportURL, waitTime } = this;
 
     return { createdAt, id, reportURL, waitTime };
   }
 
-  async asJSONPrivate() {
+  asJSONPrivate() {
     const {
       contactInfo,
       contactFirstName,
