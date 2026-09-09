@@ -2,6 +2,7 @@ import { normalizeAddress } from "./normalizeAddress";
 import { NormalAddress, OverrideAddress } from "./types";
 import { normalizeURL } from "./normalizeURL";
 import { normalizeContact } from "./normalizeContact";
+import { Upload } from "../../entity/Upload";
 import { CONTACT_ERROR, ADDRESS_ERROR, URL_ERROR } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
@@ -22,6 +23,7 @@ export const validateReport = async (
     contactLastName,
     contactRole,
     addressOverride,
+    uploadId,
   }: {
     address?: string;
     contact?: string;
@@ -32,6 +34,7 @@ export const validateReport = async (
     contactRole?: string;
     canDistribute?: boolean;
     addressOverride?: OverrideAddress;
+    uploadId?: number;
   },
   isAuthorized: boolean = false,
 ): Promise<{
@@ -39,6 +42,7 @@ export const validateReport = async (
   contactInfo: string;
   reportURL: string;
   errors: ValidationError;
+  upload: Upload | null;
   waitTime?: string;
   contactFirstName?: string;
   contactLastName?: string;
@@ -74,11 +78,25 @@ export const validateReport = async (
     errors.address = ADDRESS_ERROR;
   }
 
+  // Validate uploadId: url filePath must match upload filePath
+  let upload: Upload | null = null;
+  if (uploadId && reportURL) {
+    const candidate = await Upload.findOne({ where: { id: uploadId } });
+    if (candidate) {
+      const urlPath = reportURL.split("/").pop();
+      const uploadPath = candidate.filePath.split("/").pop();
+      if (urlPath === uploadPath) {
+        upload = candidate;
+      }
+    }
+  }
+
   return {
     errors,
     normalizedAddress,
     contactInfo,
     reportURL,
+    upload,
     waitTime,
     contactFirstName,
     contactLastName,
