@@ -5,7 +5,6 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
-  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
@@ -84,8 +83,10 @@ export class Report extends BaseEntity {
   @Index()
   truck: Truck;
 
-  @OneToMany(() => Upload, (upload) => upload.report)
-  uploads: Promise<Upload[]>;
+  @ManyToOne(() => Upload, { nullable: true })
+  @JoinColumn({ name: "upload_id" })
+  @Index()
+  upload: Upload | null;
 
   @Column({
     name: "skipped_at",
@@ -104,13 +105,8 @@ export class Report extends BaseEntity {
     if (showPrivate) return await this.asJSONPrivate();
 
     const { createdAt, id, reportURL, waitTime } = this;
-    const uploads = (await this.uploads)?.map((u) => ({
-      id: u.id,
-      filePath: u.filePath,
-      createdAt: u.createdAt,
-    })) || [];
 
-    return { createdAt, id, reportURL, waitTime, uploads };
+    return { createdAt, id, reportURL, waitTime };
   }
 
   async asJSONPrivate() {

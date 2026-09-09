@@ -3,6 +3,7 @@ import * as http_mocks from "node-mocks-http";
 import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
+import { Upload } from "../entity/Upload";
 import { Order } from "../entity/Order";
 import { Action } from "../entity/Action";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
@@ -556,6 +557,103 @@ describe("#create", () => {
 
     const newReport = await Report.findOne({ where: { reportURL: url } });
     expect(newReport.location.id).toBe(canonicalLoc.id);
+  });
+
+  test("links upload to report when uploadId matches url", async () => {
+    const filePath = "uploads/chicago-il-testabc.png";
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    const upload = new Upload();
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = filePath;
+    upload.location = location;
+    await upload.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url: `https://polls.pizza/${filePath}`,
+        contact: "555-555-1234",
+        address: "5335 S Kimbark Ave Chicago IL 60615",
+        uploadId: upload.id,
+      },
+    });
+    const response = http_mocks.createResponse();
+    await controller.create(request, response, () => undefined);
+
+    const report = await Report.findOne({
+      where: { reportURL: `https://polls.pizza/${filePath}` },
+      relations: ["upload"],
+    });
+    expect(report).toBeTruthy();
+    expect(report.upload).toBeTruthy();
+    expect(report!.upload!.id).toBe(upload.id);
+  });
+
+  test("does not link upload when url does not match filePath", async () => {
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    const upload = new Upload();
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = "uploads/chicago-il-different.png";
+    upload.location = location;
+    await upload.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url: `https://polls.pizza/uploads/chicago-il-notmatching.png`,
+        contact: "555-555-1234",
+        address: "5335 S Kimbark Ave Chicago IL 60615",
+        uploadId: upload.id,
+      },
+    });
+    const response = http_mocks.createResponse();
+    await controller.create(request, response, () => undefined);
+
+    const report = await Report.findOne({
+      where: {
+        reportURL: `https://polls.pizza/uploads/chicago-il-notmatching.png`,
+      },
+      relations: ["upload"],
+    });
+    expect(report).toBeTruthy();
+    expect(report!.upload).toBeNull();
+  });
+
+  test("does not link upload when no uploadId provided", async () => {
+    const url = `https://polls.pizza/uploads/chicago-il-noid.png`;
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url,
+        contact: "555-555-1234",
+        address: "5335 S Kimbark Ave Chicago IL 60615",
+      },
+    });
+    const response = http_mocks.createResponse();
+    await controller.create(request, response, () => undefined);
+
+    const report = await Report.findOne({
+      where: { reportURL: url },
+      relations: ["upload"],
+    });
+    expect(report).toBeTruthy();
+    expect(report!.upload).toBeNull();
   });
 });
 

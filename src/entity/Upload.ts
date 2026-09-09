@@ -11,7 +11,6 @@ import {
   MoreThan,
 } from "typeorm";
 import { Location } from "./Location";
-import { Report } from "./Report";
 import { NormalAddress } from "../lib/validator";
 import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
 import { v4 as uuidv4 } from "uuid";
@@ -47,11 +46,6 @@ export class Upload extends BaseEntity {
 
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;
-
-  @ManyToOne(() => Report, { nullable: true })
-  @JoinColumn({ name: "report_id" })
-  @Index()
-  report: Report | null;
 
   static async createOrReject(
     ipAddress: string,
