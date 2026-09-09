@@ -69,22 +69,28 @@ export class LocationsController {
     return {
       ...locJSON,
       hasTruck: authorized ? locJSON.hasTruck : await location.hasTruckJSON(),
-      reports: (await location.openReports()).map((report) =>
-        report.asJSON(authorized),
+      reports: await Promise.all(
+        (await location.openReports()).map((report) =>
+          report.asJSON(authorized),
+        ),
       ),
       orders: await Promise.all(
         orders.map(async (order) => ({
           ...order.asJSON(authorized),
-          reports: (await order.reports).map((report) =>
-            report.asJSON(authorized),
+          reports: await Promise.all(
+            (await order.reports).map((report) =>
+              report.asJSON(authorized),
+            ),
           ),
         })),
       ),
       trucks: await Promise.all(
         trucks.map(async (truck) => ({
           ...truck.asJSON(),
-          reports: (await truck.reports).map((report) =>
-            report.asJSON(authorized),
+          reports: await Promise.all(
+            (await truck.reports).map((report) =>
+              report.asJSON(authorized),
+            ),
           ),
         })),
       ),
