@@ -12,9 +12,9 @@ const handlerPromise = (async () => {
 })();
 
 module.exports.handler = async (event, context) => {
-  // serverless-http defaults callbackWaitsForEmptyEventLoop to false,
-  // which kills all pending promises (socialPost, et al) as soon as
-  // the HTTP response is sent. Flip it so fire-and-forget work completes.
+  // Keep the event loop alive for fire-and-forget work (social posting).
+  // The Node runtime defaults callbackWaitsForEmptyEventLoop to true,
+  // but being explicit avoids surprises with wrappers that flip it.
   context.callbackWaitsForEmptyEventLoop = true;
   const resolvedHandler = await handlerPromise;
   return await resolvedHandler(event, context);

@@ -17,11 +17,6 @@ import { socialEnabled } from "./social-config";
  * response. Individual failures are logged but never propagated.
  */
 export async function socialPost(order: Order): Promise<void> {
-  const diag = {
-    bluesky: "unknown",
-    twitter: "unknown",
-    threads: "unknown",
-  };
   console.log(`socialPost: starting for order ${order.id}`);
 
   const text = renderMessage(order);
@@ -39,36 +34,30 @@ export async function socialPost(order: Order): Promise<void> {
 
   const enabled = socialEnabled();
   console.log(
-    `socialPost: enabled gates — bluesky=${enabled.bluesky}, twitter=${enabled.twitter}, threads=always`,
+    `socialPost: enabled gates — bluesky=${enabled.bluesky}, twitter=${enabled.twitter}`,
   );
 
   if (enabled.bluesky) {
-    diag.bluesky = "attempting…";
-    console.log(`socialPost: bluesky → ${diag.bluesky}`);
+    console.log("socialPost: bluesky → attempting…");
     blueskyPost(order, text, mediaUrls)
       .then(() => console.log("socialPost: bluesky → completed"))
       .catch((err) => console.error(`socialPost: bluesky → FAILED (${err})`));
   } else {
-    diag.bluesky = "skipped (not configured)";
-    console.log(`socialPost: bluesky → ${diag.bluesky}`);
+    console.log("socialPost: bluesky → skipped (not configured)");
   }
 
   if (enabled.twitter) {
-    diag.twitter = "attempting…";
-    console.log(`socialPost: twitter → ${diag.twitter}`);
+    console.log("socialPost: twitter → attempting…");
     twitterPost(order, text, mediaUrls)
       .then(() => console.log("socialPost: twitter → completed"))
       .catch((err) => console.error(`socialPost: twitter → FAILED (${err})`));
   } else {
-    diag.twitter = "skipped (not configured)";
-    console.log(`socialPost: twitter → ${diag.twitter}`);
+    console.log("socialPost: twitter → skipped (not configured)");
   }
 
-  // Threads is NOT gated on env vars here: its access token lives in the DB
-  // (refreshed by the scheduled job — see #199), so socialEnabled() cannot
-  // see it. threadsPost self-gates via getAccessToken() at runtime.
-  diag.threads = "attempting…";
-  console.log(`socialPost: threads → ${diag.threads}`);
+  // Threads self-gates at runtime via getAccessToken() (token lives in DB,
+  // not frozen Lambda env vars), so it always attempts here.
+  console.log("socialPost: threads → attempting…");
   threadsPost(order, text, mediaUrls)
     .then(() => console.log("socialPost: threads → completed"))
     .catch((err) => console.error(`socialPost: threads → FAILED (${err})`));

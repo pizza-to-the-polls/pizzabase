@@ -218,9 +218,14 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
     return null;
   }
 
-  const mediaType = media.url.endsWith(".mov")
-    ? "video/quicktime"
-    : "video/mp4";
+  const MIME_BY_EXT: Record<string, string> = {
+    mp4: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    mpeg: "video/mpeg",
+  };
+  const ext = media.url.split(".").pop()?.toLowerCase() || "";
+  const mediaType = MIME_BY_EXT[ext] || "video/mp4";
 
   // --- STEP 1: INIT ---
   const initParams: Record<string, string> = {

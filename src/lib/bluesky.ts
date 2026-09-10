@@ -65,7 +65,7 @@ interface UploadBlobResponse {
 
 const BLUESKY_BLOB_LIMIT = 976 * 1024; // ~976 KB
 const BLUESKY_VIDEO_LIMIT = 50 * 1024 * 1024; // 50 MB
-const SUPPORTED_VIDEO_FORMATS = ["mp4", "mpeg", "webm", "mov"];
+const SUPPORTED_VIDEO_FORMATS = ["mp4", "mpeg", "webm", "mov", "quicktime"];
 
 function getEnv(name: string): string {
   const value = process.env[name];
@@ -179,6 +179,16 @@ async function getSession(pdsUrl: string, accessJwt: string): Promise<boolean> {
   return response.ok;
 }
 
+function rowToSession(row: IntegrationSession, pdsUrl: string): SessionData {
+  return {
+    accessJwt: row.credentials.accessJwt,
+    refreshJwt: row.credentials.refreshJwt,
+    did: row.credentials.did,
+    handle: row.credentials.handle,
+    pdsUrl,
+  };
+}
+
 async function getOrCreateSession(): Promise<SessionData> {
   const pdsUrl = getEnvOrDefault("BSKY_PDS_URL", "https://bsky.social");
   const handle = getEnv("BSKY_HANDLE");
@@ -199,7 +209,18 @@ async function getOrCreateSession(): Promise<SessionData> {
       did: session.did,
       handle: session.handle,
     };
-    await repo.save(sessionRow);
+    try {
+      await repo.save(sessionRow);
+    } catch {
+      // Race: another invocation created the session between findOne and
+      // save. Reload the winner's row and use its credentials.
+      const existing = await repo.findOne({ where: { service: "bluesky" } });
+      if (existing) {
+        return rowToSession(existing, pdsUrl);
+      }
+      // Still nothing? Try saving again (low probability).
+      await repo.save(sessionRow);
+    }
 
     return session;
   }
@@ -208,14 +229,7 @@ async function getOrCreateSession(): Promise<SessionData> {
   const isActive = await getSession(pdsUrl, sessionRow.credentials.accessJwt);
 
   if (isActive) {
-    const creds = sessionRow.credentials;
-    return {
-      accessJwt: creds.accessJwt,
-      refreshJwt: creds.refreshJwt,
-      did: creds.did,
-      handle: creds.handle,
-      pdsUrl,
-    };
+    return rowToSession(sessionRow, pdsUrl);
   }
 
   // Try to refresh
@@ -231,13 +245,7 @@ async function getOrCreateSession(): Promise<SessionData> {
     };
     await repo.save(sessionRow);
 
-    return {
-      accessJwt: refreshed.accessJwt,
-      refreshJwt: refreshed.refreshJwt,
-      did: sessionRow.credentials.did,
-      handle: sessionRow.credentials.handle,
-      pdsUrl,
-    };
+    return rowToSession(sessionRow, pdsUrl);
   } catch {
     // Refresh failed — delete the stored session and re-authenticate
     await repo.delete({ service: "bluesky" });
@@ -358,7 +366,7 @@ async function getBlobSize(url: string): Promise<number> {
  * Check if a URL is hosted on polls.pizza/uploads.
  */
 function isPollsPizzaUpload(url: string): boolean {
-  return url.includes("polls.pizza/uploads") || url.includes("polls.pizza/up");
+  return url.includes("polls.pizza/uploads/");
 }
 
 /**

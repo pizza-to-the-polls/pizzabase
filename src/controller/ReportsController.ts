@@ -17,7 +17,7 @@ export class ReportsController {
     if (!report) return;
 
     return {
-      ...(report.asJSON()),
+      ...report.asJSON(),
       location: await report.location.asJSON(),
       order: (await report.order)?.asJSON(),
       truck: (await report.truck)?.asJSON(),
@@ -52,7 +52,7 @@ export class ReportsController {
     return {
       results: await Promise.all(
         reports.map(async (report) => ({
-          ...(report.asJSON()),
+          ...report.asJSON(),
           location: await report.location.asJSON(),
           order: (await report.order)?.asJSON(),
           truck: (await report.truck)?.asJSON(),

@@ -232,7 +232,7 @@ async function postMedia(
       console.log(`Threads media post published: ${publishData.id}`);
 
       // Success — one media is enough; return
-      return;
+      return publishData.id ?? null;
     } catch (err) {
       console.error(`Threads: failed to post media ${media.url}:`, err);
       // Continue to next media
@@ -242,11 +242,12 @@ async function postMedia(
   // If all media failed, fall back to text-only
   if (text) {
     try {
-      await postTextOnly(text);
+      return await postTextOnly(text);
     } catch (err) {
       console.error("Threads: fallback text-only post also failed:", err);
     }
   }
+  return null;
 }
 
 // ---------------------------------------------------------------------------

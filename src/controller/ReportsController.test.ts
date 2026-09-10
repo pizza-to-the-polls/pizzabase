@@ -597,7 +597,7 @@ describe("#create", () => {
     expect(report!.upload!.id).toBe(upload.id);
   });
 
-  test("does not link upload when url does not match filePath", async () => {
+  test("returns 422 when uploadId url does not match filePath", async () => {
     const location = await Location.createFromAddress({
       latitude: 41.79907,
       longitude: -87.58413,
@@ -623,16 +623,12 @@ describe("#create", () => {
       },
     });
     const response = http_mocks.createResponse();
-    await controller.create(request, response, () => undefined);
+    const body = await controller.create(request, response, () => undefined);
 
-    const report = await Report.findOne({
-      where: {
-        reportURL: `https://polls.pizza/uploads/chicago-il-notmatching.png`,
-      },
-      relations: ["upload"],
+    expect(response.statusCode).toEqual(422);
+    expect(body).toEqual({
+      errors: { upload: "URL does not match uploaded file" },
     });
-    expect(report).toBeTruthy();
-    expect(report!.upload).toBeNull();
   });
 
   test("does not link upload when no uploadId provided", async () => {
@@ -671,7 +667,7 @@ describe("#index", () => {
       results: await Promise.all(
         (await Report.find({ take: 5, order: { createdAt: "DESC" } })).map(
           async (report) => ({
-            ...(report.asJSON()),
+            ...report.asJSON(),
             location: await report.location.asJSON(),
             order: report.order?.asJSON(),
             truck: report.truck?.asJSON(),
@@ -703,7 +699,7 @@ describe("#index", () => {
             where: { truck: { id: truck.id } },
           })
         ).map(async (report) => ({
-          ...(report.asJSON()),
+          ...report.asJSON(),
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
@@ -733,7 +729,7 @@ describe("#index", () => {
             where: { location: { id: location.id } },
           })
         ).map(async (report) => ({
-          ...(report.asJSON()),
+          ...report.asJSON(),
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
@@ -760,7 +756,7 @@ describe("#index", () => {
             where: { order: { id: order.id } },
           })
         ).map(async (report) => ({
-          ...(report.asJSON()),
+          ...report.asJSON(),
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
@@ -783,7 +779,7 @@ describe("#show", () => {
     );
 
     expect(body).toEqual({
-      ...(report.asJSON()),
+      ...report.asJSON(),
       location: await report.location.asJSON(),
       order: report.order?.asJSON(),
       truck: report.truck?.asJSON(),

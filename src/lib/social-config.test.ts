@@ -65,24 +65,30 @@ describe("socialEnabled", () => {
     );
   });
 
-  it("reports twitter enabled only when the API key is set", () => {
-    withEnv({ TWITTER_API_KEY: undefined }, () => {
-      expect(socialEnabled().twitter).toBe(false);
-    });
+  it("reports twitter enabled only when all four credentials are set", () => {
+    withEnv(
+      {
+        TWITTER_API_KEY: undefined,
+        TWITTER_API_SECRET: "sec",
+        TWITTER_ACCESS_TOKEN: "tok",
+        TWITTER_ACCESS_SECRET: "sec2",
+      },
+      () => {
+        expect(socialEnabled().twitter).toBe(false);
+      },
+    );
 
-    withEnv({ TWITTER_API_KEY: "api-key" }, () => {
-      expect(socialEnabled().twitter).toBe(true);
-    });
-  });
-
-  it("reports threads enabled only when the access token is set", () => {
-    withEnv({ THREADS_ACCESS_TOKEN: undefined }, () => {
-      expect(socialEnabled().threads).toBe(false);
-    });
-
-    withEnv({ THREADS_ACCESS_TOKEN: "access-token" }, () => {
-      expect(socialEnabled().threads).toBe(true);
-    });
+    withEnv(
+      {
+        TWITTER_API_KEY: "key",
+        TWITTER_API_SECRET: "sec",
+        TWITTER_ACCESS_TOKEN: "tok",
+        TWITTER_ACCESS_SECRET: "sec2",
+      },
+      () => {
+        expect(socialEnabled().twitter).toBe(true);
+      },
+    );
   });
 
   it("treats empty strings as unconfigured", () => {
@@ -91,13 +97,11 @@ describe("socialEnabled", () => {
         BSKY_HANDLE: "",
         BSKY_APP_PASSWORD: "",
         TWITTER_API_KEY: "",
-        THREADS_ACCESS_TOKEN: "",
       },
       () => {
         expect(socialEnabled()).toEqual({
           bluesky: false,
           twitter: false,
-          threads: false,
         });
       },
     );
