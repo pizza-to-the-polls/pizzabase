@@ -383,7 +383,7 @@ async function waitForProcessing(
     }
 
     // Wait before polling again (use check_after_secs if provided)
-    const waitSecs = statusData.processing_info?.check_after_secs || 2;
+    const waitSecs = statusData.processing_info?.check_after_secs ?? 2;
     await new Promise((resolve) => setTimeout(resolve, waitSecs * 1000));
   }
 

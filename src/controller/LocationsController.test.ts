@@ -8,6 +8,11 @@ import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/geocode");
+jest.mock("../lib/social", () => ({
+  socialPost: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { socialPost } from "../lib/social";
 
 let location: Location | null;
 const controller = new LocationsController();
@@ -435,6 +440,8 @@ describe("#truck", () => {
 });
 
 describe("#order", () => {
+  beforeEach(() => (socialPost as jest.Mock).mockClear());
+
   it("returns validation errors", async () => {
     const { fullAddress } = location ? location : null;
     const response = http_mocks.createResponse();
@@ -472,6 +479,9 @@ describe("#order", () => {
 
     expect(order.cost).toEqual(500.23);
     expect(order.quantity).toEqual(32);
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+    );
   });
 
   it("creates a donut order", async () => {
@@ -491,6 +501,9 @@ describe("#order", () => {
     expect(order.cost).toEqual(500.23);
     expect(order.orderType).toEqual("dozen donuts");
     expect(order.quantity).toEqual(5);
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+    );
   });
 
   it("validates the order too", async () => {
