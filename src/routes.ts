@@ -8,6 +8,7 @@ import { UploadsController } from "./controller/UploadsController";
 import { SightEngineController } from "./controller/SightEngineController";
 import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
+import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
 
 export const Routes = [
@@ -160,6 +161,12 @@ export const Routes = [
     route: "/webhook",
     controller: DonationsController,
     action: "webhook",
+  },
+  {
+    method: "post",
+    route: "/threads-token",
+    controller: ThreadsTokenController,
+    action: "update",
   },
   {
     method: "get",

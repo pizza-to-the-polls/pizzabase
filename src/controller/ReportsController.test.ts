@@ -597,7 +597,7 @@ describe("#create", () => {
     expect(report!.upload!.id).toBe(upload.id);
   });
 
-  test("does not link upload when url does not match filePath", async () => {
+  test("returns 422 when uploadId url does not match filePath", async () => {
     const location = await Location.createFromAddress({
       latitude: 41.79907,
       longitude: -87.58413,
@@ -623,16 +623,12 @@ describe("#create", () => {
       },
     });
     const response = http_mocks.createResponse();
-    await controller.create(request, response, () => undefined);
+    const body = await controller.create(request, response, () => undefined);
 
-    const report = await Report.findOne({
-      where: {
-        reportURL: `https://polls.pizza/uploads/chicago-il-notmatching.png`,
-      },
-      relations: ["upload"],
+    expect(response.statusCode).toEqual(422);
+    expect(body).toEqual({
+      errors: { upload: "URL does not match uploaded file" },
     });
-    expect(report).toBeTruthy();
-    expect(report!.upload).toBeNull();
   });
 
   test("does not link upload when no uploadId provided", async () => {

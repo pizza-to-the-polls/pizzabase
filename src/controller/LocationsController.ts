@@ -10,6 +10,7 @@ import {
   zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
+import { socialPost } from "../lib/social";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -68,22 +69,24 @@ export class LocationsController {
     return {
       ...locJSON,
       hasTruck: authorized ? locJSON.hasTruck : await location.hasTruckJSON(),
-      reports: (await location.openReports()).map((report) =>
-        report.asJSON(authorized),
+      reports: await Promise.all(
+        (await location.openReports()).map((report) =>
+          report.asJSON(authorized),
+        ),
       ),
       orders: await Promise.all(
         orders.map(async (order) => ({
           ...order.asJSON(authorized),
-          reports: (await order.reports).map((report) =>
-            report.asJSON(authorized),
+          reports: await Promise.all(
+            (await order.reports).map((report) => report.asJSON(authorized)),
           ),
         })),
       ),
       trucks: await Promise.all(
         trucks.map(async (truck) => ({
           ...truck.asJSON(),
-          reports: (await truck.reports).map((report) =>
-            report.asJSON(authorized),
+          reports: await Promise.all(
+            (await truck.reports).map((report) => report.asJSON(authorized)),
           ),
         })),
       ),
@@ -163,7 +166,13 @@ export class LocationsController {
       return { errors };
     }
 
-    await zapNewOrder(await Order.placeOrder(order, location));
+    const placedOrder = await Order.placeOrder(order, location);
+    await zapNewOrder(placedOrder);
+
+    // Fire-and-forget: social posting never blocks the response.
+    socialPost(placedOrder).catch((err) =>
+      console.error("socialPost crashed:", err),
+    );
 
     return { success: true };
   }

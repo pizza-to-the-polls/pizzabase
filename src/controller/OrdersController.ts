@@ -3,6 +3,7 @@ import { isAuthorized, findOr404 } from "./helper";
 import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
 import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
+import { socialPost } from "../lib/social";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -21,6 +22,9 @@ export class OrdersController {
 
     await zapNewOrder(order);
 
+    // Fire-and-forget: social posting never blocks the response.
+    socialPost(order).catch((err) => console.error("socialPost crashed:", err));
+
     return { address: order.location.fullAddress };
   }
 
@@ -35,7 +39,9 @@ export class OrdersController {
     return {
       ...order.asJSON(),
       location: await order.location.asJSON(),
-      reports: (await order.reports).map((report) => report.asJSON()),
+      reports: await Promise.all(
+        (await order.reports).map((report) => report.asJSON()),
+      ),
     };
   }
 
@@ -77,7 +83,9 @@ export class OrdersController {
       orders.map(async (order) => ({
         ...order.asJSON(),
         location: await order.location.asJSON(),
-        reports: (await order.reports).map((report) => report.asJSON()),
+        reports: await Promise.all(
+          (await order.reports).map((report) => report.asJSON()),
+        ),
       })),
     );
     return { results, count };
