@@ -140,7 +140,10 @@ export async function extractExifAndReview(
             Key: sidecarKey,
           }) as any,
         );
-        if (sidecarObj.Body && (await bodyToBuffer(sidecarObj.Body)).length > 0) {
+        if (
+          sidecarObj.Body &&
+          (await bodyToBuffer(sidecarObj.Body)).length > 0
+        ) {
           c2paResult = { detected: true, label: "c2pa-sidecar" };
         }
       }

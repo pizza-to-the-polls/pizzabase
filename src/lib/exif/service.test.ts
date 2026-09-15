@@ -185,11 +185,10 @@ describe("extractExifAndReview", () => {
   }
 
   it("extracts EXIF when Body is a stream (as the real SDK returns)", async () => {
-    const send = jest.fn().mockImplementation(
-      () =>
-        Promise.resolve({
-          Body: streamOf(brooklynJpeg),
-        }),
+    const send = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        Body: streamOf(brooklynJpeg),
+      }),
     );
     const result = await extractExifAndReview(deps(send), {
       filePath,
@@ -204,11 +203,10 @@ describe("extractExifAndReview", () => {
 
   it("handles stream Body with a follow-up Range read", async () => {
     // Force the overflow path so the follow-up GetObject also returns a stream
-    const send = jest.fn().mockImplementation(
-      () =>
-        Promise.resolve({
-          Body: streamOf(brooklynJpeg),
-        }),
+    const send = jest.fn().mockImplementation(() =>
+      Promise.resolve({
+        Body: streamOf(brooklynJpeg),
+      }),
     );
     const result = await extractExifAndReview(deps(send), {
       filePath,
