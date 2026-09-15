@@ -173,6 +173,56 @@ describe("extractExifAndReview", () => {
     expect(result.exif).toBeNull();
   });
 
+  // ---- SDK-shaped responses (Body as a stream) ---------------------------
+
+  // The AWS SDK v3 returns GetObject Body as a Readable stream in Node.
+  // These tests feed a real stream to catch regressions where the service
+  // assumes Body is already a Buffer (see: buffer.readUInt32BE crash).
+
+  function streamOf(buf: Buffer): NodeJS.ReadableStream {
+    const { Readable } = require("stream");
+    return Readable.from([buf]);
+  }
+
+  it("extracts EXIF when Body is a stream (as the real SDK returns)", async () => {
+    const send = jest.fn().mockImplementation(
+      () =>
+        Promise.resolve({
+          Body: streamOf(brooklynJpeg),
+        }),
+    );
+    const result = await extractExifAndReview(deps(send), {
+      filePath,
+      includeReview: true,
+    });
+
+    expect(result.exif).not.toBeNull();
+    const exif = result.exif as any;
+    expect(exif.Image?.Orientation).toBe(1);
+    expect(result.review?.assessment).toBeDefined();
+  });
+
+  it("handles stream Body with a follow-up Range read", async () => {
+    // Force the overflow path so the follow-up GetObject also returns a stream
+    const send = jest.fn().mockImplementation(
+      () =>
+        Promise.resolve({
+          Body: streamOf(brooklynJpeg),
+        }),
+    );
+    const result = await extractExifAndReview(deps(send), {
+      filePath,
+      includeReview: false,
+    });
+
+    expect(result.exif).not.toBeNull();
+    expect(send).toHaveBeenCalledWith(
+      expect.objectContaining({
+        input: expect.objectContaining({ Range: expect.any(String) }),
+      }),
+    );
+  });
+
   // ---- S3 Range reads (bounded follow-up) --------------------------------
 
   it("issues a follow-up Range read when EXIF segment overflows initial buffer", async () => {
