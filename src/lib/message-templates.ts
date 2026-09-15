@@ -53,8 +53,10 @@ function selectTemplate(): string {
   return TEMPLATES[Math.floor(Math.random() * TEMPLATES.length)];
 }
 
-function typeLabel(orderType: string): string {
-  if (orderType === OrderTypes.pizzas) return "pizzas";
+function typeLabel(orderType: string, quantity: number): string {
+  if (orderType === OrderTypes.pizzas) {
+    return quantity === 1 ? "pizza" : "pizzas";
+  }
   if (orderType === OrderTypes.donuts) return "dozen donuts";
   return orderType;
 }
@@ -70,7 +72,7 @@ export function renderMessage(order: MessageOrder): string {
   const template = selectTemplate();
   const fullStateName =
     toStateName(order.location.state.toUpperCase()) ?? order.location.state;
-  const label = typeLabel(order.orderType);
+  const label = typeLabel(order.orderType, order.quantity);
   const restaurant = order.restaurant ?? "";
 
   const replacements: Record<string, string> = {
