@@ -287,10 +287,11 @@ async function downloadBlob(
 /**
  * Upload a blob to BlueSky.
  *
- * Uses Node's built-in FormData/Blob (undici): the `form-data` package's
- * hand-built multipart body caused Bluesky to record the blob's mimeType as
- * the outer "multipart/form-data" instead of the part's actual type, which
- * then fails record creation with "Expected image/*".
+ * com.atproto.repo.uploadBlob takes the RAW file bytes as the request body
+ * with the blob's content type as the Content-Type header. Wrapping the file
+ * in multipart/form-data makes the PDS store the entire multipart envelope
+ * as the blob (mimeType "multipart/form-data"), which then fails record
+ * creation with "Expected image/*".
  */
 async function uploadBlob(
   pdsUrl: string,
@@ -300,37 +301,21 @@ async function uploadBlob(
 ): Promise<BlobRef> {
   const url = `${pdsUrl}/xrpc/com.atproto.repo.uploadBlob`;
 
-  const buildRequest = (): { headers: Record<string, string>; body: FormData } => {
-    const formData = new FormData();
-    formData.append(
-      "file",
-      new Blob([new Uint8Array(buffer)], { type: mimeType }),
-      `blob.${mimeType.split("/")[1] || "bin"}`,
-    );
-    return {
-      headers: { Authorization: `Bearer ${accessJwt}` },
-      body: formData,
-    };
-  };
+  const send = () =>
+    fetch(url, {
+      method: "POST",
+      headers: {
+        Authorization: `Bearer ${accessJwt}`,
+        "Content-Type": mimeType,
+      },
+      body: new Uint8Array(buffer),
+    });
 
-  let { headers, body } = buildRequest();
-
-  let response = await fetch(url, {
-    method: "POST",
-    headers,
-    body,
-  });
+  let response = await send();
 
   if (!response.ok && response.status >= 500) {
-    // Rebuild form data for retry (streams can't be reused)
-    const retry = buildRequest();
-    headers = retry.headers;
-    body = retry.body;
-    response = await fetch(url, {
-      method: "POST",
-      headers,
-      body,
-    });
+    // One retry on transient failures — the buffer is reusable
+    response = await send();
   }
 
   if (!response.ok) {
