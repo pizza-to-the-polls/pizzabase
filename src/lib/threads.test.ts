@@ -66,15 +66,13 @@ async function createTestOrder(
 
 // Helper to identify Threads API fetch calls
 function threadsFetchCalls(): [string, RequestInit][] {
-  return (global.fetch as jest.Mock).mock.calls.filter(
-    ([url]: [string]) => {
-      try {
-        return new URL(url).hostname === "graph.threads.net";
-      } catch {
-        return false;
-      }
-    },
-  );
+  return (global.fetch as jest.Mock).mock.calls.filter(([url]: [string]) => {
+    try {
+      return new URL(url).hostname === "graph.threads.net";
+    } catch {
+      return false;
+    }
+  });
 }
 
 // Queue the two responses a text post needs: container creation, then publish.
