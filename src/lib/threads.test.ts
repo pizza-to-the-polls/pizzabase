@@ -72,6 +72,18 @@ function threadsFetchCalls(): [string, RequestInit][] {
   );
 }
 
+// Queue the two responses a text post needs: container creation, then publish.
+function mockTextPostFlow(containerId: string, publishedId: string): void {
+  (global.fetch as jest.Mock).mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ id: containerId }),
+  });
+  (global.fetch as jest.Mock).mockResolvedValueOnce({
+    ok: true,
+    json: () => Promise.resolve({ id: publishedId }),
+  });
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
@@ -108,20 +120,18 @@ describe("threadsPost", () => {
     it("posts text-only when no media URLs provided", async () => {
       jest.spyOn(Math, "random").mockReturnValue(0);
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: "threads-post-123" }),
-      });
+      mockTextPostFlow("threads-container-123", "threads-post-123");
 
       const order = await createTestOrder();
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2); // container create + publish
 
       const [url, opts] = calls[0];
       expect(url).toContain("/threads");
       expect(url).not.toContain("threads_publish");
+      expect(calls[1][0]).toContain("threads_publish");
 
       const body = JSON.parse(opts.body as string);
       expect(body.media_type).toBe("TEXT");
@@ -132,33 +142,27 @@ describe("threadsPost", () => {
     });
 
     it("uses provided text when passed", async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: "threads-post-456" }),
-      });
+      mockTextPostFlow("container-threads-post-456", "threads-post-456");
 
       const order = await createTestOrder();
       await threadsPost(order, "Custom provided text");
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2); // container create + publish
 
       const body = JSON.parse(calls[0][1].body as string);
       expect(body.text).toBe("Custom provided text");
     });
 
     it("truncates text exceeding 500 characters", async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: "threads-post-789" }),
-      });
+      mockTextPostFlow("container-threads-post-789", "threads-post-789");
 
       const longText = "🍕".repeat(600);
       const order = await createTestOrder();
       await threadsPost(order, longText);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2); // container create + publish
 
       const body = JSON.parse(calls[0][1].body as string);
       expect(body.text.length).toBeLessThanOrEqual(500);
@@ -168,10 +172,7 @@ describe("threadsPost", () => {
     it("renders message from order when text not provided", async () => {
       jest.spyOn(Math, "random").mockReturnValue(0);
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: "post-from-template" }),
-      });
+      mockTextPostFlow("container-post-from-template", "post-from-template");
 
       const order = await createTestOrder({
         quantity: 10,
@@ -180,7 +181,7 @@ describe("threadsPost", () => {
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2); // container create + publish
 
       const body = JSON.parse(calls[0][1].body as string);
       expect(body.text).toContain("10 pizzas");
@@ -192,10 +193,7 @@ describe("threadsPost", () => {
     it("includes donut label for donut orders", async () => {
       jest.spyOn(Math, "random").mockReturnValue(0);
 
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: "donut-post" }),
-      });
+      mockTextPostFlow("container-donut-post", "donut-post");
 
       const order = await createTestOrder({
         orderType: OrderTypes.donuts,
@@ -205,7 +203,7 @@ describe("threadsPost", () => {
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2); // container create + publish
 
       const body = JSON.parse(calls[0][1].body as string);
       expect(body.text).toContain("3 dozen donuts");
@@ -214,16 +212,13 @@ describe("threadsPost", () => {
     });
 
     it("includes Authorization header with Bearer token", async () => {
-      (global.fetch as jest.Mock).mockResolvedValueOnce({
-        ok: true,
-        json: () => Promise.resolve({ id: "auth-test" }),
-      });
+      mockTextPostFlow("container-auth-test", "auth-test");
 
       const order = await createTestOrder();
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(1);
+      expect(calls).toHaveLength(2); // container create + publish
 
       const headers = calls[0][1].headers as Record<string, string>;
       expect(headers.Authorization).toBe("Bearer test-threads-access-token");
@@ -342,24 +337,30 @@ describe("threadsPost", () => {
           ok: true,
           json: () => Promise.resolve({ status: "ERROR" }),
         })
-        // Text-only fallback post
+        // Text-only fallback container
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ id: "text-only-fallback" }),
+        })
+        // Text-only fallback publish
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: "text-only-fallback-published" }),
         });
 
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(3);
+      expect(calls).toHaveLength(4);
 
-      // No publish attempted — last call is the text-only fallback
-      const lastUrl = calls[2][0] as string;
-      const lastBody = JSON.parse(calls[2][1].body as string);
-      expect(lastUrl).toContain("/threads");
-      expect(lastUrl).not.toContain("threads_publish");
-      expect(lastBody.creation_id).toBeUndefined();
-      expect(lastBody.text).toBeDefined();
+      // Third call creates the text container; fourth publishes it
+      const containerUrl = calls[2][0] as string;
+      const containerBody = JSON.parse(calls[2][1].body as string);
+      expect(containerUrl).toContain("/threads");
+      expect(containerBody.media_type).toBe("TEXT");
+      const publishBody = JSON.parse(calls[3][1].body as string);
+      expect(calls[3][0]).toContain("threads_publish");
+      expect(publishBody.creation_id).toBe("text-only-fallback");
     });
 
     it("tries video first then falls back to image", async () => {
@@ -435,20 +436,28 @@ describe("threadsPost", () => {
           status: 400,
           json: () => Promise.resolve({ error: { message: "Invalid URL" } }),
         })
-        // Fallback text-only succeeds
+        // Fallback text container
         .mockResolvedValueOnce({
           ok: true,
           json: () => Promise.resolve({ id: "fallback-text-post" }),
+        })
+        // Fallback text publish
+        .mockResolvedValueOnce({
+          ok: true,
+          json: () => Promise.resolve({ id: "fallback-text-post-published" }),
         });
 
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      expect(calls).toHaveLength(2);
+      expect(calls).toHaveLength(3);
 
-      // Second call should be text-only
+      // Second call creates the text container; third publishes it
       const textBody = JSON.parse(calls[1][1].body as string);
       expect(textBody.media_type).toBe("TEXT");
+      const publishBody = JSON.parse(calls[2][1].body as string);
+      expect(calls[2][0]).toContain("threads_publish");
+      expect(publishBody.creation_id).toBe("fallback-text-post");
     });
 
     it("handles publish failure gracefully", async () => {
@@ -592,8 +601,11 @@ describe("threadsPost", () => {
       await threadsPost(order);
 
       const calls = threadsFetchCalls();
-      // Two calls: one failed, one retried
-      expect(calls.length).toBe(2);
+      // Three calls: container (failed + retried), then publish
+      expect(calls.length).toBe(3);
+      expect(calls[1][0]).toContain("/threads");
+      expect(calls[1][0]).not.toContain("threads_publish");
+      expect(calls[2][0]).toContain("threads_publish");
     });
 
     it("handles missing alt text gracefully", async () => {

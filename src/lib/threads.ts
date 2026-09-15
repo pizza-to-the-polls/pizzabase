@@ -75,6 +75,11 @@ async function threadsApi(
 
 /**
  * Post a simple text-only Thread.
+ *
+ * Text posts use the same two-step flow as media: creating the container
+ * (POST /threads) does NOT publish anything visible — the container must
+ * then be published via POST /threads_publish. Skipping the publish step
+ * yields an invisible post whose creation id masquerades as a post id.
  */
 async function postTextOnly(text: string): Promise<string | null> {
   const response = await threadsApi("threads", {
@@ -91,9 +96,26 @@ async function postTextOnly(text: string): Promise<string | null> {
     );
   }
 
-  const data = (await response.json()) as { id: string };
-  console.log(`Threads text post created: ${data.id}`);
-  return data.id ?? null;
+  const container = (await response.json()) as { id: string };
+  console.log(`Threads text container created: ${container.id}`);
+
+  // Step 2: publish the container — without this the post never goes live.
+  const publishResponse = await threadsApi("threads_publish", {
+    creation_id: container.id,
+  });
+
+  if (!publishResponse.ok) {
+    const errorBody = await publishResponse.json().catch(() => ({}));
+    throw new Error(
+      `Threads text publish failed: ${publishResponse.status} ${JSON.stringify(
+        errorBody,
+      )}`,
+    );
+  }
+
+  const published = (await publishResponse.json()) as { id: string };
+  console.log(`Threads text post published: ${published.id}`);
+  return published.id ?? null;
 }
 
 // ---------------------------------------------------------------------------
