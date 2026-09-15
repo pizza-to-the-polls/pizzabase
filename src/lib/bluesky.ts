@@ -9,7 +9,6 @@ import {
 } from "./message-templates";
 import { collectMedia, MediaUrls } from "./media";
 import { socialEnabled } from "./social-config";
-import FormData from "form-data";
 
 interface SessionData {
   accessJwt: string;
@@ -287,6 +286,11 @@ async function downloadBlob(
 
 /**
  * Upload a blob to BlueSky.
+ *
+ * Uses Node's built-in FormData/Blob (undici): the `form-data` package's
+ * hand-built multipart body caused Bluesky to record the blob's mimeType as
+ * the outer "multipart/form-data" instead of the part's actual type, which
+ * then fails record creation with "Expected image/*".
  */
 async function uploadBlob(
   pdsUrl: string,
@@ -296,21 +300,16 @@ async function uploadBlob(
 ): Promise<BlobRef> {
   const url = `${pdsUrl}/xrpc/com.atproto.repo.uploadBlob`;
 
-  const buildRequest = (): {
-    headers: Record<string, string>;
-    body: Buffer;
-  } => {
+  const buildRequest = (): { headers: Record<string, string>; body: FormData } => {
     const formData = new FormData();
-    formData.append("file", buffer, {
-      filename: `blob.${mimeType.split("/")[1] || "bin"}`,
-      contentType: mimeType,
-    });
+    formData.append(
+      "file",
+      new Blob([new Uint8Array(buffer)], { type: mimeType }),
+      `blob.${mimeType.split("/")[1] || "bin"}`,
+    );
     return {
-      headers: {
-        Authorization: `Bearer ${accessJwt}`,
-        ...formData.getHeaders(),
-      },
-      body: formData.getBuffer(),
+      headers: { Authorization: `Bearer ${accessJwt}` },
+      body: formData,
     };
   };
 
