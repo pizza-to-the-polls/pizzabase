@@ -67,8 +67,13 @@ async function createTestOrder(
 // Helper to identify Threads API fetch calls
 function threadsFetchCalls(): [string, RequestInit][] {
   return (global.fetch as jest.Mock).mock.calls.filter(
-    ([url]: [string]) =>
-      typeof url === "string" && url.includes("graph.threads.net"),
+    ([url]: [string]) => {
+      try {
+        return new URL(url).hostname === "graph.threads.net";
+      } catch {
+        return false;
+      }
+    },
   );
 }
 
