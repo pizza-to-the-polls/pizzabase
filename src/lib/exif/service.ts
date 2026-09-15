@@ -45,6 +45,27 @@ export interface ExifServiceResult {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * The SDK returns GetObject Body as a Readable stream in Node (string or
+ * Buffer only in special cases). The EXIF parser needs a real Buffer, so
+ * collect the stream. Calls must handle the collection exactly once —
+ * a consumed stream cannot be re-read.
+ */
+async function bodyToBuffer(body: unknown): Promise<Buffer> {
+  if (Buffer.isBuffer(body)) return body;
+  if (typeof body === "string") return Buffer.from(body);
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Buffer | string>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -78,7 +99,7 @@ export async function extractExifAndReview(
   let combinedBuffer: Buffer | null = null;
 
   if (s3Object.Body) {
-    const initialBuffer = s3Object.Body as Buffer;
+    const initialBuffer = await bodyToBuffer(s3Object.Body);
 
     // ---- 2. Bounded EXIF extraction with one follow-up --------------------
     tiffPayload = await extractExifWithRetry(
@@ -94,7 +115,7 @@ export async function extractExifAndReview(
               Range: `bytes=${start}-${end}`,
             }) as any,
           );
-          return (followUp.Body as Buffer) ?? null;
+          return await bodyToBuffer(followUp.Body);
         } catch {
           return null;
         }
@@ -119,7 +140,10 @@ export async function extractExifAndReview(
             Key: sidecarKey,
           }) as any,
         );
-        if (sidecarObj.Body && (sidecarObj.Body as Buffer).length > 0) {
+        if (
+          sidecarObj.Body &&
+          (await bodyToBuffer(sidecarObj.Body)).length > 0
+        ) {
           c2paResult = { detected: true, label: "c2pa-sidecar" };
         }
       }
@@ -148,7 +172,7 @@ export async function extractExifAndReview(
               Range: `bytes=${start}-${end}`,
             }) as any,
           );
-          return (followUp.Body as Buffer) ?? null;
+          return await bodyToBuffer(followUp.Body);
         } catch {
           return null;
         }
@@ -165,7 +189,7 @@ export async function extractExifAndReview(
         }) as any,
       );
       if (sidecar.Body) {
-        xmpXml = (sidecar.Body as Buffer).toString("utf-8") || null;
+        xmpXml = (await bodyToBuffer(sidecar.Body)).toString("utf-8") || null;
       }
     } catch {
       // No sidecar – proceed.
