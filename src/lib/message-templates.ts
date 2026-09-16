@@ -53,7 +53,7 @@ export const TEMPLATES: readonly string[] = [
   "E pluribus unum: out of many voters, one pizza order. {{3. Pizzas}} from {{2. Restaurant}} to {{2. Location City}} {{2. Location State}}",
   "A well-fed electorate is a patient electorate. Sending {{3. Pizzas}} from {{2. Restaurant}} to {{2. Location Address}}, {{2. Location City}} {{2. Location State}}",
   "It's called checks and balances: we checked the line at {{2. Location Address}} and balanced it with {{3. Pizzas}} from {{2. Restaurant}}",
-  "Democracy on a full stomach. We upgraded the voting line with {{3. Pizzas}} from {{2. Restaurant}} for {{2. Location City}} {{2. Location State}} 🍕🏛️",
+  "Bread and circuses? We upgraded to pizza. {{3. Pizzas}} from {{2. Restaurant}} for {{2. Location City}} {{2. Location State}} — panem et pizzam 🍕🏛️",
   "Read the room? We read the line at {{2. Location Address}}. Pizza's coming: {{3. Pizzas}} from {{2. Restaurant}} for {{2. Location City}} {{2. Location State}}",
   "You get a slice! And YOU get a slice! Everybody voting at {{2. Location Address}} gets a slice! ({{3. Pizzas}} from {{2. Restaurant}})",
   "One person, one vote, {{3. Pizzas}} from {{2. Restaurant}} for the line at {{2. Location City}} {{2. Location State}}",
