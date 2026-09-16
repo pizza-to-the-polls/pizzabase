@@ -197,6 +197,12 @@ export const TEMPLATES: readonly string[] = [
   "we've got eyes on the prize and pies on the lines. {{3. Pizzas}} from {{2. Restaurant}} headed to {{2. Location Address}} {{2. Location City}}!",
   "standing in line is hard. standing in line with {{3. Pizzas}} from {{2. Restaurant}} at {{2. Location Address}} {{2. Location City}} is a culinary experience",
   "voting is cool, but voting while munching on {{3. Pizzas}} from {{2. Restaurant}} at {{2. Location Address}} {{2. Location City}} is next-level",
+  "⬜⬜⬜🟥⬜⬜⬜\n⬜⬜🟥🧀🟥⬜⬜\n⬜🟥🧀🍕🧀🟥⬜\n🟫🟫🟫🟫🟫🟫🟫\n\n{{3. Pizzas}} from {{2. Restaurant}} are landing at {{2. Location Address}} {{2. Location City}}!",
+  ' 🦀  "mine."\n(V)(;,,;)(V)\n  \\\\======/  🍕\n\n{{3. Pizzas}} from {{2. Restaurant}} spotted at {{2. Location Address}} {{2. Location City}}!',
+  "     (∩ ͡° ͜ʖ ͡°)⊃━☆ﾟ.* \n     /      \\ \n  ✨  🍕  ✨\n\nACCIO PIZZA! {{3. Pizzas}} from {{2. Restaurant}} summoned to {{2. Location Address}} {{2. Location City}}",
+  " ∧,,,∧\n( 👁 👁 )   ...soon\n(     っ🍕\n\n{{3. Pizzas}} from {{2. Restaurant}} headed to {{2. Location Address}} in {{2. Location City}}!",
+  "         🍕\n       ▄█▀█▄\n     ▄█▀   ▀█▄\n ───█▀       ▀█───\n\nvibe wave high in {{2. Location City}}: {{3. Pizzas}} from {{2. Restaurant}} arrived at {{2. Location Address}}",
+  "  ▂ ▄ ▅ ▆ ▇ █ 🍕 █ ▆ ▅ ▄ ▂  \n\ndemocracy is cranked to 11 at {{2. Location Address}} {{2. Location City}} — {{3. Pizzas}} from {{2. Restaurant}} are here!",
 ];
 
 const NBSP = "\u00a0";
