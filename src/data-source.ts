@@ -7,6 +7,7 @@ import { withDatabaseResumeRetry } from "./lib/retryDatabaseResume";
 import { APIKey } from "./entity/APIKey";
 import { Action } from "./entity/Action";
 import { Donation } from "./entity/Donation";
+import { IntegrationSession } from "./entity/IntegrationSession";
 import { Location } from "./entity/Location";
 import { Order } from "./entity/Order";
 import { Report } from "./entity/Report";
@@ -19,6 +20,7 @@ const entities = [
   APIKey,
   BannedPhoneNumber,
   Donation,
+  IntegrationSession,
   Location,
   Order,
   Report,
@@ -66,7 +68,7 @@ const testConfig: PostgresConnectionOptions = {
   dropSchema: true,
   synchronize: true,
   logging: false,
-  entities: ["src/entity/**/*.ts"],
+  entities,
   migrations: ["src/migration/**/*.ts"],
   subscribers: ["src/subscriber/**/*.ts"],
 };

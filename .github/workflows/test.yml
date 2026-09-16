@@ -156,6 +156,10 @@ jobs:
           JWT_SECRET: "enjoying-pineapple-on-pizza-is-valid"
           SIGHTENGINE_API_USER: ${{ secrets.SIGHTENGINE_API_USER }}
           SIGHTENGINE_API_SECRET: ${{ secrets.SIGHTENGINE_API_SECRET }}
+
+          # Social posting is prod-only — staging skips it cleanly
+          # (social-config treats empty creds as a no-op gate).
+
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
       - name: run migrations

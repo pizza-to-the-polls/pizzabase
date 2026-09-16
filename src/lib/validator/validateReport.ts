@@ -10,6 +10,7 @@ interface ValidationError {
   contact?: string;
   url?: string;
   address?: string;
+  upload?: string;
 }
 
 export const validateReport = async (
@@ -80,13 +81,19 @@ export const validateReport = async (
 
   // Validate uploadId: url filePath must match upload filePath
   let upload: Upload | null = null;
-  if (uploadId && reportURL) {
+  if (uploadId) {
     const candidate = await Upload.findOne({ where: { id: uploadId } });
-    if (candidate) {
+    if (!candidate) {
+      errors.upload = "Upload not found";
+    } else if (!reportURL) {
+      errors.upload = "URL required with upload";
+    } else {
       const urlPath = reportURL.split("/").pop();
       const uploadPath = candidate.filePath.split("/").pop();
       if (urlPath === uploadPath) {
         upload = candidate;
+      } else {
+        errors.upload = "URL does not match uploaded file";
       }
     }
   }
