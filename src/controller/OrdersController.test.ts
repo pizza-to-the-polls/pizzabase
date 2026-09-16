@@ -7,6 +7,11 @@ import { Location } from "../entity/Location";
 import { ADDRESS_ERROR, COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/geocode");
+jest.mock("../lib/social", () => ({
+  socialPost: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { socialPost } from "../lib/social";
 
 const controller = new OrdersController();
 
@@ -18,13 +23,15 @@ describe("#show", () => {
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${order.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
       ...order.asJSON(),
       location: await order.location.asJSON(),
-      reports: (await order.reports).map((report) => report.asJSON()),
+      reports: await Promise.all(
+        (await order.reports).map((report) => report.asJSON()),
+      ),
     });
   });
 });
@@ -44,7 +51,7 @@ describe("#delete", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await order.reload();
@@ -65,7 +72,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { limit: 2 } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const orders = await Order.find({ take: 2, order: { createdAt: "DESC" } });
     expect(body).toEqual({
@@ -74,8 +81,10 @@ describe("#index", () => {
         orders.map(async (order) => ({
           ...order.asJSON(),
           location: await order.location.asJSON(),
-          reports: (await order.reports).map((report) => report.asJSON()),
-        }))
+          reports: await Promise.all(
+            (await order.reports).map((report) => report.asJSON()),
+          ),
+        })),
       ),
     });
   });
@@ -84,7 +93,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { limit: 4, page: 1 } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     const orders = await Order.find({
@@ -98,14 +107,18 @@ describe("#index", () => {
         orders.map(async (order) => ({
           ...order.asJSON(),
           location: await order.location.asJSON(),
-          reports: (await order.reports).map((report) => report.asJSON()),
-        }))
+          reports: await Promise.all(
+            (await order.reports).map((report) => report.asJSON()),
+          ),
+        })),
       ),
     });
   });
 });
 
 describe("#create", () => {
+  beforeEach(() => (socialPost as jest.Mock).mockClear());
+
   it("returns validation errors", async () => {
     const response = http_mocks.createResponse();
     const body = await controller.create(
@@ -115,7 +128,7 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -145,14 +158,18 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await location.reload();
     const [order] = await location.orders;
 
     expect(order.cost).toEqual(500.23);
     expect(order.quantity).toEqual(32);
+    expect(order.restaurant).toBeNull();
     expect(location.validatedAt).toBeTruthy();
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+    );
   });
 
   it("can create an order on a new location", async () => {
@@ -166,14 +183,17 @@ describe("#create", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const order = await Order.findOne({ where: { cost: 500.23 } });
 
     expect(order.quantity).toEqual(32);
     expect(order.location.fullAddress).toEqual(
-      "550 Different Address City OR 12345"
+      "550 Different Address City OR 12345",
     );
     expect(order.location.validatedAt).toBeTruthy();
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+    );
   });
 });

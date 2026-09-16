@@ -158,7 +158,7 @@ export function extractExifFromJpeg(buffer: Buffer): JpegExtractResult {
       const sig = buffer.toString(
         "ascii",
         segmentDataStart,
-        segmentDataStart + 6
+        segmentDataStart + 6,
       );
       if (sig === EXIF_SIG) {
         // TIFF payload starts after the 6-byte "Exif\0\0" signature.
@@ -359,14 +359,14 @@ export function extractXmpFromJpeg(buffer: Buffer): XmpExtractResult {
           0,
           xmpSigLen,
           segmentDataStart,
-          segmentDataStart + xmpSigLen
+          segmentDataStart + xmpSigLen,
         ) === 0
       ) {
         // XMP XML payload starts after the signature.
         const xml = buffer.toString(
           "utf-8",
           segmentDataStart + xmpSigLen,
-          segmentEnd
+          segmentEnd,
         );
         return {
           xmpXml: xml.trimEnd(),
@@ -455,7 +455,7 @@ export function extractXmpFromPng(buffer: Buffer): XmpExtractResult {
 function parsePngItxtXmp(
   buffer: Buffer,
   dataStart: number,
-  dataEnd: number
+  dataEnd: number,
 ): string | null {
   let pos = dataStart;
 
@@ -629,7 +629,7 @@ function findChildBox<T>(
   parentStart: number,
   parentEnd: number,
   boxType: string,
-  visitor: (header: BoxHeader) => T | null
+  visitor: (header: BoxHeader) => T | null,
 ): T | null {
   let off = parentStart;
   while (off + 8 <= parentEnd) {
@@ -765,9 +765,8 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
           off += baseOffsetSize;
         }
 
-        let extentCount: number;
         if (off + 2 > h.end) return null;
-        extentCount = buffer.readUInt16BE(off);
+        const extentCount = buffer.readUInt16BE(off);
         off += 2;
 
         let extentOffset = 0;
@@ -802,7 +801,7 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
 
       ilocEntries = entries;
       return entries; // signal found
-    }
+    },
   );
 
   if (!ilocEntries || ilocEntries.length === 0) {
@@ -887,7 +886,7 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
       }
 
       return null;
-    }
+    },
   );
 
   if (exifItemId === null) {
@@ -986,7 +985,7 @@ function findTiffStart(buffer: Buffer, start: number, end: number): number {
 
 export type FetchMoreBytes = (
   start: number,
-  end: number
+  end: number,
 ) => Promise<Buffer | null>;
 
 /**
@@ -1003,7 +1002,7 @@ export type FetchMoreBytes = (
 export async function extractExifWithRetry(
   initialBuffer: Buffer,
   initialOffset: number,
-  fetchMore: FetchMoreBytes
+  fetchMore: FetchMoreBytes,
 ): Promise<Buffer | null> {
   // Detect container type from magic bytes.
   if (initialBuffer.length < 2) {
@@ -1093,7 +1092,7 @@ export async function extractExifWithRetry(
 export async function extractXmpWithRetry(
   initialBuffer: Buffer,
   initialOffset: number,
-  fetchMore: FetchMoreBytes
+  fetchMore: FetchMoreBytes,
 ): Promise<string | null> {
   if (initialBuffer.length < 2) {
     return null;

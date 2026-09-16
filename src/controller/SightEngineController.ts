@@ -7,7 +7,7 @@ export class SightEngineController {
   async getSightEngineScore(
     request: Request,
     response: Response,
-    next: NextFunction
+    next: NextFunction,
   ) {
     if (!(await isAuthorized(request, response, next))) return null;
 

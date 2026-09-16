@@ -38,14 +38,14 @@ export const brooklynJpeg: Buffer = readDerivedFixture("brooklyn-exif.jpeg");
  * Redondo Beach JPEG fixture (screenshot markers in EXIF).
  */
 export const redondoJpeg: Buffer = readDerivedFixture(
-  "redondo-screenshot-exif.jpeg"
+  "redondo-screenshot-exif.jpeg",
 );
 
 /**
  * Los Angeles PNG fixture (no EXIF).
  */
 export const losAngelesPng: Buffer = readDerivedFixture(
-  "los-angeles-no-exif.png"
+  "los-angeles-no-exif.png",
 );
 
 // ---------------------------------------------------------------------------
@@ -80,7 +80,7 @@ export const jpegNoExif: Buffer = (() => {
         "0001" + // X density
         "0001" + // Y density
         "00" + // No thumbnail
-        "00" // No thumbnail
+        "00", // No thumbnail
     ),
     fromHex("FFD9"),
   ]);

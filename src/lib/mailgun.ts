@@ -42,7 +42,7 @@ export const sendCrustClubEmail = async (to: string, data: { token: string }) =>
 
 export const sendNoMembershipFoundEmail = async (
   to: string,
-  data: { email: string }
+  data: { email: string },
 ) =>
   await sendMGTemplate({
     from: "Crust Club @ Pizza to the Polls<crustclub@polls.pizza>",

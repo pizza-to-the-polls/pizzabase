@@ -34,8 +34,8 @@ const maxChargesPerPage = 100; // 1 to 100
             const donated = new Date(charge.created * 1000);
             await manager.query(`
                   UPDATE donations SET created_at = '${donated.toISOString()}', updated_at = '${donated.toISOString()}' WHERE id = ${
-              donation.id
-            }
+                    donation.id
+                  }
                 `);
           } catch (e) {
             console.error(e);

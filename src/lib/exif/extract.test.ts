@@ -55,7 +55,7 @@ describe("extractExifFromJpeg", () => {
     expect(parsed.Photo.UserComment).toBeDefined();
     if (Buffer.isBuffer(parsed.Photo.UserComment)) {
       expect(parsed.Photo.UserComment.toString("ascii")).toContain(
-        "Screenshot"
+        "Screenshot",
       );
     }
 
@@ -154,18 +154,7 @@ describe("extractExifFromPng", () => {
     };
 
     const ihdrData = Buffer.from([
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x08,
-      0x00,
-      0x00,
-      0x00,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00,
       0x00,
     ]);
 
@@ -197,18 +186,7 @@ describe("extractExifFromPng", () => {
     };
 
     const ihdrData = Buffer.from([
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x08,
-      0x00,
-      0x00,
-      0x00,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00,
       0x00,
     ]);
 
@@ -259,8 +237,8 @@ describe("extractExifFromPng", () => {
         "eXIf",
         Buffer.from(
           "Exif\0\0II\x2a\x00\x00\x00\x00\x08\x00\x00\x00\x00",
-          "ascii"
-        )
+          "ascii",
+        ),
       ),
     ]);
 
@@ -364,18 +342,7 @@ describe("extractExifWithRetry", () => {
     };
 
     const ihdrData = Buffer.from([
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x00,
-      0x00,
-      0x00,
-      0x01,
-      0x08,
-      0x00,
-      0x00,
-      0x00,
+      0x00, 0x00, 0x00, 0x01, 0x00, 0x00, 0x00, 0x01, 0x08, 0x00, 0x00, 0x00,
       0x00,
     ]);
 
@@ -391,7 +358,7 @@ describe("extractExifWithRetry", () => {
     const fetchMore = jest
       .fn<Promise<Buffer | null>, [number, number]>()
       .mockImplementationOnce(async (start: number, end: number) =>
-        fullPng.slice(start, end + 1)
+        fullPng.slice(start, end + 1),
       );
 
     const extracted = await extractExifWithRetry(truncated, 0, fetchMore);
@@ -408,7 +375,7 @@ describe("extractExifWithRetry", () => {
     const fetchMore = jest
       .fn<Promise<Buffer | null>, [number, number]>()
       .mockImplementationOnce(async (start: number, end: number) =>
-        full.slice(start, end + 1)
+        full.slice(start, end + 1),
       );
 
     const extracted = await extractExifWithRetry(initial, 0, fetchMore);
@@ -423,7 +390,7 @@ describe("extractExifWithRetry", () => {
     const fetchMore = jest
       .fn<Promise<Buffer | null>, [number, number]>()
       .mockImplementationOnce(async (start: number, end: number) =>
-        full.slice(start, end + 1)
+        full.slice(start, end + 1),
       );
 
     const extracted = await extractExifWithRetry(initial, 0, fetchMore);
@@ -500,7 +467,7 @@ describe("extractExifWithRetry", () => {
     const extracted = await extractExifWithRetry(
       truncated,
       MAX_EXIF_BYTES - 1024,
-      fetchMore
+      fetchMore,
     );
     expect(extracted).toBeNull();
     expect(fetchMore).not.toHaveBeenCalled();
@@ -511,7 +478,7 @@ describe("extractExifWithRetry", () => {
     const result = await extractExifWithRetry(
       Buffer.from([0x00, 0x00]),
       0,
-      fetchMore
+      fetchMore,
     );
     expect(result).toBeNull();
     expect(fetchMore).not.toHaveBeenCalled();
@@ -570,9 +537,7 @@ describe("malformed / truncated EXIF within valid container", () => {
  * Returns the complete Buffer and the absolute offset of the TIFF data
  * within mdat (for verifying extraction correctness).
  */
-function buildMinimalHeif(
-  exifTiff: Buffer
-): {
+function buildMinimalHeif(exifTiff: Buffer): {
   buffer: Buffer;
   tiffOffset: number;
 } {
@@ -813,7 +778,7 @@ describe("extractExif (HEIF routing)", () => {
     const result = await extractExifWithRetry(
       validHeif,
       0,
-      async () => null // no follow-up needed
+      async () => null, // no follow-up needed
     );
     expect(result).not.toBeNull();
     expect(Buffer.isBuffer(result!)).toBe(true);

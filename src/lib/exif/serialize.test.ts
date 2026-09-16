@@ -58,7 +58,7 @@ describe("serializeExif", () => {
     expect(result.Image.Make).toBe("Apple");
     expect(result.Image.XResolution).toBe(72);
     expect(result.Photo.ExifVersion._bytes).toBe(
-      Buffer.from([0x30, 0x32, 0x33, 0x30]).toString("base64")
+      Buffer.from([0x30, 0x32, 0x33, 0x30]).toString("base64"),
     );
     expect(result.Photo.DateTimeOriginal).toBe("2024-06-01T08:00:00.000Z");
   });

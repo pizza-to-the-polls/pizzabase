@@ -4,6 +4,8 @@
  * assessment. The controller delegates to this module so it stays thin.
  */
 
+import { GetObjectCommand } from "@aws-sdk/client-s3";
+
 import {
   extractExifWithRetry,
   extractXmpWithRetry,
@@ -24,11 +26,9 @@ const INITIAL_RANGE_BYTES = 65535;
 
 export interface ExifServiceDeps {
   s3Client: {
-    getObject(params: {
-      Bucket: string;
-      Key: string;
-      Range?: string;
-    }): { promise(): Promise<{ Body?: Buffer | null }> };
+    send(command: {
+      input: { Bucket: string; Key: string; Range?: string };
+    }): Promise<{ Body?: Buffer | null }>;
   };
   bucket: string;
 }
@@ -45,6 +45,27 @@ export interface ExifServiceResult {
 }
 
 // ---------------------------------------------------------------------------
+// Helpers
+// ---------------------------------------------------------------------------
+
+/**
+ * The SDK returns GetObject Body as a Readable stream in Node (string or
+ * Buffer only in special cases). The EXIF parser needs a real Buffer, so
+ * collect the stream. Calls must handle the collection exactly once —
+ * a consumed stream cannot be re-read.
+ */
+async function bodyToBuffer(body: unknown): Promise<Buffer> {
+  if (Buffer.isBuffer(body)) return body;
+  if (typeof body === "string") return Buffer.from(body);
+
+  const chunks: Buffer[] = [];
+  for await (const chunk of body as AsyncIterable<Buffer | string>) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+// ---------------------------------------------------------------------------
 // Public API
 // ---------------------------------------------------------------------------
 
@@ -54,7 +75,7 @@ export interface ExifServiceResult {
  */
 export async function extractExifAndReview(
   deps: ExifServiceDeps,
-  options: ExifServiceOptions
+  options: ExifServiceOptions,
 ): Promise<ExifServiceResult> {
   const { s3Client, bucket } = deps;
   const { filePath, includeReview } = options;
@@ -66,19 +87,19 @@ export async function extractExifAndReview(
   let c2paResult: { detected: boolean; label: string | null } | undefined;
 
   // ---- 1. Fetch initial byte range ----------------------------------------
-  const s3Object = await s3Client
-    .getObject({
+  const s3Object = await s3Client.send(
+    new GetObjectCommand({
       Bucket: bucket,
       Key: filePath,
       Range: `bytes=0-${INITIAL_RANGE_BYTES}`,
-    })
-    .promise();
+    }) as any,
+  );
 
   let tiffPayload: Buffer | null = null;
   let combinedBuffer: Buffer | null = null;
 
   if (s3Object.Body) {
-    const initialBuffer = s3Object.Body as Buffer;
+    const initialBuffer = await bodyToBuffer(s3Object.Body);
 
     // ---- 2. Bounded EXIF extraction with one follow-up --------------------
     tiffPayload = await extractExifWithRetry(
@@ -87,18 +108,18 @@ export async function extractExifAndReview(
       async (start: number, end: number) => {
         if (end - start + 1 > MAX_EXIF_BYTES) return null;
         try {
-          const followUp = await s3Client
-            .getObject({
+          const followUp = await s3Client.send(
+            new GetObjectCommand({
               Bucket: bucket,
               Key: filePath,
               Range: `bytes=${start}-${end}`,
-            })
-            .promise();
-          return (followUp.Body as Buffer) ?? null;
+            }) as any,
+          );
+          return await bodyToBuffer(followUp.Body);
         } catch {
           return null;
         }
-      }
+      },
     );
 
     // XMP is almost certainly in the initial range when EXIF was.
@@ -113,10 +134,16 @@ export async function extractExifAndReview(
     try {
       const sidecarKey = filePath.replace(/\.(jpe?g|png)$/i, ".c2pa");
       if (sidecarKey !== filePath) {
-        const sidecarObj = await s3Client
-          .getObject({ Bucket: bucket, Key: sidecarKey })
-          .promise();
-        if (sidecarObj.Body && (sidecarObj.Body as Buffer).length > 0) {
+        const sidecarObj = await s3Client.send(
+          new GetObjectCommand({
+            Bucket: bucket,
+            Key: sidecarKey,
+          }) as any,
+        );
+        if (
+          sidecarObj.Body &&
+          (await bodyToBuffer(sidecarObj.Body)).length > 0
+        ) {
           c2paResult = { detected: true, label: "c2pa-sidecar" };
         }
       }
@@ -138,28 +165,31 @@ export async function extractExifAndReview(
       async (start: number, end: number) => {
         if (end - start + 1 > MAX_EXIF_BYTES) return null;
         try {
-          const followUp = await s3Client
-            .getObject({
+          const followUp = await s3Client.send(
+            new GetObjectCommand({
               Bucket: bucket,
               Key: filePath,
               Range: `bytes=${start}-${end}`,
-            })
-            .promise();
-          return (followUp.Body as Buffer) ?? null;
+            }) as any,
+          );
+          return await bodyToBuffer(followUp.Body);
         } catch {
           return null;
         }
-      }
+      },
     );
   }
 
   if (!xmpXml) {
     try {
-      const sidecar = await s3Client
-        .getObject({ Bucket: bucket, Key: `${filePath}.xmp` })
-        .promise();
+      const sidecar = await s3Client.send(
+        new GetObjectCommand({
+          Bucket: bucket,
+          Key: `${filePath}.xmp`,
+        }) as any,
+      );
       if (sidecar.Body) {
-        xmpXml = (sidecar.Body as Buffer).toString("utf-8") || null;
+        xmpXml = (await bodyToBuffer(sidecar.Body)).toString("utf-8") || null;
       }
     } catch {
       // No sidecar – proceed.

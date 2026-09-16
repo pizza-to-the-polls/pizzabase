@@ -19,7 +19,7 @@ describe("Donations API (via Lambda handler)", () => {
     const response = await lambdaPost(
       "/webhook",
       { type: "charge.succeeded" },
-      { "stripe-signature": "fake-sig" }
+      { "stripe-signature": "fake-sig" },
     );
 
     expect(response.statusCode).toBe(400);

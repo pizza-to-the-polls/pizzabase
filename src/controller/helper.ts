@@ -6,7 +6,7 @@ import { APIKey } from "../entity/APIKey";
 export const findOr404 = (
   object: any,
   response: Response,
-  next: NextFunction
+  next: NextFunction,
 ): any => {
   const obj = object;
   if (obj) return obj;
@@ -16,7 +16,7 @@ export const findOr404 = (
 };
 
 export const checkAuthorization = async (
-  request: Request
+  request: Request,
 ): Promise<boolean> => {
   const { authorization } = request.headers;
   const key = (authorization || "").replace("Basic ", "");
@@ -29,7 +29,7 @@ export const checkAuthorization = async (
 export const isAuthorized = async (
   request: Request,
   response: Response,
-  next: NextFunction
+  next: NextFunction,
 ): Promise<boolean> => {
   if (await checkAuthorization(request)) {
     return true;

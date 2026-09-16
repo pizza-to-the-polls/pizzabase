@@ -48,7 +48,7 @@ describe("#getSightEngineScore", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(200);
@@ -68,7 +68,7 @@ describe("#getSightEngineScore", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(200);
@@ -95,7 +95,7 @@ describe("#getSightEngineScore", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response1,
-      () => undefined
+      () => undefined,
     );
 
     expect(response1.statusCode).toEqual(200);
@@ -111,7 +111,7 @@ describe("#getSightEngineScore", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response2,
-      () => undefined
+      () => undefined,
     );
 
     expect(response2.statusCode).toEqual(200);
@@ -127,7 +127,7 @@ describe("#getSightEngineScore", () => {
         params: { fileName },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(401);
@@ -143,7 +143,7 @@ describe("#getSightEngineScore", () => {
         headers: { Authorization: "Basic badkey" },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(401);
@@ -159,7 +159,7 @@ describe("#getSightEngineScore", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(404);
@@ -168,7 +168,7 @@ describe("#getSightEngineScore", () => {
   it("should propagate API errors when checkImage fails", async () => {
     const { checkImage } = require("../lib/sightengine/client");
     checkImage.mockRejectedValueOnce(
-      new Error("SightEngine API error: 500 Internal Server Error")
+      new Error("SightEngine API error: 500 Internal Server Error"),
     );
 
     const response = http_mocks.createResponse();
@@ -181,8 +181,8 @@ describe("#getSightEngineScore", () => {
           headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
         }),
         response,
-        () => undefined
-      )
+        () => undefined,
+      ),
     ).rejects.toThrow("SightEngine API error: 500 Internal Server Error");
   });
 });

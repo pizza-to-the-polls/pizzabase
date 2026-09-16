@@ -7,6 +7,10 @@ export const initBugSnagMiddleware = () => {
   if (process.env.BUGSNAG_KEY) {
     Bugsnag.start({
       apiKey: process.env.BUGSNAG_KEY,
+      // Disable auto session tracking: sessions are a browser/mobile concept and
+      // the cold-start POST to sessions.bugsnag.com intermittently fails with
+      // TLS resets in Lambda (ECONNRESET), producing noisy ERROR logs.
+      autoTrackSessions: false,
       plugins: [BugsnagPluginExpress],
     });
 

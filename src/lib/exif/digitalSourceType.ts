@@ -84,7 +84,7 @@ function createParser(): XMLParser {
       _name: string,
       jpath: string,
       _isLeafNode: boolean,
-      _isAttribute: boolean
+      _isAttribute: boolean,
     ) => {
       // rdf:Description can appear multiple times; ensure it's always an array
       return jpath.endsWith(".rdf:Description");
@@ -115,7 +115,7 @@ function createParser(): XMLParser {
  */
 function findDigitalSourceTypeValue(
   node: unknown,
-  path: string
+  path: string,
 ): string | null {
   if (node === null || node === undefined) return null;
 
@@ -194,7 +194,7 @@ function findDigitalSourceTypeValue(
  * @param xmpXml - Raw XMP XML string (e.g. from JPEG APP1 or PNG iTXt).
  */
 export function parseDigitalSourceType(
-  xmpXml: string
+  xmpXml: string,
 ): DigitalSourceTypeResult {
   if (!xmpXml || typeof xmpXml !== "string" || xmpXml.trim().length === 0) {
     return { uri: null, label: null };

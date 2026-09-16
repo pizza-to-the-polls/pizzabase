@@ -47,7 +47,7 @@ export const validateOrder = async ({
     errors.cost = COST_ERROR;
   }
   let normalizedAddress: null | NormalAddress;
-  if (!!address) {
+  if (address) {
     normalizedAddress = await normalizeAddress(address);
     if (!normalizedAddress) {
       errors.address = ADDRESS_ERROR;

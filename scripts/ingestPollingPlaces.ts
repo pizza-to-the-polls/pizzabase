@@ -11,9 +11,8 @@ const backFillLocations = async (data, _manager) => {
     const noramlizedAddress = await normalizeAddress(address as string);
 
     if (noramlizedAddress) {
-      const [location] = await Location.getOrCreateFromAddress(
-        noramlizedAddress
-      );
+      const [location] =
+        await Location.getOrCreateFromAddress(noramlizedAddress);
       await location.validate("democracy works");
     } else {
       throw new Error(`Could not map ${address}`);

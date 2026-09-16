@@ -76,7 +76,7 @@ describe("detectC2paFromJpeg", () => {
   it("detects 'c2pa.assertions' in APP11 payload", async () => {
     const payload = Buffer.from(
       "JUMBF_header_here_c2pa.assertions_trailer",
-      "ascii"
+      "ascii",
     );
     const jpeg = buildJpegWithApp11(payload);
     const result = detectC2paFromJpeg(jpeg);
@@ -146,16 +146,7 @@ describe("detectC2paFromJpeg", () => {
     // C2PA after SOS should not be detected.
     const soi = Buffer.from([0xff, 0xd8]);
     const sos = Buffer.from([
-      0xff,
-      0xda,
-      0x00,
-      0x08,
-      0x01,
-      0x02,
-      0x00,
-      0x00,
-      0x00,
-      0x00,
+      0xff, 0xda, 0x00, 0x08, 0x01, 0x02, 0x00, 0x00, 0x00, 0x00,
     ]);
     // APP11 with c2pa placed after SOS
     const app11 = (() => {

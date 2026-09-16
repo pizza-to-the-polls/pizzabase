@@ -59,7 +59,7 @@ export class Truck extends BaseEntity {
       take: number;
       skip: number;
       location?: { location?: { id: number } };
-    } = { take: 0, skip: 0 }
+    } = { take: 0, skip: 0 },
   ): Promise<[Truck[], number]> {
     return this.findAndCount({
       where: {
@@ -75,7 +75,7 @@ export class Truck extends BaseEntity {
   static async createForAddress(
     address: NormalAddress,
     identifier?: string,
-    assignedBy?: string
+    assignedBy?: string,
   ): Promise<Truck> {
     const [location] = await Location.getOrCreateFromAddress(address);
     return await location.assignTruck(assignedBy, identifier);
@@ -83,7 +83,7 @@ export class Truck extends BaseEntity {
 
   static async createForLocation(
     location: Location,
-    identifier?: string
+    identifier?: string,
   ): Promise<Truck> {
     const truck = new this();
     truck.location = location;

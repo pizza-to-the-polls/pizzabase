@@ -3,8 +3,10 @@ import * as http_mocks from "node-mocks-http";
 import { ReportsController } from "./ReportsController";
 import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
+import { Upload } from "../entity/Upload";
 import { Order } from "../entity/Order";
 import { Action } from "../entity/Action";
+import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import {
   ADDRESS_ERROR,
   URL_ERROR,
@@ -165,17 +167,15 @@ describe("#create", () => {
     expect(report.contactLastName).toEqual(contactLastName);
     expect(report.contactRole).toEqual(contactRole);
 
-    const [
-      zapUrl,
-      { body: zapBody },
-    ] = (global.fetch as jest.Mock).mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (global.fetch as jest.Mock).mock
+      .calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_LOCATION",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 
@@ -220,18 +220,20 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { reportURL: url } });
     expect(report).toBeTruthy();
     expect(report.location.id).toBe(location.id);
+    expect(report.waitTime).toEqual(waitTime);
+    expect(report.contactFirstName).toBeNull();
+    expect(report.contactLastName).toBeNull();
+    expect(report.contactRole).toBeNull();
 
-    const [
-      zapUrl,
-      { body: zapBody },
-    ] = (global.fetch as jest.Mock).mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (global.fetch as jest.Mock).mock
+      .calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_REPORT);
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_REPORT",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 
@@ -256,7 +258,7 @@ describe("#create", () => {
         state: "IL",
         zip: "60615",
       },
-      { canDistribute: true }
+      { canDistribute: true },
     );
 
     const request = http_mocks.createRequest({
@@ -320,17 +322,15 @@ describe("#create", () => {
     const report = await Report.findOne({ where: { contactInfo: contact } });
     expect(report).toBeTruthy();
 
-    const [
-      zapUrl,
-      { body: zapBody },
-    ] = (global.fetch as jest.Mock).mock.calls[0];
+    const [zapUrl, { body: zapBody }] = (global.fetch as jest.Mock).mock
+      .calls[0];
     expect(zapUrl).toEqual(process.env.ZAP_NEW_LOCATION);
     expect(zapBody).toEqual(
       JSON.stringify({
         hook: "ZAP_NEW_LOCATION",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 
@@ -398,7 +398,7 @@ describe("#create", () => {
 
     const order = await Order.placeOrder(
       { cost: 50, quantity: 5 },
-      report.location
+      report.location,
     );
 
     const request = http_mocks.createRequest({
@@ -426,6 +426,85 @@ describe("#create", () => {
     expect(report.order.id).toBe(order.id);
 
     expect((global.fetch as jest.Mock).mock.calls.length).toEqual(0);
+  });
+
+  test("Banned phone number is silently skipped", async () => {
+    const url = "http://twitter.com/something/status/banme";
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const contact = "555-234-2345";
+
+    const ban = new BannedPhoneNumber();
+    ban.phoneNumber = "5552342345";
+    ban.reason = "Spam";
+    ban.bannedBy = "admin";
+    await ban.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { url, contact, address },
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toEqual(200);
+
+    // Verify no report was created
+    const report = await Report.findOne({
+      where: { contactInfo: contact },
+    });
+    expect(report).toBeNull();
+
+    // Verify no zapier hooks were called
+    expect((global.fetch as jest.Mock).mock.calls.length).toBe(0);
+  });
+
+  test("Email address is not checked against banned numbers", async () => {
+    const url = "http://twitter.com/something/status/email";
+    const address = "5335 S Kimbark Ave Chicago IL 60615";
+    const contact = "test@example.com";
+
+    const ban = new BannedPhoneNumber();
+    ban.phoneNumber = "5552342345";
+    ban.reason = "Spam";
+    ban.bannedBy = "admin";
+    await ban.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url,
+        contact,
+        address,
+        waitTime: "5",
+        canDistribute: true,
+      },
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.create(request, response, () => undefined);
+
+    // Email should be processed normally
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      willReceive: true,
+      alreadyOrdered: false,
+    });
+    expect(response.statusCode).toEqual(200);
+
+    // Verify the report was created
+    const report = await Report.findOne({ where: { reportURL: url } });
+    expect(report).toBeTruthy();
+
+    // Verify zapier hook was called
+    expect((global.fetch as jest.Mock).mock.calls.length).toBeGreaterThan(0);
   });
 
   test("Non-cannonical loc, creates new report on canonical loc", async () => {
@@ -479,6 +558,99 @@ describe("#create", () => {
     const newReport = await Report.findOne({ where: { reportURL: url } });
     expect(newReport.location.id).toBe(canonicalLoc.id);
   });
+
+  test("links upload to report when uploadId matches url", async () => {
+    const filePath = "uploads/chicago-il-testabc.png";
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    const upload = new Upload();
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = filePath;
+    upload.location = location;
+    await upload.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url: `https://polls.pizza/${filePath}`,
+        contact: "555-555-1234",
+        address: "5335 S Kimbark Ave Chicago IL 60615",
+        uploadId: upload.id,
+      },
+    });
+    const response = http_mocks.createResponse();
+    await controller.create(request, response, () => undefined);
+
+    const report = await Report.findOne({
+      where: { reportURL: `https://polls.pizza/${filePath}` },
+      relations: ["upload"],
+    });
+    expect(report).toBeTruthy();
+    expect(report.upload).toBeTruthy();
+    expect(report!.upload!.id).toBe(upload.id);
+  });
+
+  test("returns 422 when uploadId url does not match filePath", async () => {
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    const upload = new Upload();
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = "uploads/chicago-il-different.png";
+    upload.location = location;
+    await upload.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url: `https://polls.pizza/uploads/chicago-il-notmatching.png`,
+        contact: "555-555-1234",
+        address: "5335 S Kimbark Ave Chicago IL 60615",
+        uploadId: upload.id,
+      },
+    });
+    const response = http_mocks.createResponse();
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(422);
+    expect(body).toEqual({
+      errors: { upload: "URL does not match uploaded file" },
+    });
+  });
+
+  test("does not link upload when no uploadId provided", async () => {
+    const url = `https://polls.pizza/uploads/chicago-il-noid.png`;
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url,
+        contact: "555-555-1234",
+        address: "5335 S Kimbark Ave Chicago IL 60615",
+      },
+    });
+    const response = http_mocks.createResponse();
+    await controller.create(request, response, () => undefined);
+
+    const report = await Report.findOne({
+      where: { reportURL: url },
+      relations: ["upload"],
+    });
+    expect(report).toBeTruthy();
+    expect(report!.upload).toBeNull();
+  });
 });
 
 describe("#index", () => {
@@ -488,7 +660,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { limit: "5" } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -499,8 +671,8 @@ describe("#index", () => {
             location: await report.location.asJSON(),
             order: report.order?.asJSON(),
             truck: report.truck?.asJSON(),
-          })
-        )
+          }),
+        ),
       ),
       count: await Report.count(),
     });
@@ -516,7 +688,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { truck: `${truck.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -531,7 +703,7 @@ describe("#index", () => {
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
-        }))
+        })),
       ),
       count: await Report.count({ where: { truck: { id: truck.id } } }),
     });
@@ -546,7 +718,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { location: `${location.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -561,7 +733,7 @@ describe("#index", () => {
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
-        }))
+        })),
       ),
       count: await Report.count({ where: { location: { id: location.id } } }),
     });
@@ -573,7 +745,7 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest({ query: { order: `${order.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -588,7 +760,7 @@ describe("#index", () => {
           location: await report.location.asJSON(),
           order: report.order?.asJSON(),
           truck: report.truck?.asJSON(),
-        }))
+        })),
       ),
       count: await Report.count({ where: { order: { id: order.id } } }),
     });
@@ -603,7 +775,7 @@ describe("#show", () => {
     const body = await controller.show(
       http_mocks.createRequest({ params: { id: `${report.id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({

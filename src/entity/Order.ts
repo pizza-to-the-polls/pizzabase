@@ -143,7 +143,7 @@ export class Order extends BaseEntity {
       restaurant?: string;
       user?: string;
     },
-    address: NormalAddress
+    address: NormalAddress,
   ): Promise<Order> {
     const [location] = await Location.getOrCreateFromAddress(address);
 
@@ -164,7 +164,7 @@ export class Order extends BaseEntity {
       orderType?: OrderTypes;
       user?: string;
     },
-    location: Location
+    location: Location,
   ): Promise<Order> {
     const order = new this();
 
@@ -172,7 +172,7 @@ export class Order extends BaseEntity {
     order.orderType = orderType || OrderTypes.pizzas;
     order.snacks = quantity * ORDER_TYPE_TO_SNACKS[order.orderType];
     order.cost = cost;
-    order.restaurant = restaurant;
+    order.restaurant = restaurant ?? null;
     order.location = location;
 
     await order.save();

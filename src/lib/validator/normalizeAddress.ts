@@ -4,7 +4,7 @@ import { NormalAddress, OverrideAddress } from "./types";
 import { notifyBugsnag } from "../notifyBugsnag";
 
 const overrideAddress = (
-  addressOverride: null | OverrideAddress
+  addressOverride: null | OverrideAddress,
 ): NormalAddress | null => {
   const { address, city, state, zip, latitude, longitude } =
     addressOverride || {};
@@ -26,7 +26,7 @@ const overrideAddress = (
 
 export const normalizeAddress = async (
   address?: string,
-  addressOverride: null | OverrideAddress = null
+  addressOverride: null | OverrideAddress = null,
 ): Promise<NormalAddress | null> => {
   try {
     return (

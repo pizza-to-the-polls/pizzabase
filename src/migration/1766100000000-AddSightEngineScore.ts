@@ -5,13 +5,13 @@ export class AddSightEngineScore1766100000000 implements MigrationInterface {
 
   public async up(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "uploads" ADD COLUMN "sightengine_score" double precision NULL`
+      `ALTER TABLE "uploads" ADD COLUMN "sightengine_score" double precision NULL`,
     );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(
-      `ALTER TABLE "uploads" DROP COLUMN "sightengine_score"`
+      `ALTER TABLE "uploads" DROP COLUMN "sightengine_score"`,
     );
   }
 }

@@ -8,6 +8,11 @@ import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/geocode");
+jest.mock("../lib/social", () => ({
+  socialPost: jest.fn().mockResolvedValue(undefined),
+}));
+
+import { socialPost } from "../lib/social";
 
 let location: Location | null;
 const controller = new LocationsController();
@@ -31,12 +36,12 @@ describe("#index", () => {
     const body = await controller.index(
       http_mocks.createRequest(),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
       results: await Promise.all(
-        (await Location.find()).map(async (loc) => await loc.asJSON())
+        (await Location.find()).map(async (loc) => await loc.asJSON()),
       ),
       count: 1,
     });
@@ -50,7 +55,7 @@ describe("#show", () => {
     const body = await controller.show(
       http_mocks.createRequest({ params: { idOrAddress: `not-real` } }),
       response,
-      () => undefined
+      () => undefined,
     );
 
     expect(response.statusCode).toEqual(404);
@@ -75,12 +80,12 @@ describe("#show", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     const body = await controller.show(
       http_mocks.createRequest({ params: { idOrAddress: `${id}` } }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await report.reload();
@@ -92,7 +97,9 @@ describe("#show", () => {
       orders: [
         {
           ...order.asJSON(),
-          reports: (await order.reports).map((rep) => rep.asJSON()),
+          reports: await Promise.all(
+            (await order.reports).map((rep) => rep.asJSON()),
+          ),
         },
       ],
       reports: [report.asJSON()],
@@ -108,7 +115,7 @@ describe("#show", () => {
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -128,7 +135,7 @@ describe("#show", () => {
         params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -148,7 +155,7 @@ describe("#show", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     expect(body).toEqual({
@@ -175,7 +182,7 @@ describe("#validate", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await location.reload();
@@ -197,7 +204,7 @@ describe("#validate", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await location.reload();
@@ -221,7 +228,7 @@ describe("#validate", () => {
         headers: { Authorization: `Basic badapikey` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toBeFalsy();
     expect(response.statusCode).toEqual(401);
@@ -243,7 +250,7 @@ describe("#validate", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
 
     await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
@@ -261,7 +268,7 @@ describe("#validate", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
 
     // Will skip the duplicate url report
@@ -285,7 +292,7 @@ describe("#validate", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await report.reload();
@@ -297,7 +304,7 @@ describe("#validate", () => {
         hook: "ZAP_NEW_REPORT",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
-      })
+      }),
     );
   });
 });
@@ -320,7 +327,7 @@ describe("#skip", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
 
     await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
@@ -338,7 +345,7 @@ describe("#skip", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     await controller.skip(
       http_mocks.createRequest({
@@ -348,7 +355,7 @@ describe("#skip", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await location.reload();
@@ -385,7 +392,7 @@ describe("#truck", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
 
     await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
@@ -403,7 +410,7 @@ describe("#truck", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     await controller.truck(
       http_mocks.createRequest({
@@ -413,7 +420,7 @@ describe("#truck", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await location.reload();
@@ -433,6 +440,8 @@ describe("#truck", () => {
 });
 
 describe("#order", () => {
+  beforeEach(() => (socialPost as jest.Mock).mockClear());
+
   it("returns validation errors", async () => {
     const { fullAddress } = location ? location : null;
     const response = http_mocks.createResponse();
@@ -444,7 +453,7 @@ describe("#order", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({
       errors: {
@@ -464,12 +473,15 @@ describe("#order", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const [order] = await location.orders;
 
     expect(order.cost).toEqual(500.23);
     expect(order.quantity).toEqual(32);
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+    );
   });
 
   it("creates a donut order", async () => {
@@ -482,13 +494,16 @@ describe("#order", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     const [order] = await location.orders;
 
     expect(order.cost).toEqual(500.23);
     expect(order.orderType).toEqual("dozen donuts");
     expect(order.quantity).toEqual(5);
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+    );
   });
 
   it("validates the order too", async () => {
@@ -501,7 +516,7 @@ describe("#order", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
     await location.reload();
     expect(location.validatedAt).toBeTruthy();
@@ -523,7 +538,7 @@ describe("#order", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
 
     await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
@@ -541,7 +556,7 @@ describe("#order", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     skipped.skippedAt = new Date();
     await skipped.save();
@@ -559,7 +574,7 @@ describe("#order", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     const response = http_mocks.createResponse();
     const body = await controller.order(
@@ -575,7 +590,7 @@ describe("#order", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       response,
-      () => undefined
+      () => undefined,
     );
     expect(body).toEqual({ success: true });
     expect(response.statusCode).toEqual(200);
@@ -631,11 +646,11 @@ describe("#merge", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     const order = await Order.placeOrder(
       { quantity: 1, cost: 5 },
-      ordered.location
+      ordered.location,
     );
     const truck = await location.assignTruck("someone", "abd-id");
 
@@ -652,7 +667,7 @@ describe("#merge", () => {
         city: "Chicago",
         state: "IL",
         zip: "60615",
-      }
+      },
     );
     await controller.merge(
       http_mocks.createRequest({
@@ -662,7 +677,7 @@ describe("#merge", () => {
         headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
       }),
       http_mocks.createResponse(),
-      () => undefined
+      () => undefined,
     );
 
     await location.reload();
@@ -677,16 +692,14 @@ describe("#merge", () => {
     expect(userId).toEqual("jimmy");
     expect(actionType).toEqual(`merged into ${canonicalLocation.id}`);
 
-    const {
-      userId: mergedUserId,
-      actionType: mergedActionType,
-    } = await Action.findOne({
-      where: {
-        entityId: canonicalLocation.id,
-        entityType: location.constructor.name,
-      },
-      order: { id: "DESC" },
-    });
+    const { userId: mergedUserId, actionType: mergedActionType } =
+      await Action.findOne({
+        where: {
+          entityId: canonicalLocation.id,
+          entityType: location.constructor.name,
+        },
+        order: { id: "DESC" },
+      });
     expect(mergedUserId).toEqual("jimmy");
     expect(mergedActionType).toEqual(`absorbed ${id}`);
 

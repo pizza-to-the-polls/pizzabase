@@ -2,6 +2,7 @@ import { normalizeAddress } from "./normalizeAddress";
 import { NormalAddress, OverrideAddress } from "./types";
 import { normalizeURL } from "./normalizeURL";
 import { normalizeContact } from "./normalizeContact";
+import { Upload } from "../../entity/Upload";
 import { CONTACT_ERROR, ADDRESS_ERROR, URL_ERROR } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
@@ -9,6 +10,7 @@ interface ValidationError {
   contact?: string;
   url?: string;
   address?: string;
+  upload?: string;
 }
 
 export const validateReport = async (
@@ -22,6 +24,7 @@ export const validateReport = async (
     contactLastName,
     contactRole,
     addressOverride,
+    uploadId,
   }: {
     address?: string;
     contact?: string;
@@ -32,13 +35,15 @@ export const validateReport = async (
     contactRole?: string;
     canDistribute?: boolean;
     addressOverride?: OverrideAddress;
+    uploadId?: number;
   },
-  isAuthorized: boolean = false
+  isAuthorized: boolean = false,
 ): Promise<{
   normalizedAddress: NormalAddress;
   contactInfo: string;
   reportURL: string;
   errors: ValidationError;
+  upload: Upload | null;
   waitTime?: string;
   contactFirstName?: string;
   contactLastName?: string;
@@ -50,7 +55,7 @@ export const validateReport = async (
 
   try {
     reportURL = normalizeURL(
-      url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : ""
+      url ? url : isAuthorized ? `http://trusted.url/${uuidv4()}` : "",
     );
     if (!reportURL) {
       errors.url = URL_ERROR;
@@ -60,7 +65,7 @@ export const validateReport = async (
   }
 
   const contactInfo = normalizeContact(
-    contact ? contact : isAuthorized ? "trusted@example.com" : ""
+    contact ? contact : isAuthorized ? "trusted@example.com" : "",
   );
   if (!contactInfo) {
     errors.contact = CONTACT_ERROR;
@@ -68,10 +73,29 @@ export const validateReport = async (
 
   const normalizedAddress: null | NormalAddress = await normalizeAddress(
     address,
-    isAuthorized ? addressOverride : null
+    isAuthorized ? addressOverride : null,
   );
   if (!normalizedAddress) {
     errors.address = ADDRESS_ERROR;
+  }
+
+  // Validate uploadId: url filePath must match upload filePath
+  let upload: Upload | null = null;
+  if (uploadId) {
+    const candidate = await Upload.findOne({ where: { id: uploadId } });
+    if (!candidate) {
+      errors.upload = "Upload not found";
+    } else if (!reportURL) {
+      errors.upload = "URL required with upload";
+    } else {
+      const urlPath = reportURL.split("/").pop();
+      const uploadPath = candidate.filePath.split("/").pop();
+      if (urlPath === uploadPath) {
+        upload = candidate;
+      } else {
+        errors.upload = "URL does not match uploaded file";
+      }
+    }
   }
 
   return {
@@ -79,14 +103,15 @@ export const validateReport = async (
     normalizedAddress,
     contactInfo,
     reportURL,
+    upload,
     waitTime,
     contactFirstName,
     contactLastName,
     contactRole: contactRole
       ? contactRole
       : isAuthorized
-      ? "Trusted"
-      : undefined,
+        ? "Trusted"
+        : undefined,
     canDistribute,
   };
 };
