@@ -452,6 +452,36 @@ function isValidVideoFormat(contentType: string): boolean {
 }
 
 /**
+ * Resolve the mimeType to declare for a video blob.
+ *
+ * Storage/transcode layers sometimes serve MP4-family content with
+ * non-canonical types (e.g. MediaConvert output served as video/x-m4v) —
+ * BlueSky rejects records whose mimeType doesn't match its own sniffing
+ * ("Expected video/mp4"). Trust the URL extension first, fall back to the
+ * served content-type, and normalize known-equivalent types to mp4.
+ */
+function resolveVideoMimeType(
+  videoUrl: string,
+  servedContentType: string,
+): string {
+  const ext = videoUrl.split(".").pop()?.toLowerCase() || "";
+  const EXT_MIME: Record<string, string> = {
+    mp4: "video/mp4",
+    m4v: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    mpeg: "video/mpeg",
+  };
+  if (EXT_MIME[ext]) {
+    return EXT_MIME[ext];
+  }
+  if (servedContentType === "video/x-m4v") {
+    return "video/mp4";
+  }
+  return servedContentType;
+}
+
+/**
  * Upload a video blob to BlueSky, streaming the download into the upload
  * request. Buffering a 50 MB video into memory is wasteful and risks OOM on
  * memory-constrained Lambdas; a stream keeps memory flat regardless of size.
@@ -485,9 +515,13 @@ async function uploadVideoBlob(
       );
     }
 
-    const contentType =
+    const servedContentType =
       downloadResponse.headers.get("content-type") ||
       "application/octet-stream";
+    const contentType = resolveVideoMimeType(videoUrl, servedContentType);
+    console.log(
+      `[bluesky] video ${videoUrl}: served as ${servedContentType}, uploading as ${contentType}`,
+    );
     if (!isValidVideoFormat(contentType)) {
       console.warn(`Unsupported video format: ${contentType}, skipping`);
       return null;
