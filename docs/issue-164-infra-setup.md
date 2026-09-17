@@ -58,11 +58,17 @@ aws s3api put-bucket-lifecycle-configuration \
     "Rules": [
       {
         "ID": "expire-after-365-days",
+        "Filter": {},
         "Status": "Enabled",
         "Expiration": { "Days": 365 }
       }
     ]
   }'
+```
+
+> **Note:** the rule MUST include a `Filter` (an empty `{}` applies the rule to
+> all objects). A rule with neither `Filter` nor `Prefix` is rejected with
+> `MalformedXML`.
 ```
 
 ### 1d. Set CORS (needed for presigned browser uploads)
@@ -73,7 +79,7 @@ aws s3api put-bucket-cors \
   --cors-configuration '{
     "CORSRules": [
       {
-        "AllowedOrigins": ["https://polls.pizza"],
+        "AllowedOrigins": ["https://polls.pizza", "https://next.polls.pizza", "http://localhost:3000"],
         "AllowedMethods": ["POST", "PUT"],
         "AllowedHeaders": ["*"],
         "MaxAgeSeconds": 3600
