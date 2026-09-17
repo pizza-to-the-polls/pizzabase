@@ -642,6 +642,80 @@ export function isAnyIsoBmff(buffer: Buffer): boolean {
 }
 
 /**
+ * Check whether the buffer starts with a video ISO BMFF container
+ * (MP4, MOV, etc. — not HEIF/HEIC/AVIF).
+ */
+export function isVideoIsoBmff(buffer: Buffer): boolean {
+  return isIsoBmff(buffer, VIDEO_BMFF_BRANDS);
+}
+
+/**
+ * Parse duration in seconds from the mvhd box inside moov.
+ *
+ * Walks the ISO BMFF box hierarchy:
+ *   ftyp → skip
+ *   moov → mvhd → parse version 0 or v1
+ *
+ * Returns null when:
+ *  - Not a video ISO BMFF container
+ *  - moov/mvhd not found within the buffer
+ *  - mvhd version is unknown (only v0/v1 supported)
+ *  - timescale is zero
+ *  - v1 duration exceeds JS safe integer range
+ */
+export function extractDuration(buffer: Buffer): number | null {
+  if (!isVideoIsoBmff(buffer)) return null;
+
+  // Walk top-level boxes looking for moov
+  let moovHeader: BoxHeader | null = null;
+  findChildBox(buffer, 0, buffer.length, "moov", (h) => {
+    moovHeader = h;
+    return h;
+  });
+
+  if (!moovHeader) return null;
+
+  // moov is a full box — skip the 4-byte version+flags before children
+  const moovChildrenStart = moovHeader.dataStart + 4;
+  if (moovChildrenStart > moovHeader.end) return null;
+
+  let durationResult: number | null = null;
+  findChildBox(buffer, moovChildrenStart, moovHeader.end, "mvhd", (h) => {
+    // mvhd is a full box: version(1) + flags(3) = 4 bytes
+    if (h.dataStart + 4 > h.end) return null;
+    const version = buffer[h.dataStart];
+
+    if (version === 0) {
+      // v0: timescale at dataStart+12, duration at dataStart+16
+      if (h.dataStart + 20 > h.end) return null;
+      const timescale = buffer.readUInt32BE(h.dataStart + 12);
+      const durationRaw = buffer.readUInt32BE(h.dataStart + 16);
+      if (timescale === 0) return null;
+      durationResult = durationRaw / timescale;
+      return durationResult;
+    }
+
+    if (version === 1) {
+      // v1: timescale at dataStart+20, duration at dataStart+24 (64-bit)
+      if (h.dataStart + 32 > h.end) return null;
+      const timescale = buffer.readUInt32BE(h.dataStart + 20);
+      const hi = buffer.readUInt32BE(h.dataStart + 24);
+      const lo = buffer.readUInt32BE(h.dataStart + 28);
+      // Guard: JS Number safe integer range
+      if (hi > 0x001fffff) return null;
+      const durationRaw = hi * 0x100000000 + lo;
+      if (timescale === 0) return null;
+      durationResult = durationRaw / timescale;
+      return durationResult;
+    }
+
+    return null; // unknown version
+  });
+
+  return durationResult;
+}
+
+/**
  * Walk the direct children of a parent box, calling visitor for each child
  * of the given type. Stops when visitor returns non-null.
  */

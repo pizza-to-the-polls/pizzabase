@@ -15,7 +15,11 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
-import { extractExif } from "../lib/exif/extract";
+import {
+  extractExif,
+  isVideoIsoBmff,
+  extractDuration,
+} from "../lib/exif/extract";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const lambda = new LambdaClient({
@@ -29,6 +33,11 @@ const MEDIA_FORMAT_FUNCTION =
   process.env.MEDIA_FORMAT_FUNCTION_NAME || "pizzabase-dev-on-media-format";
 
 const INITIAL_RANGE_BYTES = 65535;
+
+const MEDIA_MAX_DURATION_SECONDS = parseInt(
+  process.env.MEDIA_MAX_DURATION_SECONDS || "90",
+  10,
+);
 
 interface S3EventRecord {
   s3: {
@@ -108,6 +117,32 @@ export async function handler(event: S3Event): Promise<void> {
       } else {
         console.log(`[on-s3-upload-process-exif] No EXIF found in ${key}`);
       }
+
+      // ── Video duration check ──────────────────────────────
+      const isVideo = isVideoIsoBmff(initialBuffer);
+      if (isVideo) {
+        const durationSeconds = extractDuration(initialBuffer);
+        if (
+          durationSeconds !== null &&
+          durationSeconds > MEDIA_MAX_DURATION_SECONDS
+        ) {
+          upload.mediaStatus = "failed";
+          upload.failureReason = `video exceeds ${MEDIA_MAX_DURATION_SECONDS}s duration limit (duration: ${Math.round(durationSeconds)}s)`;
+          await upload.save();
+          console.log(
+            `[on-s3-upload-process-exif] Video ${key} over duration limit: ${durationSeconds}s`,
+          );
+          continue;
+        }
+        if (durationSeconds !== null) {
+          // Store duration in existing exif_data JSONB
+          upload.exifData = {
+            ...((upload.exifData as Record<string, unknown>) || {}),
+            duration_seconds: durationSeconds,
+          };
+        }
+      }
+      // ── End duration check ────────────────────────────────
 
       upload.exifExtracted = true;
       await upload.save();
