@@ -1,9 +1,10 @@
 /**
  * Detect the display rotation of an MP4/MOV video track from its tkhd box.
  *
- * Phone cameras record landscape sensor pixels and store a 90°/180°/270°
- * rotation in the track header's display matrix. MediaConvert ignores that
- * matrix, so transcoded output comes out sideways unless we compensate.
+ * Phone cameras (iPhone and Android alike) record landscape sensor pixels
+ * and store a 90°/180°/270° rotation in the track header's display matrix.
+ * MediaConvert ignores that matrix, so transcoded output comes out sideways
+ * unless we compensate.
  *
  * Usage: pass the raw file bytes; the returned value maps directly onto
  * MediaConvert's Input.VideoSelector.Rotate (omit when null — identity).

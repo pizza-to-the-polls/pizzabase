@@ -158,7 +158,9 @@ async function processImage(
   const image = sharp(buffer, {
     failOnError: false,
     animated: ext === ".gif",
-  });
+  }).rotate(); // auto-orient from EXIF — phone portrait photos come in with
+  // landscape pixels + Orientation≠1, and the re-encode strips the EXIF that
+  // would otherwise fix display, so bake the rotation into the pixels now.
 
   const metadata = await image.metadata();
   const longestEdge = Math.max(metadata.width || 0, metadata.height || 0);
