@@ -7,7 +7,9 @@ plugins:
 provider:
   name: aws
   runtime: nodejs${file(.nvmrc)}.x
-  timeout: 30
+  # 120s: socialPost runs fire-and-forget in-process (lambda.ts holds the
+  # invocation) and Threads video containers can take minutes to process.
+  timeout: 120
   region: us-west-2
   environment:
     NODE_ENV: production
