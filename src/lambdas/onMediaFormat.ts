@@ -25,6 +25,7 @@ import {
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
 import { detectInputRotation } from "../lib/mp4-rotation";
+import { cdnUrlForKey } from "../lib/media-cdn";
 import * as path from "path";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -193,7 +194,9 @@ async function processImage(
       }),
     );
 
-    processedPath.gif = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${gifKey}`;
+    processedPath.gif =
+      cdnUrlForKey(gifKey) ??
+      `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${gifKey}`;
     return processedPath;
   }
 
@@ -224,7 +227,9 @@ async function processImage(
     }),
   );
 
-  processedPath.webp = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${webpKey}`;
+  processedPath.webp =
+    cdnUrlForKey(webpKey) ??
+    `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${webpKey}`;
 
   // JPEG (fallback)
   const jpegBuffer = await resizePipeline
@@ -243,7 +248,9 @@ async function processImage(
     }),
   );
 
-  processedPath.jpeg = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${jpegKey}`;
+  processedPath.jpeg =
+    cdnUrlForKey(jpegKey) ??
+    `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${jpegKey}`;
 
   return processedPath;
 }

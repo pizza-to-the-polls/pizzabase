@@ -1,6 +1,7 @@
 import type { Order } from "../entity/Order";
 import { AppDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
+import { cdnUrlFromStoredUrl } from "./media-cdn";
 
 export interface MediaUrls {
   images: string[];
@@ -47,15 +48,22 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
     if (upload.rawFilePath) {
       // Pipeline upload: serve the processed, scrubbed output. The raw file
       // is private and the legacy public key doesn't exist for these rows.
+      // Stored URLs may predate the CDN — rewrite against the CDN domain.
       const processed = upload.processedFilePath as Record<
         string,
         string
       > | null;
       if (isVideo) {
         // media_status flips to ready in on-mediaconvert-complete
-        url = upload.mediaStatus === "ready" ? (processed?.mp4 ?? null) : null;
+        url =
+          upload.mediaStatus === "ready"
+            ? cdnUrlFromStoredUrl(processed?.mp4)
+            : null;
       } else {
-        url = processed?.webp || processed?.jpeg || null;
+        url =
+          cdnUrlFromStoredUrl(processed?.webp) ||
+          cdnUrlFromStoredUrl(processed?.jpeg) ||
+          null;
       }
     } else {
       // Legacy upload: lives in the public bucket under its original key.

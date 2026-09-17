@@ -6,6 +6,7 @@ import { presignUpload } from "../lib/aws";
 import { zapNewUpload } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { isAuthorized, findOr404 } from "./helper";
+import { cdnUrlForKey, cdnUrlFromStoredUrl } from "../lib/media-cdn";
 import { extractExifAndReview } from "../lib/exif/service";
 
 export class UploadsController {
@@ -154,8 +155,13 @@ export class UploadsController {
     }
 
     // Legacy row: no raw file path recorded means it predates the pipeline
-    // and lives in the public bucket under its original key.
+    // and lives in the bucket under its original key — serve via the CDN too
+    // (the bucket is private; direct S3 URLs no longer work).
     if (!upload.rawFilePath) {
+      const legacy = cdnUrlForKey(upload.filePath);
+      if (legacy) {
+        return response.redirect(302, legacy);
+      }
       const bucket = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
       return response.redirect(
         302,
@@ -164,8 +170,12 @@ export class UploadsController {
     }
 
     const processed = upload.processedFilePath as Record<string, string> | null;
+    // Stored URLs may predate the CDN — rewrite them against the CDN domain.
     const primary =
-      processed?.webp || processed?.jpeg || processed?.mp4 || processed?.gif;
+      cdnUrlFromStoredUrl(processed?.webp) ||
+      cdnUrlFromStoredUrl(processed?.jpeg) ||
+      cdnUrlFromStoredUrl(processed?.mp4) ||
+      cdnUrlFromStoredUrl(processed?.gif);
 
     if (primary) {
       return response.redirect(302, primary);
