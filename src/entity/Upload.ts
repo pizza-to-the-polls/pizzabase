@@ -54,6 +54,7 @@ export class Upload extends BaseEntity {
     name: "media_status",
     type: "enum",
     enum: ["none", "processing", "ready", "failed"],
+    enumName: "media_status",
     default: "none",
   })
   mediaStatus: MediaStatus;
@@ -74,6 +75,7 @@ export class Upload extends BaseEntity {
     name: "moderation_status",
     type: "enum",
     enum: ["pending", "clean", "flagged", "rejected"],
+    enumName: "moderation_status",
     default: "pending",
   })
   moderationStatus: ModerationStatus;
