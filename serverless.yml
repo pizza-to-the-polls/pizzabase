@@ -132,7 +132,6 @@ functions:
       AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
       AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
       DB_NAME: ${env:DB_NAME}
-      AWS_REGION: ${env:AWS_REGION, 'us-west-2'}
     events:
       - s3:
           bucket: raw.polls.pizza
@@ -151,7 +150,6 @@ functions:
       AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
       AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
       DB_NAME: ${env:DB_NAME}
-      AWS_REGION: ${env:AWS_REGION, 'us-west-2'}
       IMAGE_MAX_DIMENSION: ${env:IMAGE_MAX_DIMENSION, '1920'}
       IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
       MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
@@ -169,7 +167,6 @@ functions:
       AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
       AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
       DB_NAME: ${env:DB_NAME}
-      AWS_REGION: ${env:AWS_REGION, 'us-west-2'}
     events:
       - eventBridge:
           pattern:
