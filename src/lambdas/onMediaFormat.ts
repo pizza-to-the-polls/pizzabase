@@ -190,7 +190,7 @@ async function processImage(
       }),
     );
 
-    processedPath.gif = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${gifKey}`;
+    processedPath.gif = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${gifKey}`;
     return processedPath;
   }
 
@@ -221,7 +221,7 @@ async function processImage(
     }),
   );
 
-  processedPath.webp = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${webpKey}`;
+  processedPath.webp = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${webpKey}`;
 
   // JPEG (fallback)
   const jpegBuffer = await resizePipeline
@@ -240,7 +240,7 @@ async function processImage(
     }),
   );
 
-  processedPath.jpeg = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${jpegKey}`;
+  processedPath.jpeg = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${jpegKey}`;
 
   return processedPath;
 }

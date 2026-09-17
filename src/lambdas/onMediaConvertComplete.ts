@@ -72,7 +72,7 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
     if (mp4Path) {
       // MediaConvert outputs full S3 paths like s3://bucket/key_transcoded.mp4
       const key = mp4Path.replace(`s3://${PROCESSED_BUCKET}/`, "");
-      const mp4Url = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${key}`;
+      const mp4Url = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${key}`;
       // Keep jobId so redelivered events still resolve.
       upload.processedFilePath = { mp4: mp4Url, jobId };
       console.log(
