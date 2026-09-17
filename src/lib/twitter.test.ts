@@ -362,6 +362,40 @@ describe("twitterPost with media", () => {
     clearTwitterEnv();
   });
 
+  /** Build a web ReadableStream that yields a Buffer in small chunks. */
+  function streamFromBuffer(
+    buf: Buffer,
+    chunkSize = 64 * 1024,
+  ): ReadableStream<Uint8Array> {
+    return new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (let off = 0; off < buf.length; off += chunkSize) {
+          controller.enqueue(
+            new Uint8Array(buf.subarray(off, off + chunkSize)),
+          );
+        }
+        controller.close();
+      },
+    });
+  }
+
+  function headResponse(contentLength: number) {
+    return {
+      ok: true,
+      status: 200,
+      headers: new Map([["content-length", String(contentLength)]]),
+    };
+  }
+
+  function streamResponse(buf: Buffer, contentType = "video/mp4") {
+    return {
+      ok: true,
+      status: 200,
+      headers: new Map([["content-type", contentType]]),
+      body: streamFromBuffer(buf),
+    };
+  }
+
   it("uploads images and attaches them to the tweet", async () => {
     // Create order with location
     const location = await Location.createFromAddress({
@@ -462,13 +496,10 @@ describe("twitterPost with media", () => {
       location,
     );
 
+    const videoBytes = Buffer.alloc(5 * 1024 * 1024 + 12345); // > 1 chunk → 2 segments
     (global.fetch as jest.Mock)
-      // S3 download for video
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Map([["content-type", "video/mp4"]]),
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(5000000)),
-      })
+      // HEAD — size check without downloading
+      .mockResolvedValueOnce(headResponse(videoBytes.length))
       // INIT
       .mockResolvedValueOnce({
         ok: true,
@@ -477,10 +508,12 @@ describe("twitterPost with media", () => {
             media_id_string: "111111111",
           }),
       })
-      // APPEND
-      .mockResolvedValueOnce({
-        ok: true,
-      })
+      // GET — streaming download
+      .mockResolvedValueOnce(streamResponse(videoBytes))
+      // APPEND (segment 0)
+      .mockResolvedValueOnce({ ok: true })
+      // APPEND (segment 1)
+      .mockResolvedValueOnce({ ok: true })
       // FINALIZE
       .mockResolvedValueOnce({
         ok: true,
@@ -502,26 +535,36 @@ describe("twitterPost with media", () => {
 
     await twitterPost(order);
 
-    // Check INIT call
+    // Check INIT call carries the HEAD-derived total_bytes
     const allCalls = (global.fetch as jest.Mock).mock.calls;
     const initCall = allCalls.find(
       ([_url, opts]: [string, any]) =>
-        opts?.body?.includes?.("command=INIT") ||
-        (typeof opts?.body === "string" && opts.body.includes("command=INIT")),
+        typeof opts?.body === "string" && opts.body.includes("command=INIT"),
     );
     expect(initCall).toBeTruthy();
+    expect(initCall[1].body).toContain(
+      `total_bytes=${encodeURIComponent(String(videoBytes.length))}`,
+    );
 
-    // Check APPEND call (Buffer body with multipart video data)
-    const uploadCalls = allCalls.filter(
-      ([url]: [string]) =>
-        url === "https://upload.twitter.com/1.1/media/upload.json",
+    // Check APPEND calls: 5 MB+ video → 2 chunks with segment indices 0, 1
+    const appendCalls = allCalls.filter(
+      ([_url, opts]: [string, any]) =>
+        opts?.body instanceof Buffer &&
+        (opts.body as Buffer)
+          .toString("latin1")
+          .includes('name="segment_index"'),
     );
-    // INIT (URLSearchParams) + APPEND (Buffer) + FINALIZE (URLSearchParams) = 3
-    expect(uploadCalls.length).toBeGreaterThanOrEqual(3);
-    const bufferCalls = uploadCalls.filter(
-      ([_url, opts]: [string, any]) => opts?.body instanceof Buffer,
-    );
-    expect(bufferCalls.length).toBeGreaterThanOrEqual(1);
+    expect(appendCalls).toHaveLength(2);
+    expect(
+      (appendCalls[0][1].body as Buffer)
+        .toString("latin1")
+        .includes('name="segment_index"\r\n\r\n0'),
+    ).toBe(true);
+    expect(
+      (appendCalls[1][1].body as Buffer)
+        .toString("latin1")
+        .includes('name="segment_index"\r\n\r\n1'),
+    ).toBe(true);
 
     // Check FINALIZE call
     const finalizeCall = allCalls.find(
@@ -563,14 +606,9 @@ describe("twitterPost with media", () => {
       location,
     );
 
-    // S3 download returns huge buffer (> 512 MB)
-    const hugeBuffer = new ArrayBuffer(513 * 1024 * 1024); // 513 MB
+    // HEAD reports 513 MB — video skipped before any download
     (global.fetch as jest.Mock)
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Map([["content-type", "video/mp4"]]),
-        arrayBuffer: () => Promise.resolve(hugeBuffer),
-      })
+      .mockResolvedValueOnce(headResponse(513 * 1024 * 1024))
       // Tweet post (no media, since video was skipped)
       .mockResolvedValueOnce({
         ok: true,
@@ -740,12 +778,8 @@ describe("twitterPost with media", () => {
     );
 
     (global.fetch as jest.Mock)
-      // S3 download
-      .mockResolvedValueOnce({
-        ok: true,
-        headers: new Map([["content-type", "video/mp4"]]),
-        arrayBuffer: () => Promise.resolve(new ArrayBuffer(1000000)),
-      })
+      // HEAD — size check
+      .mockResolvedValueOnce(headResponse(1000000))
       // INIT
       .mockResolvedValueOnce({
         ok: true,
@@ -754,6 +788,8 @@ describe("twitterPost with media", () => {
             media_id_string: "222222222",
           }),
       })
+      // GET — streaming download
+      .mockResolvedValueOnce(streamResponse(Buffer.alloc(1000000)))
       // APPEND
       .mockResolvedValueOnce({
         ok: true,
@@ -817,6 +853,72 @@ describe("twitterPost with media", () => {
     expect(tweetCalls).toHaveLength(1);
     const body = JSON.parse(tweetCalls[0][1].body);
     expect(body.media.media_ids).toContain("222222222");
+  });
+
+  it("continues with tweet even when a video APPEND fails", async () => {
+    const location = await Location.createFromAddress({
+      latitude: 45.5152,
+      longitude: -122.6784,
+      fullAddress: "606 Fail Video Portland OR 97201",
+      address: "606 Fail Video",
+      city: "Portland",
+      state: "OR",
+      zip: "97201",
+    });
+
+    const upload = new Upload();
+    upload.location = location;
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = "uploads/fail-video.mp4";
+    upload.fileHash = "failvideohash";
+    await upload.save();
+
+    const order = await Order.placeOrder(
+      { quantity: 6, orderType: OrderTypes.pizzas, cost: 60 },
+      location,
+    );
+
+    (global.fetch as jest.Mock)
+      // HEAD
+      .mockResolvedValueOnce(headResponse(1000000))
+      // INIT
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ media_id_string: "444444444" }),
+      })
+      // GET — streaming download
+      .mockResolvedValueOnce(streamResponse(Buffer.alloc(1000000)))
+      // APPEND — fails (a consumed stream cannot be retried)
+      .mockResolvedValueOnce({
+        ok: false,
+        status: 500,
+        json: () => Promise.resolve({ errors: [{ message: "Server error" }] }),
+      })
+      // Tweet post succeeds (without media)
+      .mockResolvedValueOnce({
+        ok: true,
+        json: () => Promise.resolve({ data: { id: "123", text: "..." } }),
+      });
+
+    const errorSpy = jest.spyOn(console, "error").mockImplementation(() => {});
+
+    await twitterPost(order);
+
+    // Should log the media upload failure
+    expect(errorSpy).toHaveBeenCalledWith(
+      expect.stringContaining("failed to upload media"),
+      expect.anything(),
+    );
+
+    // Tweet should still be posted (without media)
+    const tweetCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      ([url]: [string]) => url === "https://api.twitter.com/2/tweets",
+    );
+    expect(tweetCalls).toHaveLength(1);
+    const body = JSON.parse(tweetCalls[0][1].body);
+    expect(body.media).toBeUndefined();
+
+    errorSpy.mockRestore();
   });
 
   it("sets alt text after image upload", async () => {
