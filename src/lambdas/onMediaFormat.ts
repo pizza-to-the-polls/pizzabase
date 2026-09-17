@@ -24,6 +24,7 @@ import {
 } from "@aws-sdk/client-mediaconvert";
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
+import { detectInputRotation } from "../lib/mp4-rotation";
 import * as path from "path";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -270,12 +271,37 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
   const upload = await Upload.findOne({ where: { id: uploadId } as any });
   if (!upload) return;
 
+  // MediaConvert ignores the input's display-matrix rotation: a phone video
+  // recorded portrait (landscape pixels + 90° matrix) comes out sideways.
+  // Detect the rotation from the raw tkhd and pass it to the job.
+  let rotate: "DEGREES_90" | "DEGREES_180" | "DEGREES_270" | undefined;
+  try {
+    const rawObject = await s3.send(
+      new GetObjectCommand({ Bucket: RAW_BUCKET, Key: key }),
+    );
+    if (rawObject.Body) {
+      const rawBuffer = Buffer.from(
+        await rawObject.Body.transformToByteArray(),
+      );
+      rotate = detectInputRotation(rawBuffer) ?? undefined;
+      console.log(
+        `[on-media-format] input rotation for ${key}: ${rotate ?? "none"}`,
+      );
+    }
+  } catch (err) {
+    console.warn(
+      `[on-media-format] rotation detection failed for ${key} — transcoding without rotation correction:`,
+      err,
+    );
+  }
+
   const jobParams: CreateJobCommandInput = {
     Role: process.env.MEDIACONVERT_ROLE_ARN || "",
     Settings: {
       Inputs: [
         {
           FileInput: `s3://${RAW_BUCKET}/${key}`,
+          ...(rotate ? { VideoSelector: { Rotate: rotate } } : {}),
           AudioSelectors: {
             "Audio Selector 1": {
               DefaultSelection: "DEFAULT",
