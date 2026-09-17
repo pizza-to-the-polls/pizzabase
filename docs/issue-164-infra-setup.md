@@ -69,7 +69,8 @@ aws s3api put-bucket-lifecycle-configuration \
 > **Note:** the rule MUST include a `Filter` (an empty `{}` applies the rule to
 > all objects). A rule with neither `Filter` nor `Prefix` is rejected with
 > `MalformedXML`.
-```
+
+````
 
 ### 1d. Set CORS (needed for presigned browser uploads)
 
@@ -86,7 +87,7 @@ aws s3api put-bucket-cors \
       }
     ]
   }'
-```
+````
 
 ---
 
