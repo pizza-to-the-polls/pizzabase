@@ -157,6 +157,11 @@ jobs:
           SIGHTENGINE_API_USER: ${{ secrets.SIGHTENGINE_API_USER }}
           SIGHTENGINE_API_SECRET: ${{ secrets.SIGHTENGINE_API_SECRET }}
 
+          # Media pipeline infra (see docs/issue-164-infra-setup.md)
+          RAW_UPLOADS_BUCKET: ${{ secrets.RAW_UPLOADS_BUCKET }}
+          MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
           # TEMPORARY: social posting enabled on staging so we can test video
           # posts end-to-end while the async media pipeline is on staging.
           # Remove before merging the feature branch to master.
