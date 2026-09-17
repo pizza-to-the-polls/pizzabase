@@ -1001,6 +1001,302 @@ function findTiffStart(buffer: Buffer, start: number, end: number): number {
 }
 
 // ---------------------------------------------------------------------------
+// Video duration parsing (MP4/MOV mvhd box)
+// ---------------------------------------------------------------------------
+
+export interface MvhdParseResult {
+  /** Duration in seconds (floating point). */
+  durationSeconds: number;
+  /** Whether the mvhd box was fully found and parsed. */
+  found: boolean;
+  /** If the mvhd box extends beyond the buffer, how many total bytes needed. */
+  bytesNeeded: number;
+}
+
+/**
+ * Find a direct child box of the given type in the buffer range [start, end).
+ * Returns the BoxHeader of the first matching child, or null if not found.
+ *
+ * When allowPartial is true, returns a box header even if its declared
+ * end extends beyond parentEnd (useful for truncation detection).
+ */
+function findFirstChildBox(
+  buffer: Buffer,
+  parentStart: number,
+  parentEnd: number,
+  boxType: string,
+  allowPartial: boolean = false,
+): BoxHeader | null {
+  let off = parentStart;
+  while (off + 8 <= parentEnd) {
+    const header = readBoxHeader(buffer, off);
+    if (!header) break;
+
+    // When not allowing partial, stop if the box extends beyond parent.
+    if (!allowPartial && header.end > parentEnd) break;
+
+    if (header.type === boxType) {
+      return header;
+    }
+
+    // Even if allowPartial, only advance if the box fits.
+    if (header.end > parentEnd) break;
+
+    off = header.end;
+    if (off <= parentStart) break;
+  }
+  return null;
+}
+
+/**
+ * Parse duration from a Movie Header (mvhd) box.
+ *
+ * Handles both version 0 (32-bit fields) and version 1 (64-bit fields).
+ *
+ * mvhd full-box layout (after size+type header):
+ *   version(1) + flags(3) = 4 bytes
+ *   v0: creation_time(4) + modification_time(4) + time_scale(4) + duration(4)
+ *   v1: creation_time(8) + modification_time(8) + time_scale(4) + duration(8)
+ *
+ * duration_seconds = duration / time_scale
+ */
+function parseMvhdBox(
+  mvhdHeader: BoxHeader,
+  buffer: Buffer,
+): { durationSeconds: number } | null {
+  const dataStart = mvhdHeader.dataStart;
+  const dataEnd = mvhdHeader.end;
+
+  // Need at least version(1) + flags(3) = 4 bytes of content.
+  if (dataEnd - dataStart < 4) return null;
+
+  const version = buffer[dataStart];
+
+  if (version === 0) {
+    // v0: after version+flags(4): creation_time(4) + modification_time(4) + time_scale(4) + duration(4) = 16 bytes
+    if (dataEnd - dataStart < 4 + 16) return null;
+
+    const timeScale = buffer.readUInt32BE(dataStart + 4 + 8); // offset +12 from dataStart
+    const duration = buffer.readUInt32BE(dataStart + 4 + 12); // offset +16 from dataStart
+
+    if (timeScale === 0) return null;
+    return { durationSeconds: duration / timeScale };
+  }
+
+  if (version === 1) {
+    // v1: after version+flags(4): creation_time(8) + modification_time(8) + time_scale(4) + duration(8) = 28 bytes
+    if (dataEnd - dataStart < 4 + 28) return null;
+
+    const timeScale = buffer.readUInt32BE(dataStart + 4 + 16); // offset +20 from dataStart
+    // Read 64-bit duration as two 32-bit big-endian halves.
+    const durationHi = buffer.readUInt32BE(dataStart + 4 + 20); // offset +24
+    const durationLo = buffer.readUInt32BE(dataStart + 4 + 24); // offset +28
+
+    if (timeScale === 0) return null;
+
+    // Guard: JS Number can only represent integers up to 2^53 safely.
+    if (durationHi > 0x001fffff) {
+      return null;
+    }
+    const duration = durationHi * 0x100000000 + durationLo;
+    return { durationSeconds: duration / timeScale };
+  }
+
+  // Unknown mvhd version.
+  return null;
+}
+
+/**
+ * Walk ISO BMFF box tree to find moov → mvhd and extract duration.
+ *
+ * Handles both version 0 (32-bit duration/time fields) and
+ * version 1 (64-bit duration/time fields) of the mvhd box.
+ *
+ * Returns a best-effort parse: if the mvhd box is present but
+ * extends beyond the buffer, signals bytesNeeded so the caller
+ * can do a follow-up read.
+ */
+export function parseMvhdDuration(buffer: Buffer): MvhdParseResult {
+  if (!isAnyIsoBmff(buffer)) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  // Skip past ftyp: read its header to find where it ends.
+  const ftypHeader = readBoxHeader(buffer, 0);
+  if (!ftypHeader) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  const searchStart = ftypHeader.end;
+
+  // Find moov box among top-level children (siblings of ftyp).
+  // Use allowPartial so we can detect truncation when the moov box
+  // header is readable but its data extends beyond the buffer.
+  const moovHeader = findFirstChildBox(
+    buffer,
+    searchStart,
+    buffer.length,
+    "moov",
+    true,
+  );
+
+  if (!moovHeader) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  // Ensure moov box is fully within the buffer.
+  if (moovHeader.end > buffer.length) {
+    return {
+      durationSeconds: 0,
+      found: false,
+      bytesNeeded: moovHeader.end,
+    };
+  }
+
+  // Find mvhd box inside moov. The moov box is a container — search its children.
+  const mvhdHeader = findFirstChildBox(
+    buffer,
+    moovHeader.dataStart,
+    moovHeader.end,
+    "mvhd",
+  );
+
+  if (!mvhdHeader) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  // Ensure mvhd box is fully within the buffer.
+  if (mvhdHeader.end > buffer.length) {
+    return {
+      durationSeconds: 0,
+      found: false,
+      bytesNeeded: mvhdHeader.end,
+    };
+  }
+
+  const parsed = parseMvhdBox(mvhdHeader, buffer);
+  if (!parsed) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  return {
+    durationSeconds: parsed.durationSeconds,
+    found: true,
+    bytesNeeded: 0,
+  };
+}
+
+/**
+ * Probe a buffer (typically first N bytes of a video file) for duration.
+ *
+ * First tries to find moov→mvhd in the buffer. If not found,
+ * returns bytesNeeded to read from the end of the file (since moov
+ * may be at the end for non-fast-start files).
+ *
+ * Returns null if the buffer isn't an ISO BMFF container, or if
+ * no mvhd is found and no reasonable follow-up strategy exists.
+ */
+/**
+ * Search for moov→mvhd directly without requiring ftyp at offset 0.
+ * Used for tail-buffer reads where the buffer doesn't start with ftyp.
+ */
+function parseMvhdDurationFromRaw(buffer: Buffer): MvhdParseResult {
+  // Scan the buffer for "moov" magic bytes directly, because the
+  // buffer may start with arbitrary data (e.g. mdat payload when
+  // reading from the tail of a non-fast-start file). Box-walking
+  // from offset 0 would be confused by garbage.
+  let moovHeader: BoxHeader | null = null;
+  for (let scanOff = 0; scanOff + 8 <= buffer.length; scanOff++) {
+    if (
+      buffer[scanOff + 4] === 0x6d && // 'm'
+      buffer[scanOff + 5] === 0x6f && // 'o'
+      buffer[scanOff + 6] === 0x6f && // 'o'
+      buffer[scanOff + 7] === 0x76 // 'v'
+    ) {
+      // Potential moov box — try to read its header.
+      const header = readBoxHeader(buffer, scanOff);
+      if (header && header.type === "moov") {
+        moovHeader = header;
+        break;
+      }
+    }
+  }
+
+  if (!moovHeader) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  // Ensure moov box is fully within the buffer.
+  if (moovHeader.end > buffer.length) {
+    return {
+      durationSeconds: 0,
+      found: false,
+      bytesNeeded: moovHeader.end,
+    };
+  }
+
+  // Find mvhd box inside moov.
+  const mvhdHeader = findFirstChildBox(
+    buffer,
+    moovHeader.dataStart,
+    moovHeader.end,
+    "mvhd",
+  );
+
+  if (!mvhdHeader) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  if (mvhdHeader.end > buffer.length) {
+    return {
+      durationSeconds: 0,
+      found: false,
+      bytesNeeded: mvhdHeader.end,
+    };
+  }
+
+  const parsed = parseMvhdBox(mvhdHeader, buffer);
+  if (!parsed) {
+    return { durationSeconds: 0, found: false, bytesNeeded: 0 };
+  }
+
+  return {
+    durationSeconds: parsed.durationSeconds,
+    found: true,
+    bytesNeeded: 0,
+  };
+}
+
+export function probeVideoDuration(
+  buffer: Buffer,
+  fileSize?: number,
+): { durationSeconds: number; bytesNeeded: number; found: boolean } {
+  // 1. Try the head-read path: requires ftyp at offset 0.
+  if (isAnyIsoBmff(buffer)) {
+    const result = parseMvhdDuration(buffer);
+    if (result.found) {
+      return result;
+    }
+
+    // If not found and fileSize is known and larger than buffer,
+    // signal that a tail read may contain the moov box.
+    if (fileSize && fileSize > buffer.length) {
+      return { found: false, durationSeconds: 0, bytesNeeded: buffer.length };
+    }
+
+    return { found: false, durationSeconds: 0, bytesNeeded: 0 };
+  }
+
+  // 2. Try the tail-read path: search for moov→mvhd directly without ftyp.
+  const tailResult = parseMvhdDurationFromRaw(buffer);
+  if (tailResult.found) {
+    return tailResult;
+  }
+
+  return { found: false, durationSeconds: 0, bytesNeeded: 0 };
+}
+
+// ---------------------------------------------------------------------------
 // Bounded-retry extraction (for controller use)
 // ---------------------------------------------------------------------------
 

@@ -87,6 +87,9 @@ export class Upload extends BaseEntity {
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;
 
+  @Column({ name: "failure_reason", type: "varchar", nullable: true })
+  failureReason: string | null;
+
   static async createOrReject(
     ipAddress: string,
     {

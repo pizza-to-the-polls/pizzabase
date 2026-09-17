@@ -11,12 +11,15 @@ export {
   isHeif,
   isIsoBmff,
   isAnyIsoBmff,
+  parseMvhdDuration,
+  probeVideoDuration,
   MAX_EXIF_BYTES,
 } from "./extract";
 export type {
   JpegExtractResult,
   PngExtractResult,
   HeifExtractResult,
+  MvhdParseResult,
   XmpExtractResult,
   FetchMoreBytes,
 } from "./extract";

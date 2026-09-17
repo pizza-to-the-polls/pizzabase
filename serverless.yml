@@ -44,6 +44,7 @@ provider:
     MEDIA_CALLBACK_SECRET: ${env:MEDIA_CALLBACK_SECRET, ''}
     IMAGE_MAX_DIMENSION: ${env:IMAGE_MAX_DIMENSION, '1920'}
     IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
+    MEDIA_MAX_DURATION_SECONDS: ${env:MEDIA_MAX_DURATION_SECONDS, '90'}
     MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
 
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
@@ -88,6 +89,11 @@ provider:
         - "s3:*"
       Resource:
         - "arn:aws:s3:::*"
+    - Effect: "Allow"
+      Action:
+        - "lambda:InvokeFunction"
+      Resource:
+        - "arn:aws:lambda:us-west-2:*:function:pizzabase-*"
     - Effect: "Allow"
       Action:
         - "mediaconvert:CreateJob"
@@ -153,11 +159,8 @@ functions:
       IMAGE_MAX_DIMENSION: ${env:IMAGE_MAX_DIMENSION, '1920'}
       IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
       MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
-    events:
-      - s3:
-          bucket: raw.polls.pizza
-          event: s3:ObjectCreated:*
-          existing: true
+    # No direct S3 trigger: two ObjectCreated:* configs on one bucket overlap.
+    # on-s3-upload-process-exif chains this function via lambda:InvokeFunction.
 
   on-mediaconvert-complete:
     handler: build/lambdas/onMediaConvertComplete.handler

@@ -986,3 +986,314 @@ describe("extractExifFromHeif (video containers)", () => {
     expect(isAnyIsoBmff(Buffer.from("garbage"))).toBe(false);
   });
 });
+
+// ---------------------------------------------------------------------------
+// mvhd duration parsing
+// ---------------------------------------------------------------------------
+
+import { parseMvhdDuration, probeVideoDuration } from "./extract";
+
+/**
+ * Build a minimal ISO BMFF file with a moov→mvhd box at known offsets.
+ *
+ * Structure:
+ *   ftyp (24 bytes, brand "mp42")
+ *   moov (container, contains only mvhd)
+ *
+ * The mvhd box includes version, flags, creation_time, modification_time,
+ * time_scale, and duration. We support both v0 (32-bit) and v1 (64-bit).
+ */
+function buildMinimalVideoWithMvhd(
+  duration: number,
+  timeScale: number = 1000,
+  version: 0 | 1 = 0,
+): { buffer: Buffer; durationSeconds: number } {
+  let mvhdDataSize: number;
+  let mvhdData: Buffer;
+
+  if (version === 0) {
+    // mvhd full box data:
+    // version(1) + flags(3) + creation_time(4) + modification_time(4) +
+    // time_scale(4) + duration(4) = 20 bytes
+    mvhdDataSize = 20;
+    mvhdData = Buffer.alloc(mvhdDataSize);
+    mvhdData.writeUInt32BE(0, 0); // version + flags = 0
+    mvhdData.writeUInt32BE(0, 4); // creation_time
+    mvhdData.writeUInt32BE(0, 8); // modification_time
+    mvhdData.writeUInt32BE(timeScale, 12); // time_scale
+    mvhdData.writeUInt32BE(duration, 16); // duration
+  } else {
+    // v1 mvhd full box data:
+    // version(1) + flags(3) + creation_time(8) + modification_time(8) +
+    // time_scale(4) + duration(8) = 32 bytes
+    mvhdDataSize = 32;
+    mvhdData = Buffer.alloc(mvhdDataSize);
+    mvhdData.writeUInt32BE(0x01000000, 0); // version=1, flags=0
+    // creation_time: 8 bytes at offset 4
+    mvhdData.writeUInt32BE(0, 4);
+    mvhdData.writeUInt32BE(0, 8);
+    // modification_time: 8 bytes at offset 12
+    mvhdData.writeUInt32BE(0, 12);
+    mvhdData.writeUInt32BE(0, 16);
+    // time_scale: 4 bytes at offset 20
+    mvhdData.writeUInt32BE(timeScale, 20);
+    // duration: 8 bytes at offset 24
+    const durationHi = Math.floor(duration / 0x100000000);
+    const durationLo = duration % 0x100000000;
+    mvhdData.writeUInt32BE(durationHi, 24);
+    mvhdData.writeUInt32BE(durationLo, 28);
+  }
+
+  // mvhd box: header(8) + data
+  const mvhdBoxSize = 8 + mvhdDataSize;
+  const mvhdBox = Buffer.concat([
+    Buffer.from([
+      (mvhdBoxSize >> 24) & 0xff,
+      (mvhdBoxSize >> 16) & 0xff,
+      (mvhdBoxSize >> 8) & 0xff,
+      mvhdBoxSize & 0xff,
+    ]),
+    Buffer.from("mvhd", "ascii"),
+    mvhdData,
+  ]);
+
+  // moov box: header(8) + children
+  const moovBoxSize = 8 + mvhdBoxSize;
+  const moovBox = Buffer.concat([
+    Buffer.from([
+      (moovBoxSize >> 24) & 0xff,
+      (moovBoxSize >> 16) & 0xff,
+      (moovBoxSize >> 8) & 0xff,
+      moovBoxSize & 0xff,
+    ]),
+    Buffer.from("moov", "ascii"),
+    mvhdBox,
+  ]);
+
+  // ftyp box: 24 bytes
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftyp.write("mp42", 8, 4, "ascii");
+  ftyp.writeUInt32BE(0, 12);
+  ftyp.write("isom", 16, 4, "ascii");
+
+  const buffer = Buffer.concat([ftyp, moovBox]);
+
+  return {
+    buffer,
+    durationSeconds: duration / timeScale,
+  };
+}
+
+/**
+ * Build a minimal ISO BMFF file with the moov box at the end (non-fast-start).
+ */
+function buildMinimalVideoWithMvhdAtEnd(
+  duration: number,
+  timeScale: number = 1000,
+  version: 0 | 1 = 0,
+  dummyBytesBeforeMoov: number = 65536,
+): { buffer: Buffer; durationSeconds: number } {
+  const { buffer: moovBuf } = buildMinimalVideoWithMvhd(
+    duration,
+    timeScale,
+    version,
+  );
+
+  // ftyp (24) + dummy mdat (dummyBytesBeforeMoov - 24) + moov
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftyp.write("mp42", 8, 4, "ascii");
+  ftyp.writeUInt32BE(0, 12);
+  ftyp.write("isom", 16, 4, "ascii");
+
+  const mdatPayloadSize = dummyBytesBeforeMoov - 24;
+
+  // mdat box: header(8) + payload
+  const mdatBoxSize = 8 + mdatPayloadSize;
+  const mdatHeader = Buffer.alloc(8);
+  mdatHeader.writeUInt32BE(mdatBoxSize, 0);
+  mdatHeader.write("mdat", 4, 4, "ascii");
+  const mdatPayload = Buffer.alloc(mdatPayloadSize, 0);
+  const mdat = Buffer.concat([mdatHeader, mdatPayload]);
+
+  const buffer = Buffer.concat([ftyp, mdat, moovBuf.slice(24)]); // skip ftyp from moovBuf
+
+  return {
+    buffer,
+    durationSeconds: duration / timeScale,
+  };
+}
+
+describe("parseMvhdDuration", () => {
+  it("parses mvhd v0 duration correctly (30s)", () => {
+    const { buffer, durationSeconds } = buildMinimalVideoWithMvhd(
+      30000,
+      1000,
+      0,
+    );
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(durationSeconds, 2);
+    expect(result.bytesNeeded).toBe(0);
+  });
+
+  it("parses mvhd v0 duration correctly (120s)", () => {
+    const { buffer, durationSeconds } = buildMinimalVideoWithMvhd(
+      120000,
+      1000,
+      0,
+    );
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(durationSeconds, 2);
+  });
+
+  it("parses mvhd v0 duration at boundary (90s exactly)", () => {
+    const { buffer, durationSeconds } = buildMinimalVideoWithMvhd(
+      90000,
+      1000,
+      0,
+    );
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(durationSeconds, 2);
+    expect(result.durationSeconds).toBe(90);
+  });
+
+  it("parses mvhd v0 with time_scale=1000, duration=90001 (just over 90s)", () => {
+    const { buffer } = buildMinimalVideoWithMvhd(90001, 1000, 0);
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBe(90.001);
+  });
+
+  it("parses mvhd v1 duration correctly (30s)", () => {
+    const { buffer, durationSeconds } = buildMinimalVideoWithMvhd(
+      30000,
+      1000,
+      1,
+    );
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(durationSeconds, 2);
+  });
+
+  it("parses mvhd v1 duration with large 64-bit value", () => {
+    // 3600 seconds (1 hour) with time_scale=1000 → duration=3600000
+    const { buffer, durationSeconds } = buildMinimalVideoWithMvhd(
+      3600000,
+      1000,
+      1,
+    );
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(durationSeconds, 2);
+  });
+
+  it("handles time_scale correctly (duration 60s @ 30fps → time_scale=30)", () => {
+    // Video at 30fps may have time_scale=30, duration=1800 (60s * 30)
+    const { buffer } = buildMinimalVideoWithMvhd(1800, 30, 0);
+    const result = parseMvhdDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(60, 2);
+  });
+
+  it("returns not found for buffer with no moov box", () => {
+    // Just ftyp, no moov
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    const result = parseMvhdDuration(ftyp);
+    expect(result.found).toBe(false);
+  });
+
+  it("returns not found for non-ISO BMFF data (JPEG)", () => {
+    const result = parseMvhdDuration(brooklynJpeg);
+    expect(result.found).toBe(false);
+  });
+
+  it("returns not found for empty buffer", () => {
+    const result = parseMvhdDuration(Buffer.alloc(0));
+    expect(result.found).toBe(false);
+  });
+
+  it("returns not found for buffer too short to contain ftyp", () => {
+    const result = parseMvhdDuration(Buffer.alloc(10));
+    expect(result.found).toBe(false);
+  });
+
+  it("signals truncation when moov box extends beyond buffer", () => {
+    // Create a buffer with ftyp + partial moov (truncated before mvhd)
+    const { buffer: fullBuffer } = buildMinimalVideoWithMvhd(30000, 1000, 0);
+    // Cut off right after the moov box header (at ftyp(24) + 8 = 32)
+    const truncated = fullBuffer.slice(0, 32);
+    const result = parseMvhdDuration(truncated);
+    expect(result.found).toBe(false);
+    // moov box should signal truncation when its children can't be read
+    // (the moov header itself is within the buffer, so it returns bytesNeeded)
+    // Actually, since the moov box extends beyond the buffer, the findFirstChildBox
+    // calls readBoxHeader which checks bounds and returns null, then we check
+    // if moovHeader.end > buffer.length → yes, so bytesNeeded > 0.
+    expect(result.bytesNeeded).toBeGreaterThan(0);
+  });
+
+  it("returns not found when moov has no mvhd child", () => {
+    const { buffer: fullBuffer } = buildMinimalVideoWithMvhd(30000, 1000, 0);
+    // Replace "mvhd" with "xxxx" in the moov child
+    const idx = fullBuffer.indexOf("mvhd");
+    expect(idx).toBeGreaterThan(0);
+    fullBuffer.write("xxxx", idx, 4, "ascii");
+
+    const result = parseMvhdDuration(fullBuffer);
+    expect(result.found).toBe(false);
+  });
+});
+
+describe("probeVideoDuration", () => {
+  it("returns found with duration when moov is in initial buffer", () => {
+    const { buffer, durationSeconds } = buildMinimalVideoWithMvhd(
+      45000,
+      1000,
+      0,
+    );
+    const result = probeVideoDuration(buffer);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(durationSeconds, 2);
+  });
+
+  it("returns not found for non-ISO BMFF data", () => {
+    const result = probeVideoDuration(Buffer.from("not a video"));
+    expect(result.found).toBe(false);
+  });
+
+  it("returns not found for JPEG data", () => {
+    const result = probeVideoDuration(brooklynJpeg);
+    expect(result.found).toBe(false);
+  });
+
+  it("returns bytesNeeded when moov is not in initial buffer but fileSize is larger", () => {
+    const { buffer } = buildMinimalVideoWithMvhdAtEnd(30000, 1000, 0, 65536);
+    // Read only first 64KB — moov is at the end
+    const headSlice = buffer.slice(0, 65536);
+    const result = probeVideoDuration(headSlice, buffer.length);
+    expect(result.found).toBe(false);
+    expect(result.bytesNeeded).toBeGreaterThan(0);
+  });
+
+  it("finds duration from tail when moov is at end of file", () => {
+    const { buffer } = buildMinimalVideoWithMvhdAtEnd(30000, 1000, 0, 65536);
+    // Simulate tail read: last 64KB
+    const tailStart = Math.max(0, buffer.length - 65536);
+    const tailSlice = buffer.slice(tailStart);
+    const result = probeVideoDuration(tailSlice);
+    expect(result.found).toBe(true);
+    expect(result.durationSeconds).toBeCloseTo(30, 2);
+  });
+});
