@@ -136,6 +136,9 @@ functions:
     timeout: 60
     memorySize: 512
     environment:
+      # Chain target must be this stage's own function (dev/stage confusion
+      # otherwise — MediaConvert events were landing in the wrong DB).
+      MEDIA_FORMAT_FUNCTION_NAME: pizzabase-${sls:stage}-on-media-format
       UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
       AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
       AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
