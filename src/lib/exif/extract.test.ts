@@ -4,6 +4,8 @@ import {
   extractExifFromPng,
   extractExifFromHeif,
   extractExifWithRetry,
+  isVideoIsoBmff,
+  extractDuration,
   MAX_EXIF_BYTES,
 } from "./extract";
 import {
@@ -984,5 +986,259 @@ describe("extractExifFromHeif (video containers)", () => {
     expect(isAnyIsoBmff(brooklynJpeg)).toBe(false);
     expect(isAnyIsoBmff(losAngelesPng)).toBe(false);
     expect(isAnyIsoBmff(Buffer.from("garbage"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// isVideoIsoBmff
+// ---------------------------------------------------------------------------
+
+describe("isVideoIsoBmff", () => {
+  const brooklynTiff = extractExifFromJpeg(brooklynJpeg).tiff!;
+
+  it("returns true for mp42 brand", () => {
+    const { buffer } = buildMinimalMp4(brooklynTiff, "mp42");
+    expect(isVideoIsoBmff(buffer)).toBe(true);
+  });
+
+  it("returns true for qt brand (MOV)", () => {
+    const { buffer } = buildMinimalMp4(brooklynTiff, "qt  ");
+    expect(isVideoIsoBmff(buffer)).toBe(true);
+  });
+
+  it("returns true for isom brand", () => {
+    const { buffer } = buildMinimalMp4(brooklynTiff, "isom");
+    expect(isVideoIsoBmff(buffer)).toBe(true);
+  });
+
+  it("returns false for HEIF brand (heic)", () => {
+    const { buffer } = buildMinimalHeif(brooklynTiff);
+    expect(isVideoIsoBmff(buffer)).toBe(false);
+  });
+
+  it("returns false for mif1 brand (HEIF compatible)", () => {
+    const { buffer } = buildMinimalMp4(brooklynTiff, "mif1");
+    expect(isVideoIsoBmff(buffer)).toBe(false);
+  });
+
+  it("returns false for JPEG data", () => {
+    expect(isVideoIsoBmff(brooklynJpeg)).toBe(false);
+  });
+
+  it("returns false for PNG data", () => {
+    expect(isVideoIsoBmff(losAngelesPng)).toBe(false);
+  });
+
+  it("returns false for random bytes", () => {
+    expect(isVideoIsoBmff(Buffer.from("garbage"))).toBe(false);
+    expect(isVideoIsoBmff(Buffer.alloc(0))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// extractDuration (mvhd box parsing)
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal ISO BMFF file with ftyp(mp42) + moov(mvhd)
+ * for testing extractDuration.
+ */
+function buildMp4WithMvhd(
+  timescale: number,
+  durationRaw: number,
+  version: 0 | 1,
+): Buffer {
+  // ftyp box (24 bytes)
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftyp.write("mp42", 8, 4, "ascii");
+  ftyp.writeUInt32BE(0, 12);
+  ftyp.write("isom", 16, 4, "ascii");
+
+  // mvhd box
+  // v0 body: 4(ver+flags) + 4(ctime) + 4(mtime) + 4(tscale) + 4(dur) + 80(fixed) = 100
+  // v1 body: 4 + 8(ctime) + 8(mtime) + 4(tscale) + 8(dur) + 80(fixed) = 112
+  const bodySize = version === 1 ? 112 : 100;
+  const boxSize = 8 + bodySize;
+  const mvhd = Buffer.alloc(boxSize);
+  mvhd.writeUInt32BE(boxSize, 0);
+  mvhd.write("mvhd", 4, 4, "ascii");
+  // version
+  mvhd[8] = version;
+  // flags[3] at 9-11 already zero
+
+  if (version === 1) {
+    // creation_time(8) + modification_time(8) at 12-27
+    mvhd.writeUInt32BE(0, 12);
+    mvhd.writeUInt32BE(0, 16);
+    mvhd.writeUInt32BE(0, 20);
+    mvhd.writeUInt32BE(0, 24);
+    // timescale(4) at 28 (dataStart + 20)
+    mvhd.writeUInt32BE(timescale, 28);
+    // duration(8) at 32 (dataStart + 24)
+    const hi = Math.floor(durationRaw / 0x100000000);
+    const lo = durationRaw % 0x100000000;
+    mvhd.writeUInt32BE(hi, 32);
+    mvhd.writeUInt32BE(lo, 36);
+    // rate(4) = 0x00010000 at 40
+    mvhd.writeUInt32BE(0x00010000, 40);
+    // volume(2) = 0x0100, reserved(2) = 0 at 44
+    mvhd.writeUInt16BE(0x0100, 44);
+    // remaining fixed fields already zero
+  } else {
+    // creation_time(4) + modification_time(4) at 12-19
+    mvhd.writeUInt32BE(0, 12);
+    mvhd.writeUInt32BE(0, 16);
+    // timescale(4) at 20 (dataStart + 12)
+    mvhd.writeUInt32BE(timescale, 20);
+    // duration(4) at 24 (dataStart + 16)
+    mvhd.writeUInt32BE(durationRaw, 24);
+    // rate(4) = 0x00010000 at 28
+    mvhd.writeUInt32BE(0x00010000, 28);
+    // volume(2) = 0x0100, reserved(2) = 0 at 32
+    mvhd.writeUInt16BE(0x0100, 32);
+    // remaining fixed fields already zero
+  }
+
+  // moov box
+  const moov = Buffer.alloc(8 + mvhd.length);
+  moov.writeUInt32BE(8 + mvhd.length, 0);
+  moov.write("moov", 4, 4, "ascii");
+  mvhd.copy(moov, 8);
+
+  return Buffer.concat([ftyp, moov]);
+}
+
+describe("extractDuration", () => {
+  it("parses v0 mvhd duration correctly (30s)", () => {
+    // duration = 3000, timescale = 100 →30 s
+    const buf = buildMp4WithMvhd(100, 3000, 0);
+    expect(extractDuration(buf)).toBeCloseTo(30, 4);
+  });
+
+  it("parses v0 mvhd duration correctly (412s)", () => {
+    const buf = buildMp4WithMvhd(1000, 412000, 0); // 412000/1000 = 412s
+    expect(extractDuration(buf)).toBeCloseTo(412, 4);
+  });
+
+  it("parses v1 mvhd duration correctly (30s)", () => {
+    const buf = buildMp4WithMvhd(100, 3000, 1);
+    expect(extractDuration(buf)).toBeCloseTo(30, 4);
+  });
+
+  it("parses v1 mvhd duration correctly (412s)", () => {
+    const buf = buildMp4WithMvhd(1000, 412000, 1);
+    expect(extractDuration(buf)).toBeCloseTo(412, 4);
+  });
+
+  it("parses boundary value (90s exactly)", () => {
+    const bufV0 = buildMp4WithMvhd(100, 9000, 0);
+    expect(extractDuration(bufV0)).toBeCloseTo(90, 4);
+
+    const bufV1 = buildMp4WithMvhd(100, 9000, 1);
+    expect(extractDuration(bufV1)).toBeCloseTo(90, 4);
+  });
+
+  it("parses v1 with large 64-bit duration (within safe int)", () => {
+    const buf = buildMp4WithMvhd(1000, 90000, 1); // 90000/1000 = 90s
+    expect(extractDuration(buf)).toBeCloseTo(90, 4);
+  });
+
+  it("returns null for HEIF container (no moov/mvhd)", () => {
+    const brooklynTiff = extractExifFromJpeg(brooklynJpeg).tiff!;
+    const { buffer: heifBuf } = buildMinimalHeif(brooklynTiff);
+    expect(extractDuration(heifBuf)).toBeNull();
+  });
+
+  it("returns null for truncated file without moov", () => {
+    const ftypOnly = Buffer.alloc(24);
+    ftypOnly.writeUInt32BE(24, 0);
+    ftypOnly.write("ftyp", 4, 4, "ascii");
+    ftypOnly.write("mp42", 8, 4, "ascii");
+    ftypOnly.writeUInt32BE(0, 12);
+    ftypOnly.write("isom", 16, 4, "ascii");
+    expect(extractDuration(ftypOnly)).toBeNull();
+  });
+
+  it("returns null for empty buffer", () => {
+    expect(extractDuration(Buffer.alloc(0))).toBeNull();
+  });
+
+  it("returns null for JPEG data", () => {
+    expect(extractDuration(brooklynJpeg)).toBeNull();
+  });
+
+  it("returns null when moov has no mvhd child", () => {
+    const ftyp = Buffer.alloc(20);
+    ftyp.writeUInt32BE(20, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    const moovChildren = Buffer.alloc(4); // just version+flags, no children
+    moovChildren.writeUInt32BE(0, 0);
+
+    const moov = Buffer.alloc(8 + moovChildren.length);
+    moov.writeUInt32BE(8 + moovChildren.length, 0);
+    moov.write("moov", 4, 4, "ascii");
+    moovChildren.copy(moov, 8);
+
+    const buf = Buffer.concat([ftyp, moov]);
+    expect(extractDuration(buf)).toBeNull();
+  });
+
+  it("returns null when timescale is zero", () => {
+    const buf = buildMp4WithMvhd(0, 3000, 0);
+    expect(extractDuration(buf)).toBeNull();
+  });
+
+  it("handles fractional duration", () => {
+    const buf = buildMp4WithMvhd(3000, 1000, 0);
+    expect(extractDuration(buf)).toBeCloseTo(1 / 3, 4);
+  });
+
+  it("returns null when mvhd box is truncated", () => {
+    const full = buildMp4WithMvhd(100, 3000, 0);
+    // ftyp=24, moov header=8, moov fullbox=4, mvhd header=8, mvhd body needs 20 bytes
+    // offset of duration end: 24+8+4+8+20 = 44
+    // truncate at 43 (before duration field)
+    const truncated = full.slice(0, 43);
+    expect(extractDuration(truncated)).toBeNull();
+  });
+
+  it("returns null for v1 mvhd when hi exceeds safe int range", () => {
+    const bodySize = 112;
+    const boxSize = 8 + bodySize;
+    const mvhd = Buffer.alloc(boxSize);
+    mvhd.writeUInt32BE(boxSize, 0);
+    mvhd.write("mvhd", 4, 4, "ascii");
+    mvhd[8] = 1; // version 1
+    // timescale at dataStart+20 = 8+4+20 = 32
+    mvhd.writeUInt32BE(100, 32);
+    // duration hi at dataStart+24=36
+    mvhd.writeUInt32BE(0x00200000, 36); // hi > 0x001fffff
+    mvhd.writeUInt32BE(0, 40);
+
+    // moov as full box with version+flags
+    const moovChildren = Buffer.alloc(4 + mvhd.length);
+    moovChildren.writeUInt32BE(0, 0); // version+flags
+    mvhd.copy(moovChildren, 4);
+
+    const moov = Buffer.alloc(8 + moovChildren.length);
+    moov.writeUInt32BE(8 + moovChildren.length, 0);
+    moov.write("moov", 4, 4, "ascii");
+    moovChildren.copy(moov, 8);
+
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    const buf = Buffer.concat([ftyp, moov]);
+    expect(extractDuration(buf)).toBeNull();
   });
 });

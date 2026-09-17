@@ -675,8 +675,9 @@ export function extractDuration(buffer: Buffer): number | null {
 
   if (!moovHeader) return null;
 
-  // moov is a full box — skip the 4-byte version+flags before children
-  const moovChildrenStart = moovHeader.dataStart + 4;
+  // moov is a container box, not a full box — children start directly
+  // after the 8-byte header (no version+flags to skip)
+  const moovChildrenStart = moovHeader.dataStart;
   if (moovChildrenStart > moovHeader.end) return null;
 
   let durationResult: number | null = null;
