@@ -22,14 +22,50 @@ export class SightEngineController {
       return { score: upload.sightengineScore, cached: true };
     }
 
-    // API call (costs credits)
-    const S3_BUCKET = process.env.UPLOAD_S3_BUCKET;
-    const { score } = await checkImage(S3_BUCKET!, upload.filePath);
+    // Determine which object to moderate:
+    //   - Pipeline uploads keep raws in the private raw bucket and processed
+    //     outputs under uploads/<id>/ in the processed bucket — moderate the
+    //     scrubbed processed image, not the raw.
+    //   - Legacy uploads live in the processed bucket under their original
+    //     key — moderate in place.
+    const bucket = process.env.UPLOAD_S3_BUCKET!;
+    let key = upload.filePath;
 
-    // Store result
-    upload.sightengineScore = score;
-    await upload.save();
+    if (upload.rawFilePath) {
+      const processed = upload.processedFilePath as Record<
+        string,
+        string
+      > | null;
+      const processedUrl = processed?.webp || processed?.jpeg || processed?.gif;
 
-    return { score, cached: false };
+      if (!processedUrl) {
+        response.status(409);
+        return {
+          errors: [
+            `Processing incomplete for upload ${upload.id} (media_status: ${upload.mediaStatus})`,
+          ],
+        };
+      }
+
+      const parsed = new URL(processedUrl);
+      key = parsed.pathname.replace(`/${bucket}/`, "");
+    }
+
+    try {
+      const { score } = await checkImage(bucket, key);
+
+      // Store result
+      upload.sightengineScore = score;
+      await upload.save();
+
+      return { score, cached: false };
+    } catch (err) {
+      console.error(
+        `[SightEngine] check failed for upload ${upload.id} (s3://${bucket}/${key}):`,
+        err,
+      );
+      response.status(502);
+      return { errors: ["SightEngine check failed"] };
+    }
   }
 }
