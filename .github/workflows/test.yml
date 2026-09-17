@@ -162,6 +162,7 @@ jobs:
           # RAW_UPLOADS_BUCKET secret (env-separated so each stage's stack
           # owns its own S3 notification trigger without overlap).
           RAW_UPLOADS_BUCKET: raw.polls.pizza
+          MEDIA_CDN_DOMAIN: media.polls.pizza
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
