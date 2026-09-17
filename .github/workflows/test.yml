@@ -158,7 +158,10 @@ jobs:
           SIGHTENGINE_API_SECRET: ${{ secrets.SIGHTENGINE_API_SECRET }}
 
           # Media pipeline infra (see docs/issue-164-infra-setup.md)
-          RAW_UPLOADS_BUCKET: ${{ secrets.RAW_UPLOADS_BUCKET }}
+          # Staging keeps its own raw bucket; prod uses raw-prod via the
+          # RAW_UPLOADS_BUCKET secret (env-separated so each stage's stack
+          # owns its own S3 notification trigger without overlap).
+          RAW_UPLOADS_BUCKET: raw.polls.pizza
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
