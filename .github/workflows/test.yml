@@ -157,8 +157,13 @@ jobs:
           SIGHTENGINE_API_USER: ${{ secrets.SIGHTENGINE_API_USER }}
           SIGHTENGINE_API_SECRET: ${{ secrets.SIGHTENGINE_API_SECRET }}
 
-          # Social posting is prod-only — staging skips it cleanly
-          # (social-config treats empty creds as a no-op gate).
+          # Media pipeline infra (see docs/issue-164-infra-setup.md)
+          RAW_UPLOADS_BUCKET: ${{ secrets.RAW_UPLOADS_BUCKET }}
+          MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
+          AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+          # Social posting is prod-only — staging deploys without social
+          # credentials; social-config treats empty creds as a clean no-op.
 
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 

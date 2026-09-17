@@ -1,6 +1,7 @@
 import type { Order } from "../entity/Order";
 import { IntegrationSession } from "../entity/IntegrationSession";
 import { AppDataSource } from "../data-source";
+import { QueryFailedError } from "typeorm";
 import { notifyBugsnag } from "./notifyBugsnag";
 import {
   renderMessage,
@@ -210,7 +211,18 @@ async function getOrCreateSession(): Promise<SessionData> {
     };
     try {
       await repo.save(sessionRow);
-    } catch {
+    } catch (err) {
+      // Only a unique-constraint race (another invocation committed the
+      // session between our findOne and save) should fall back to the
+      // winner's row. Any other save error (connection failure, FK violation,
+      // deadlock...) must propagate — treating it as a race would silently
+      // drop the real failure.
+      const isUniqueViolation =
+        err instanceof QueryFailedError &&
+        (err as QueryFailedError & { code?: string }).code === "23505";
+      if (!isUniqueViolation) {
+        throw err;
+      }
       // Race: another invocation created the session between findOne and
       // save. Reload the winner's row and use its credentials.
       const existing = await repo.findOne({ where: { service: "bluesky" } });
@@ -440,7 +452,42 @@ function isValidVideoFormat(contentType: string): boolean {
 }
 
 /**
- * Try to upload a video to BlueSky.
+ * Resolve the mimeType to declare for a video blob.
+ *
+ * Storage/transcode layers sometimes serve MP4-family content with
+ * non-canonical types (e.g. MediaConvert output served as video/x-m4v) —
+ * BlueSky rejects records whose mimeType doesn't match its own sniffing
+ * ("Expected video/mp4"). Trust the URL extension first, fall back to the
+ * served content-type, and normalize known-equivalent types to mp4.
+ */
+function resolveVideoMimeType(
+  videoUrl: string,
+  servedContentType: string,
+): string {
+  const ext = videoUrl.split(".").pop()?.toLowerCase() || "";
+  const EXT_MIME: Record<string, string> = {
+    mp4: "video/mp4",
+    m4v: "video/mp4",
+    mov: "video/quicktime",
+    webm: "video/webm",
+    mpeg: "video/mpeg",
+  };
+  if (EXT_MIME[ext]) {
+    return EXT_MIME[ext];
+  }
+  if (servedContentType === "video/x-m4v") {
+    return "video/mp4";
+  }
+  return servedContentType;
+}
+
+/**
+ * Upload a video blob to BlueSky, streaming the download into the upload
+ * request. Buffering a 50 MB video into memory is wasteful and risks OOM on
+ * memory-constrained Lambdas; a stream keeps memory flat regardless of size.
+ *
+ * A consumed stream cannot be rewound, so a 5xx retry re-downloads the video
+ * instead of reusing the stream.
  */
 async function uploadVideoBlob(
   pdsUrl: string,
@@ -461,12 +508,65 @@ async function uploadVideoBlob(
   }
 
   try {
-    const { buffer, contentType } = await downloadBlob(videoUrl);
+    const downloadResponse = await fetch(videoUrl);
+    if (!downloadResponse.ok) {
+      throw new Error(
+        `Failed to download video from ${videoUrl}: ${downloadResponse.status}`,
+      );
+    }
 
+    const servedContentType =
+      downloadResponse.headers.get("content-type") ||
+      "application/octet-stream";
+    const contentType = resolveVideoMimeType(videoUrl, servedContentType);
+    console.log(
+      `[bluesky] video ${videoUrl}: served as ${servedContentType}, uploading as ${contentType}`,
+    );
     if (!isValidVideoFormat(contentType)) {
       console.warn(`Unsupported video format: ${contentType}, skipping`);
       return null;
     }
+
+    const url = `${pdsUrl}/xrpc/com.atproto.repo.uploadBlob`;
+    const headers = {
+      Authorization: `Bearer ${accessJwt}`,
+      "Content-Type": contentType,
+    };
+
+    if (downloadResponse.body) {
+      const send = (body: ReadableStream<Uint8Array>) =>
+        fetch(url, {
+          method: "POST",
+          headers,
+          body: body as any,
+          // undici requires duplex "half" for streaming request bodies
+          duplex: "half",
+        } as RequestInit);
+
+      let uploadResponse = await send(downloadResponse.body);
+
+      if (uploadResponse.status >= 500) {
+        // Stream is consumed — re-download and retry once
+        const retryDownload = await fetch(videoUrl);
+        if (retryDownload.ok && retryDownload.body) {
+          uploadResponse = await send(retryDownload.body);
+        }
+      }
+
+      if (!uploadResponse.ok) {
+        const text = await uploadResponse.text();
+        throw new Error(
+          `Failed to upload blob to BlueSky: ${uploadResponse.status} ${text}`,
+        );
+      }
+
+      const data = (await uploadResponse.json()) as UploadBlobResponse;
+      return { blob: data.blob, alt };
+    }
+
+    // Buffered fallback (older runtimes without streaming response bodies)
+    const arrayBuffer = await downloadResponse.arrayBuffer();
+    const buffer = Buffer.from(arrayBuffer);
 
     if (buffer.byteLength > BLUESKY_VIDEO_LIMIT) {
       console.warn(

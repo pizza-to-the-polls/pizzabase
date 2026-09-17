@@ -201,19 +201,31 @@ async function uploadImage(media: MediaItem): Promise<string | null> {
 // ---------------------------------------------------------------------------
 
 async function uploadVideo(media: MediaItem): Promise<string | null> {
-  // Download the video
-  const downloadResponse = await fetch(media.url);
-  if (!downloadResponse.ok) {
-    throw new Error(
-      `Failed to download video: ${downloadResponse.status} ${downloadResponse.statusText}`,
-    );
+  // --- STEP 0: HEAD to learn the size WITHOUT buffering the video in memory.
+  // Buffering a 500 MB video into a 1 GB Lambda can OOM the invocation, so
+  // the size cap must be enforced before any bytes are downloaded.
+  let totalBytes = -1;
+  try {
+    const headResponse = await fetch(media.url, { method: "HEAD" });
+    const contentLength = headResponse.headers.get("content-length");
+    if (contentLength) {
+      totalBytes = parseInt(contentLength, 10);
+    }
+  } catch {
+    totalBytes = -1;
   }
-  const buffer = Buffer.from(await downloadResponse.arrayBuffer());
+
+  if (totalBytes === -1) {
+    console.warn(
+      `Twitter: could not determine video size via HEAD, skipping: ${media.url}`,
+    );
+    return null;
+  }
 
   // Max video size: 512 MB
-  if (buffer.length > 512 * 1024 * 1024) {
+  if (totalBytes > 512 * 1024 * 1024) {
     console.warn(
-      `Twitter: video too large (${buffer.length} bytes), skipping: ${media.url}`,
+      `Twitter: video too large (${totalBytes} bytes), skipping: ${media.url}`,
     );
     return null;
   }
@@ -231,7 +243,7 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
   const initParams: Record<string, string> = {
     command: "INIT",
     media_type: mediaType,
-    total_bytes: buffer.length.toString(),
+    total_bytes: totalBytes.toString(),
   };
   const initBaseUrl = `${TWITTER_UPLOAD_BASE}/1.1/media/upload.json`;
   const initOAuth = generateOAuthHeader("POST", initBaseUrl, initParams);
@@ -257,36 +269,87 @@ async function uploadVideo(media: MediaItem): Promise<string | null> {
   const initData = (await initResponse.json()) as TwitterMediaUploadResponse;
   const media_id_string = initData.media_id_string;
 
-  // --- STEP 2: APPEND ---
-  const appendForm = new FormData();
-  appendForm.append("command", "APPEND");
-  appendForm.append("media_id", media_id_string);
-  appendForm.append("segment_index", "0");
-  appendForm.append("media", buffer, {
-    filename: "video.mp4",
-    contentType: mediaType,
-  });
-
+  // --- STEP 2: APPEND (streamed, in chunks) ---
+  // Twitter's v1.1 media API requires 1-5 MB segments per APPEND call; the
+  // previous implementation sent the entire video as segment 0, which only
+  // worked under ~5 MB. Streaming the download into 4 MB chunks also keeps
+  // memory bounded for large videos.
+  const VIDEO_CHUNK_SIZE = 4 * 1024 * 1024; // 4 MB
   const appendBaseUrl = `${TWITTER_UPLOAD_BASE}/1.1/media/upload.json`;
-  const appendOAuth = generateOAuthHeader("POST", appendBaseUrl);
-  const appendHeaders = appendForm.getHeaders();
-  const appendBody = appendForm.getBuffer();
 
-  const appendResponse = await fetch(appendBaseUrl, {
-    method: "POST",
-    headers: {
-      Authorization: appendOAuth,
-      ...appendHeaders,
-    },
-    body: appendBody,
-  });
+  const appendChunk = async (
+    chunk: Buffer,
+    segmentIndex: number,
+  ): Promise<void> => {
+    const appendForm = new FormData();
+    appendForm.append("command", "APPEND");
+    appendForm.append("media_id", media_id_string);
+    appendForm.append("segment_index", String(segmentIndex));
+    appendForm.append("media", chunk, {
+      filename: "video.mp4",
+      contentType: mediaType,
+    });
 
-  if (!appendResponse.ok) {
-    const errBody = await appendResponse.json().catch(() => ({}));
+    // A fresh signature per request — the nonce must be unique
+    const appendOAuth = generateOAuthHeader("POST", appendBaseUrl);
+
+    const appendResponse = await fetch(appendBaseUrl, {
+      method: "POST",
+      headers: {
+        Authorization: appendOAuth,
+        ...appendForm.getHeaders(),
+      },
+      body: appendForm.getBuffer(),
+    });
+
+    if (!appendResponse.ok) {
+      const errBody = await appendResponse.json().catch(() => ({}));
+      throw new Error(
+        `Twitter video APPEND failed (segment ${segmentIndex}): ${appendResponse.status} ${JSON.stringify(
+          errBody,
+        )}`,
+      );
+    }
+  };
+
+  const downloadResponse = await fetch(media.url);
+  if (!downloadResponse.ok || !downloadResponse.body) {
     throw new Error(
-      `Twitter video APPEND failed: ${appendResponse.status} ${JSON.stringify(
-        errBody,
-      )}`,
+      `Failed to download video: ${downloadResponse.status} ${downloadResponse.statusText}`,
+    );
+  }
+
+  const reader = downloadResponse.body.getReader();
+  let pending = Buffer.alloc(0);
+  let segmentIndex = 0;
+  let appendedBytes = 0;
+
+  try {
+    for (;;) {
+      const { done, value } = await reader.read();
+      if (done) break;
+      pending = Buffer.concat([pending, Buffer.from(value)]);
+      if (pending.length >= VIDEO_CHUNK_SIZE) {
+        await appendChunk(pending, segmentIndex++);
+        appendedBytes += pending.length;
+        pending = Buffer.alloc(0);
+      }
+    }
+    if (pending.length > 0) {
+      await appendChunk(pending, segmentIndex++);
+      appendedBytes += pending.length;
+    }
+  } catch (err) {
+    // A consumed stream cannot be rewound, so a failed APPEND cannot be
+    // retried in place — surface the error. twitterPost's per-media catch
+    // logs it and continues with the remaining media.
+    await reader.cancel().catch(() => {});
+    throw err;
+  }
+
+  if (appendedBytes !== totalBytes) {
+    console.warn(
+      `Twitter: appended byte count (${appendedBytes}) does not match HEAD content-length (${totalBytes}) for ${media.url}`,
     );
   }
 

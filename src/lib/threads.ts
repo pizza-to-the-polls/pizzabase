@@ -131,8 +131,8 @@ async function postTextOnly(text: string): Promise<string | null> {
  */
 async function waitForContainerReady(
   creationId: string,
-  maxAttempts: number = 8,
-  intervalMs: number = 2000,
+  maxAttempts: number = 60,
+  intervalMs: number = 5000,
 ): Promise<boolean> {
   const accessToken = await getAccessToken();
   if (!accessToken) return false;

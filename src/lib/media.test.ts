@@ -86,4 +86,41 @@ describe("collectMedia", () => {
     expect(media.images).toHaveLength(4);
     expect(media.videos).toHaveLength(1);
   });
+
+  it("serves pipeline uploads from their processed output", async () => {
+    const order = await createTestOrder();
+    const upload = new Upload();
+    upload.location = order.location;
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = "uploads/pipeline.mp4";
+    upload.fileHash = "hash-pipeline";
+    upload.rawFilePath = "uploads/pipeline.mp4";
+    upload.mediaStatus = "ready";
+    upload.processedFilePath = {
+      mp4: "https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/99/pipeline_transcoded.mp4",
+    };
+    await upload.save();
+
+    const media = await collectMedia(order);
+
+    expect(media.videos).toEqual([
+      "https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/99/pipeline_transcoded.mp4",
+    ]);
+  });
+
+  it("skips pipeline uploads that are not ready", async () => {
+    const order = await createTestOrder();
+    const upload = new Upload();
+    upload.location = order.location;
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = "uploads/processing.mp4";
+    upload.fileHash = "hash-processing";
+    upload.rawFilePath = "uploads/processing.mp4";
+    upload.mediaStatus = "processing";
+    await upload.save();
+
+    const media = await collectMedia(order);
+
+    expect(media.videos).toHaveLength(0);
+  });
 });

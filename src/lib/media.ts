@@ -40,12 +40,34 @@ export async function collectMedia(order: Order): Promise<MediaUrls> {
     order: { createdAt: "DESC" },
   });
   for (const upload of uploads) {
-    const url = `${mediaBase}/${upload.filePath}`;
     const ext = upload.filePath.split(".").pop()?.toLowerCase() || "";
-    if (SUPPORTED_VIDEO_FORMATS.includes(ext)) {
-      videos.push(url);
+    const isVideo = SUPPORTED_VIDEO_FORMATS.includes(ext);
+
+    let url: string | null = null;
+    if (upload.rawFilePath) {
+      // Pipeline upload: serve the processed, scrubbed output. The raw file
+      // is private and the legacy public key doesn't exist for these rows.
+      const processed = upload.processedFilePath as Record<
+        string,
+        string
+      > | null;
+      if (isVideo) {
+        // media_status flips to ready in on-mediaconvert-complete
+        url = upload.mediaStatus === "ready" ? (processed?.mp4 ?? null) : null;
+      } else {
+        url = processed?.webp || processed?.jpeg || null;
+      }
     } else {
-      images.push(url);
+      // Legacy upload: lives in the public bucket under its original key.
+      url = `${mediaBase}/${upload.filePath}`;
+    }
+
+    if (!url) continue; // not ready (or failed) — skip rather than break the post
+
+    if (isVideo) {
+      if (!videos.includes(url)) videos.push(url);
+    } else {
+      if (!images.includes(url)) images.push(url);
     }
   }
 
