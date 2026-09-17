@@ -315,6 +315,7 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
                     Codec: "AAC",
                     AacSettings: {
                       Bitrate: 128000,
+                      SampleRate: 48000,
                       CodingMode: "CODING_MODE_2_0",
                     },
                   },
