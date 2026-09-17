@@ -18,6 +18,7 @@ const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 interface MediaConvertDetail {
   status: "COMPLETE" | "ERROR" | "CANCELED";
   jobId: string;
+  userMetadata?: Record<string, string>;
   outputGroupDetails?: {
     outputDetails: {
       outputFilePaths: string[];
@@ -30,7 +31,7 @@ interface EventBridgeEvent {
 }
 
 export async function handler(event: EventBridgeEvent): Promise<void> {
-  const { status, jobId, outputGroupDetails } = event.detail;
+  const { status, jobId, userMetadata, outputGroupDetails } = event.detail;
 
   console.log(`[on-mediaconvert-complete] Job ${jobId} status: ${status}`);
 
@@ -40,10 +41,23 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
 
   await initializeDataSource();
 
-  // Find upload by job ID via jsonb query — no full table scan.
-  const upload = await Upload.createQueryBuilder("u")
-    .where("u.processed_file_path ->> 'jobId' = :jobId", { jobId })
-    .getOne();
+  // Preferred: resolve by primary key from the job's UserMetadata (set at
+  // CreateJob time) — no JSONB operator needed.
+  const uploadIdFromMeta = parseInt(userMetadata?.uploadId || "", 10);
+  let upload = Number.isFinite(uploadIdFromMeta)
+    ? await Upload.findOne({ where: { id: uploadIdFromMeta } as any })
+    : null;
+
+  if (!upload) {
+    // Fallback: find by job ID via jsonb query (jobs created without
+    // UserMetadata). NOTE: the Aurora Data API driver may store JSONB params
+    // as string-wrapped JSON, which makes the ->> extraction return NULL —
+    // if this path logs "No upload found" for a job that HAS UserMetadata,
+    // the metadata path above is the reliable one.
+    upload = await Upload.createQueryBuilder("u")
+      .where("u.processed_file_path ->> 'jobId' = :jobId", { jobId })
+      .getOne();
+  }
 
   if (!upload) {
     console.warn(`[on-mediaconvert-complete] No upload found for job ${jobId}`);
