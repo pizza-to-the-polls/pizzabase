@@ -150,7 +150,7 @@ functions:
     timeout: 120
     memorySize: 1024
     layers:
-      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:sharp:1
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:sharp:5
     environment:
       RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
       UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
