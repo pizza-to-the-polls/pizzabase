@@ -5,6 +5,7 @@ import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
 import { IntegrationSession } from "../entity/IntegrationSession";
 import { Upload } from "../entity/Upload";
+import { QueryFailedError } from "typeorm";
 
 // Helper to build mock fetch Response objects
 function mockRes(
@@ -295,6 +296,95 @@ describe("blueskyPost", () => {
         (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
       );
       expect(recordCalls.length).toBe(1);
+    });
+
+    it("recovers from a unique-constraint race on session save (23505)", async () => {
+      const repo = AppDataSource.getRepository(IntegrationSession);
+
+      // Simulate the race: another invocation commits the winning session
+      // between our findOne and save, producing a 23505 unique violation.
+      const saveSpy = jest
+        .spyOn(repo, "save")
+        .mockImplementationOnce(async () => {
+          const winner = new IntegrationSession();
+          winner.service = "bluesky";
+          winner.credentials = {
+            accessJwt: "winner-access",
+            refreshJwt: "winner-refresh",
+            did: "did:plc:winner",
+            handle: "winner.test",
+          };
+          // bypass the spy so we only fail on the losing save
+          await repo.manager.save(winner);
+          throw new QueryFailedError(
+            "INSERT INTO integration_session...",
+            [],
+            Object.assign(
+              new Error("duplicate key value violates unique constraint"),
+              {
+                code: "23505",
+              },
+            ),
+          );
+        });
+
+      routeMock(standardMocks());
+
+      const order = await buildOrder();
+      await blueskyPost(order);
+
+      saveSpy.mockRestore();
+
+      // The winner's credentials should have been used for the post
+      const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(
+        (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
+      );
+      expect(recordCalls.length).toBe(1);
+      expect(recordCalls[0][1].headers.Authorization).toBe(
+        "Bearer winner-access",
+      );
+    });
+
+    it("propagates non-unique-violation save errors", async () => {
+      const repo = AppDataSource.getRepository(IntegrationSession);
+      const saveSpy = jest.spyOn(repo, "save").mockRejectedValueOnce(
+        new QueryFailedError(
+          "INSERT INTO integration_session...",
+          [],
+          Object.assign(
+            new Error(
+              "insert or update on table violates foreign key constraint",
+            ),
+            {
+              code: "23503",
+            },
+          ),
+        ),
+      );
+
+      const errorSpy = jest
+        .spyOn(console, "error")
+        .mockImplementation(() => {});
+
+      routeMock(standardMocks());
+
+      const order = await buildOrder();
+      await blueskyPost(order);
+
+      saveSpy.mockRestore();
+
+      // The FK error must NOT be treated as a race — no post should be made
+      const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(
+        (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
+      );
+      expect(recordCalls.length).toBe(0);
+      // The error propagated to blueskyPost's top-level handler
+      expect(errorSpy).toHaveBeenCalledWith(
+        expect.stringContaining("Failed to post order"),
+        expect.anything(),
+      );
+
+      errorSpy.mockRestore();
     });
   });
 
@@ -650,6 +740,141 @@ describe("blueskyPost", () => {
 
       expect(recordBody.record.embed.$type).toBe("app.bsky.embed.video");
       expect(recordBody.record.embed.video.ref.$link).toBe("bafkrei_video_ref");
+    });
+
+    it("streams the video to the PDS instead of buffering", async () => {
+      const order = await buildOrder();
+
+      const upload = new Upload();
+      upload.location = order.location;
+      upload.ipAddress = "127.0.0.1";
+      upload.filePath = "uploads/chicago-il-stream.mp4";
+      upload.fileHash = "hash_stream_vid";
+      await upload.save();
+
+      function streamFromBuffer(buf: Buffer): ReadableStream<Uint8Array> {
+        return new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(buf));
+            controller.close();
+          },
+        });
+      }
+
+      let uploadOpts: any;
+      routeMock(
+        standardMocks({
+          "com.atproto.repo.uploadBlob": (_url: string, opts: any) => {
+            uploadOpts = opts;
+            return mockRes({
+              json: {
+                blob: {
+                  $type: "blob",
+                  ref: { $link: "bafkrei_stream_ref" },
+                  mimeType: "video/mp4",
+                  size: 5000000,
+                },
+              },
+            });
+          },
+          "https://polls.pizza/uploads/chicago-il-stream.mp4": (
+            _url: string,
+            opts?: any,
+          ) => {
+            if (opts?.method === "HEAD") {
+              return mockRes({
+                headers: {
+                  "content-type": "video/mp4",
+                  "content-length": "5000000",
+                },
+              });
+            }
+            return {
+              ok: true,
+              status: 200,
+              headers: {
+                get: (name: string) =>
+                  ({ "content-type": "video/mp4" })[name.toLowerCase()] ?? null,
+              },
+              body: streamFromBuffer(Buffer.alloc(5000000)),
+            };
+          },
+        }),
+      );
+
+      await blueskyPost(order);
+
+      // The upload request body should be the raw stream, not a Buffer
+      expect(uploadOpts).toBeTruthy();
+      expect(uploadOpts.body).toBeInstanceOf(ReadableStream);
+      expect(uploadOpts.headers["Content-Type"]).toBe("video/mp4");
+    });
+
+    it("retries a 5xx video upload by re-downloading the stream", async () => {
+      const order = await buildOrder();
+
+      const upload = new Upload();
+      upload.location = order.location;
+      upload.ipAddress = "127.0.0.1";
+      upload.filePath = "uploads/chicago-il-retry.mp4";
+      upload.fileHash = "hash_retry_vid";
+      await upload.save();
+
+      function streamFromBuffer(buf: Buffer): ReadableStream<Uint8Array> {
+        return new ReadableStream<Uint8Array>({
+          start(controller) {
+            controller.enqueue(new Uint8Array(buf));
+            controller.close();
+          },
+        });
+      }
+
+      let uploadAttempts = 0;
+      let downloadAttempts = 0;
+      routeMock(
+        standardMocks({
+          "com.atproto.repo.uploadBlob": (_url: string, _opts: any) => {
+            uploadAttempts++;
+            if (uploadAttempts === 1) {
+              return mockRes({ ok: false, status: 503, text: "overloaded" });
+            }
+            return BS_UPLOAD_BLOB;
+          },
+          "https://polls.pizza/uploads/chicago-il-retry.mp4": (
+            _url: string,
+            opts?: any,
+          ) => {
+            if (opts?.method === "HEAD") {
+              return mockRes({
+                headers: {
+                  "content-type": "video/mp4",
+                  "content-length": "5000000",
+                },
+              });
+            }
+            downloadAttempts++;
+            return {
+              ok: true,
+              status: 200,
+              headers: {
+                get: (name: string) =>
+                  ({ "content-type": "video/mp4" })[name.toLowerCase()] ?? null,
+              },
+              body: streamFromBuffer(Buffer.alloc(5000000)),
+            };
+          },
+        }),
+      );
+
+      await blueskyPost(order);
+
+      expect(uploadAttempts).toBe(2);
+      expect(downloadAttempts).toBe(2);
+
+      const recordCalls = (global.fetch as jest.Mock).mock.calls.filter(
+        (c: any[]) => c[0].includes("com.atproto.repo.createRecord"),
+      );
+      expect(recordCalls.length).toBe(1);
     });
 
     it("skips video that exceeds 50 MB", async () => {
