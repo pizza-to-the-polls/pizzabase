@@ -141,7 +141,7 @@ functions:
       DB_NAME: ${env:DB_NAME}
     events:
       - s3:
-          bucket: raw.polls.pizza
+          bucket: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
           event: s3:ObjectCreated:*
           existing: true
 
