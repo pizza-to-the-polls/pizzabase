@@ -17,6 +17,7 @@ import {
   GetObjectCommand,
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
+import { cdnUrlForKey } from "../lib/media-cdn";
 
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -92,7 +93,9 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
         );
       }
 
-      const mp4Url = `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${key}`;
+      const mp4Url =
+        cdnUrlForKey(key) ??
+        `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${key}`;
       // Keep jobId so redelivered events still resolve.
       upload.processedFilePath = { mp4: mp4Url, jobId };
       console.log(

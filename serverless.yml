@@ -40,6 +40,7 @@ provider:
 
     ALLOWED_ORIGINS: ${env:ALLOWED_ORIGINS}
     STATIC_SITE: ${env:STATIC_SITE}
+    MEDIA_CDN_DOMAIN: ${env:MEDIA_CDN_DOMAIN, 'media.polls.pizza'}
     UPLOAD_S3_BUCKET: reports.polls.pizza
 
     RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
