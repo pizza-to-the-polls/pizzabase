@@ -11,12 +11,16 @@
  * Metadata stripping happens later in on-media-format when sharp re-encodes.
  */
 
-import { S3, Lambda } from "aws-sdk";
+import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
+import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
 import { extractExif } from "../lib/exif/extract";
 
-const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
+const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
+const lambda = new LambdaClient({
+  region: process.env.AWS_REGION || "us-west-2",
+});
 
 // S3 notification configs cannot share an event type on one bucket, so only
 // this Lambda carries the ObjectCreated:* trigger. on-media-format is chained
@@ -65,13 +69,13 @@ export async function handler(event: S3Event): Promise<void> {
 
     try {
       // Read first 64KB
-      const resp = await s3
-        .getObject({
+      const resp = await s3.send(
+        new GetObjectCommand({
           Bucket: bucket,
           Key: key,
           Range: `bytes=0-${INITIAL_RANGE_BYTES}`,
-        })
-        .promise();
+        }),
+      );
 
       if (!resp.Body) {
         console.log(`[on-s3-upload-process-exif] Empty body for ${key}`);
@@ -80,7 +84,7 @@ export async function handler(event: S3Event): Promise<void> {
         continue;
       }
 
-      const initialBuffer = resp.Body as Buffer;
+      const initialBuffer = Buffer.from(await resp.Body.transformToByteArray());
       const tiffPayload = extractExif(initialBuffer);
 
       if (tiffPayload) {
@@ -116,16 +120,13 @@ export async function handler(event: S3Event): Promise<void> {
   // event. Fire-and-forget: media-format is idempotent and handles its own
   // errors; failures must not fail EXIF extraction.
   try {
-    const lambda = new Lambda({
-      region: process.env.AWS_REGION || "us-west-2",
-    });
-    await lambda
-      .invoke({
+    await lambda.send(
+      new InvokeCommand({
         FunctionName: MEDIA_FORMAT_FUNCTION,
         InvocationType: "Event",
         Payload: JSON.stringify(event),
-      })
-      .promise();
+      }),
+    );
   } catch (err) {
     console.error(
       "[on-s3-upload-process-exif] Failed to invoke on-media-format:",

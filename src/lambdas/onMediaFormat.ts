@@ -11,12 +11,22 @@
  * All metadata is stripped by sharp during re-encode.
  */
 
-import { S3, MediaConvert } from "aws-sdk";
+import {
+  S3Client,
+  GetObjectCommand,
+  PutObjectCommand,
+} from "@aws-sdk/client-s3";
+import {
+  MediaConvertClient,
+  DescribeEndpointsCommand,
+  CreateJobCommand,
+  CreateJobCommandInput,
+} from "@aws-sdk/client-mediaconvert";
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
 import * as path from "path";
 
-const s3 = new S3({ region: process.env.AWS_REGION || "us-west-2" });
+const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const RAW_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
@@ -133,17 +143,15 @@ async function processImage(
 
   const sharp = require("sharp");
 
-  const s3Object = await s3
-    .getObject({ Bucket: RAW_BUCKET, Key: key })
-    .promise();
+  const s3Object = await s3.send(
+    new GetObjectCommand({ Bucket: RAW_BUCKET, Key: key }),
+  );
 
   if (!s3Object.Body) {
     throw new Error(`Empty body for ${key}`);
   }
 
-  const buffer = Buffer.isBuffer(s3Object.Body)
-    ? s3Object.Body
-    : Buffer.from(s3Object.Body as ArrayBuffer);
+  const buffer = Buffer.from(await s3Object.Body.transformToByteArray());
 
   const ext = path.extname(key).toLowerCase();
   const image = sharp(buffer, {
@@ -172,15 +180,15 @@ async function processImage(
       : buffer;
 
     const gifKey = `${prefix}.gif`;
-    await s3
-      .putObject({
+    await s3.send(
+      new PutObjectCommand({
         Bucket: PROCESSED_BUCKET,
         Key: gifKey,
         Body: resized,
         ContentType: "image/gif",
         ACL: "public-read",
-      })
-      .promise();
+      }),
+    );
 
     processedPath.gif = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${gifKey}`;
     return processedPath;
@@ -203,15 +211,15 @@ async function processImage(
     .toBuffer();
 
   const webpKey = `${prefix}.webp`;
-  await s3
-    .putObject({
+  await s3.send(
+    new PutObjectCommand({
       Bucket: PROCESSED_BUCKET,
       Key: webpKey,
       Body: webpBuffer,
       ContentType: "image/webp",
       ACL: "public-read",
-    })
-    .promise();
+    }),
+  );
 
   processedPath.webp = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${webpKey}`;
 
@@ -222,15 +230,15 @@ async function processImage(
     .toBuffer();
 
   const jpegKey = `${prefix}.jpeg`;
-  await s3
-    .putObject({
+  await s3.send(
+    new PutObjectCommand({
       Bucket: PROCESSED_BUCKET,
       Key: jpegKey,
       Body: jpegBuffer,
       ContentType: "image/jpeg",
       ACL: "public-read",
-    })
-    .promise();
+    }),
+  );
 
   processedPath.jpeg = `https://${PROCESSED_BUCKET}.s3.amazonaws.com/${jpegKey}`;
 
@@ -241,17 +249,17 @@ async function processImage(
 
 async function transcodeVideo(key: string, uploadId: number): Promise<void> {
   if (!mediaConvertEndpoint) {
-    const mc = new MediaConvert({
+    const mc = new MediaConvertClient({
       region: process.env.AWS_REGION || "us-west-2",
     });
-    const data = await mc.describeEndpoints().promise();
+    const data = await mc.send(new DescribeEndpointsCommand({}));
     mediaConvertEndpoint = data.Endpoints?.[0]?.Url || "";
     if (!mediaConvertEndpoint) {
       throw new Error("MediaConvert: no endpoints available");
     }
   }
 
-  const mediaConvert = new MediaConvert({
+  const mediaConvert = new MediaConvertClient({
     region: process.env.AWS_REGION || "us-west-2",
     endpoint: mediaConvertEndpoint,
   });
@@ -262,7 +270,7 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
   const upload = await Upload.findOne({ where: { id: uploadId } as any });
   if (!upload) return;
 
-  const jobParams: MediaConvert.Types.CreateJobRequest = {
+  const jobParams: CreateJobCommandInput = {
     Role: process.env.MEDIACONVERT_ROLE_ARN || "",
     Settings: {
       Inputs: [
@@ -324,7 +332,7 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
     },
   };
 
-  const job = await mediaConvert.createJob(jobParams).promise();
+  const job = await mediaConvert.send(new CreateJobCommand(jobParams));
 
   // Store the job ID so on-mediaconvert-complete can match it
   upload.processedFilePath = { jobId: job.Job?.Id || "" };
