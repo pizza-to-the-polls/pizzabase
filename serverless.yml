@@ -40,6 +40,7 @@ provider:
 
     ALLOWED_ORIGINS: ${env:ALLOWED_ORIGINS}
     STATIC_SITE: ${env:STATIC_SITE}
+    MEDIA_CDN_DOMAIN: ${env:MEDIA_CDN_DOMAIN, 'media.polls.pizza'}
     UPLOAD_S3_BUCKET: reports.polls.pizza
 
     RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
@@ -135,13 +136,16 @@ functions:
     timeout: 60
     memorySize: 512
     environment:
+      # Chain target must be this stage's own function (dev/stage confusion
+      # otherwise — MediaConvert events were landing in the wrong DB).
+      MEDIA_FORMAT_FUNCTION_NAME: pizzabase-${sls:stage}-on-media-format
       UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
       AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
       AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
       DB_NAME: ${env:DB_NAME}
     events:
       - s3:
-          bucket: raw.polls.pizza
+          bucket: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
           event: s3:ObjectCreated:*
           existing: true
 

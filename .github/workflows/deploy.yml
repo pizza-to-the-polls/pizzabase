@@ -127,6 +127,7 @@ jobs:
 
           # Media pipeline infra (see docs/issue-164-infra-setup.md)
           RAW_UPLOADS_BUCKET: ${{ secrets.RAW_UPLOADS_BUCKET }}
+          MEDIA_CDN_DOMAIN: media.polls.pizza
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
