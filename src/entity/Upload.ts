@@ -5,12 +5,14 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   MoreThan,
 } from "typeorm";
 import { Location } from "./Location";
+import { Clip } from "./Clip";
 import { NormalAddress } from "../lib/validator";
 import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
 import { v4 as uuidv4 } from "uuid";
@@ -86,6 +88,9 @@ export class Upload extends BaseEntity {
 
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;
+
+  @OneToMany((_type) => Clip, (clip) => clip.upload, { onDelete: "RESTRICT" })
+  clips: Promise<Clip[]>;
 
   static async createOrReject(
     ipAddress: string,

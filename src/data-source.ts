@@ -14,11 +14,13 @@ import { Report } from "./entity/Report";
 import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
 import { BannedPhoneNumber } from "./entity/BannedPhoneNumber";
+import { Clip } from "./entity/Clip";
 
 const entities = [
   Action,
   APIKey,
   BannedPhoneNumber,
+  Clip,
   Donation,
   IntegrationSession,
   Location,
