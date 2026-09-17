@@ -59,6 +59,13 @@ describe("#getSightEngineScore", () => {
     const { checkImage } = require("../lib/sightengine/client");
     checkImage.mockResolvedValueOnce({ score: 0.5 });
 
+    // Pipeline upload: give it a processed output to moderate
+    upload.processedFilePath = {
+      webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+    };
+    upload.mediaStatus = "ready";
+    await upload.save();
+
     const response = http_mocks.createResponse();
     const body = await controller.getSightEngineScore(
       http_mocks.createRequest({
@@ -74,6 +81,12 @@ describe("#getSightEngineScore", () => {
     expect(response.statusCode).toEqual(200);
     expect(body).toEqual({ score: 0.5, cached: false });
 
+    // Moderation must target the processed output, not the raw key
+    expect(checkImage).toHaveBeenCalledWith(
+      "reports.polls.pizza",
+      `uploads/${upload.id}/test.webp`,
+    );
+
     // Verify the score was persisted to the DB
     const updated = await Upload.findOne({
       where: { filePath: upload.filePath } as any,
@@ -84,6 +97,12 @@ describe("#getSightEngineScore", () => {
   it("should return cached on second call after a fresh API call", async () => {
     const { checkImage } = require("../lib/sightengine/client");
     checkImage.mockResolvedValueOnce({ score: 0.3 });
+
+    upload.processedFilePath = {
+      webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+    };
+    upload.mediaStatus = "ready";
+    await upload.save();
 
     // First call: uncached
     const response1 = http_mocks.createResponse();
@@ -165,24 +184,49 @@ describe("#getSightEngineScore", () => {
     expect(response.statusCode).toEqual(404);
   });
 
-  it("should propagate API errors when checkImage fails", async () => {
+  it("should return 409 while processing is incomplete", async () => {
+    // createOrReject leaves mediaStatus 'processing' with no processed output
+    const response = http_mocks.createResponse();
+    const body = await controller.getSightEngineScore(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${fileName}/sightengine`,
+        params: { fileName },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(409);
+    expect(body.errors[0]).toContain("Processing incomplete");
+  });
+
+  it("should return a JSON 502 when checkImage fails", async () => {
     const { checkImage } = require("../lib/sightengine/client");
     checkImage.mockRejectedValueOnce(
       new Error("SightEngine API error: 500 Internal Server Error"),
     );
 
+    upload.processedFilePath = {
+      webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+    };
+    upload.mediaStatus = "ready";
+    await upload.save();
+
     const response = http_mocks.createResponse();
-    await expect(
-      controller.getSightEngineScore(
-        http_mocks.createRequest({
-          method: "GET",
-          url: `/uploads/${fileName}/sightengine`,
-          params: { fileName },
-          headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
-        }),
-        response,
-        () => undefined,
-      ),
-    ).rejects.toThrow("SightEngine API error: 500 Internal Server Error");
+    const body = await controller.getSightEngineScore(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${fileName}/sightengine`,
+        params: { fileName },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(502);
+    expect(body.errors).toEqual(["SightEngine check failed"]);
   });
 });
