@@ -1,4 +1,4 @@
-import { detectInputRotation } from "./mp4-rotation";
+import { detectInputRotation, detectVideoDuration } from "./mp4-rotation";
 
 /**
  * Build a minimal, spec-correct tkhd v0 box:
@@ -106,5 +106,93 @@ describe("detectInputRotation", () => {
   it("returns null for a buffer with no moov box", () => {
     const buf = Buffer.concat([ftyp, Buffer.alloc(64)]);
     expect(detectInputRotation(buf)).toBeNull();
+  });
+});
+
+// ---------------------------------------------------------------------------
+// detectVideoDuration
+// ---------------------------------------------------------------------------
+
+/**
+ * Build a minimal mvhd box. v0 body:
+ *   ver/flags(4) creation(4) mod(4) timescale(4) duration(4) ...
+ * v1 body:
+ *   ver/flags(4) creation(8) mod(8) timescale(4) duration(8) ...
+ */
+function mvhdBox(
+  timescale: number,
+  duration: number,
+  version: 0 | 1 = 0,
+): Buffer {
+  const body = Buffer.alloc(version === 0 ? 100 : 104);
+  body[0] = version;
+  if (version === 0) {
+    body.writeUInt32BE(timescale, 12);
+    body.writeUInt32BE(duration, 16);
+  } else {
+    body.writeUInt32BE(Math.floor(duration / 2 ** 32), 24); // high word
+    body.writeUInt32BE(duration % 2 ** 32, 28); // low word
+    body.writeUInt32BE(timescale, 20);
+  }
+  return Buffer.concat([
+    Buffer.from([0, 0, 0, body.length + 8]),
+    Buffer.from("mvhd", "latin1"),
+    body,
+  ]);
+}
+
+function mdatBox(payload: Buffer): Buffer {
+  return Buffer.concat([
+    Buffer.from([0, 0, 0, payload.length + 8]),
+    Buffer.from("mdat", "latin1"),
+    payload,
+  ]);
+}
+
+describe("detectVideoDuration", () => {
+  it("computes seconds from an mvhd v0 box", () => {
+    // 18000 ticks at 600/s = 30s
+    const buf = Buffer.concat([
+      ftyp,
+      moovBox([mvhdBox(600, 18000), trakBox(tkhdBox(IDENTITY, 1920, 1080))]),
+    ]);
+    expect(detectVideoDuration(buf)).toBe(30);
+  });
+
+  it("computes seconds from an mvhd v1 (64-bit) box", () => {
+    const buf = Buffer.concat([ftyp, moovBox([mvhdBox(600, 18000, 1)])]);
+    expect(detectVideoDuration(buf)).toBe(30);
+  });
+
+  it("reads the low 32 bits of a 64-bit duration", () => {
+    const buf = Buffer.concat([
+      ftyp,
+      moovBox([mvhdBox(600, 2 ** 32 + 12000, 1)]),
+    ]);
+    expect(detectVideoDuration(buf)).toBe(20);
+  });
+
+  it("finds moov placed after mdat", () => {
+    const buf = Buffer.concat([
+      ftyp,
+      mdatBox(Buffer.alloc(64)),
+      moovBox([mvhdBox(1000, 4500)]),
+    ]);
+    expect(detectVideoDuration(buf)).toBe(4.5);
+  });
+
+  it("returns null when there is no moov box", () => {
+    const buf = Buffer.concat([ftyp, Buffer.alloc(64)]);
+    expect(detectVideoDuration(buf)).toBeNull();
+  });
+
+  it("returns null when timescale is zero", () => {
+    const buf = Buffer.concat([ftyp, moovBox([mvhdBox(0, 18000)])]);
+    expect(detectVideoDuration(buf)).toBeNull();
+  });
+
+  it("returns null when duration is zero", () => {
+    const buf = Buffer.concat([ftyp, moovBox([mvhdBox(600, 0)])]);
+    expect(detectVideoDuration(buf)).toBeNull();
   });
 });
