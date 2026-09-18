@@ -8,6 +8,8 @@ import { APIKey } from "./entity/APIKey";
 import { Action } from "./entity/Action";
 import { Donation } from "./entity/Donation";
 import { IntegrationSession } from "./entity/IntegrationSession";
+import { Link } from "./entity/Link";
+import { LinkClick } from "./entity/LinkClick";
 import { Location } from "./entity/Location";
 import { Order } from "./entity/Order";
 import { Report } from "./entity/Report";
@@ -23,6 +25,8 @@ const entities = [
   Clip,
   Donation,
   IntegrationSession,
+  Link,
+  LinkClick,
   Location,
   Order,
   Report,
