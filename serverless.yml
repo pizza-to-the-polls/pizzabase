@@ -14,6 +14,10 @@ provider:
   environment:
     NODE_ENV: production
 
+    # Clip Factory: render trigger target (fired by the app lambda via
+    # fire-and-forget async invoke; renderer function arrives via CF-6).
+    RENDER_CLIP_FUNCTION_NAME: pizzabase-${sls:stage}-renderClip
+
     DB_NAME: ${env:DB_NAME}
     AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
     AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
