@@ -4,16 +4,18 @@
  * assessment. The controller delegates to this module so it stays thin.
  */
 
-import { GetObjectCommand } from "@aws-sdk/client-s3";
+import { GetObjectCommand, HeadObjectCommand } from "@aws-sdk/client-s3";
 
 import {
   extractExifWithRetry,
+  extractExifFromIsoBmffVideo,
   extractXmpWithRetry,
   serializeExif,
   reviewExif,
   parseDigitalSourceType,
   detectC2pa,
   MAX_EXIF_BYTES,
+  isAnyIsoBmff,
   ExifData,
 } from "../exif";
 
@@ -28,7 +30,7 @@ export interface ExifServiceDeps {
   s3Client: {
     send(command: {
       input: { Bucket: string; Key: string; Range?: string };
-    }): Promise<{ Body?: Buffer | null }>;
+    }): Promise<{ Body?: Buffer | null; ContentLength?: number }>;
   };
   bucket: string;
 }
@@ -121,6 +123,48 @@ export async function extractExifAndReview(
         }
       },
     );
+
+    // ---- 2b. Non-faststart (moov-at-end) video tail read -----------------
+    // MOV/MP4 files without a faststart flag keep `moov` after `mdat`, past
+    // the 256 KiB front window. Issuing a bounded tail read surfaces the
+    // moov/udta/uuid EXIF payload that a front-only scan misses.
+    if (!tiffPayload && isAnyIsoBmff(initialBuffer)) {
+      try {
+        const headResult = await s3Client.send(
+          new HeadObjectCommand({
+            Bucket: bucket,
+            Key: filePath,
+          }) as any,
+        );
+        const fileSize = headResult?.ContentLength;
+        if (
+          typeof fileSize === "number" &&
+          fileSize > MAX_EXIF_BYTES &&
+          Number.isFinite(fileSize)
+        ) {
+          const tailStart = fileSize - MAX_EXIF_BYTES;
+          const tailObject = await s3Client.send(
+            new GetObjectCommand({
+              Bucket: bucket,
+              Key: filePath,
+              Range: `bytes=${tailStart}-${fileSize - 1}`,
+            }) as any,
+          );
+          if (tailObject.Body) {
+            const tailBuffer = await bodyToBuffer(tailObject.Body);
+            const videoResult = extractExifFromIsoBmffVideo(
+              tailBuffer,
+              tailStart,
+            );
+            if (videoResult.tiff) {
+              tiffPayload = videoResult.tiff;
+            }
+          }
+        }
+      } catch {
+        // Tail read unavailable — leave tiffPayload null.
+      }
+    }
 
     // XMP is almost certainly in the initial range when EXIF was.
     combinedBuffer = initialBuffer;

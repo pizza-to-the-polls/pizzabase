@@ -3,6 +3,7 @@ import {
   extractExifFromJpeg,
   extractExifFromPng,
   extractExifFromHeif,
+  extractExifFromIsoBmffVideo,
   extractExifWithRetry,
   MAX_EXIF_BYTES,
 } from "./extract";
@@ -13,6 +14,7 @@ import {
   truncatedJpeg,
   jpegNoExif,
   jpegTruncatedExif,
+  iphoneRealLayoutMov,
 } from "../../tests/fixtures/exif";
 
 // We don't mock exif-reader in these tests – we exercise the extraction
@@ -984,5 +986,758 @@ describe("extractExifFromHeif (video containers)", () => {
     expect(isAnyIsoBmff(brooklynJpeg)).toBe(false);
     expect(isAnyIsoBmff(losAngelesPng)).toBe(false);
     expect(isAnyIsoBmff(Buffer.from("garbage"))).toBe(false);
+  });
+});
+
+// ---------------------------------------------------------------------------
+// Apple MOV/MP4 video EXIF extraction (moov → udta → uuid MetaBox)
+// ---------------------------------------------------------------------------
+
+/** Apple metadata usertype UUID for the uuid box under moov/udta. */
+const APPLE_METADATA_UUID = Buffer.from([
+  0x85, 0xc0, 0xb6, 0x87, 0xf4, 0x5c, 0x46, 0xda, 0x9d, 0x5d, 0x9f, 0x90, 0x49,
+  0xb8, 0xe2, 0xae,
+]);
+
+/**
+ * Build a minimal TIFF file containing Apple iPhone-style EXIF metadata
+ * (Make, Model, DateTime, GPS). The TIFF is little-endian and contains an
+ * Image IFD with Make/Model plus a GPS IFD pointed by tag 0x8825.
+ */
+function buildIphoneTiff(): Buffer {
+  // IFD entries for Image IFD (IFD0).
+  const make = Buffer.from("Apple\0", "ascii"); // 6 bytes
+  const model = Buffer.from("iPhone 14 Pro\0", "ascii"); // 14 bytes
+  const dateTime = Buffer.from("2024:01:15 10:30:00\0", "ascii"); // 20 bytes
+
+  // GPS IFD entries: lat 34°3'0"N, lon 118°14'0"W.
+  const gpsRef = Buffer.from("N\0", "ascii"); // 2 bytes
+  const gpsLonRef = Buffer.from("W\0", "ascii"); // 2 bytes
+
+  // Rational: 3 values × 8 bytes (num+denom) = 24 bytes per coordinate.
+  const gpsLat = Buffer.alloc(24);
+  gpsLat.writeUInt32LE(34, 0);
+  gpsLat.writeUInt32LE(1, 4);
+  gpsLat.writeUInt32LE(3, 8);
+  gpsLat.writeUInt32LE(1, 12);
+  gpsLat.writeUInt32LE(0, 16);
+  gpsLat.writeUInt32LE(1, 20);
+
+  const gpsLon = Buffer.alloc(24);
+  gpsLon.writeUInt32LE(118, 0);
+  gpsLon.writeUInt32LE(1, 4);
+  gpsLon.writeUInt32LE(14, 8);
+  gpsLon.writeUInt32LE(1, 12);
+  gpsLon.writeUInt32LE(0, 16);
+  gpsLon.writeUInt32LE(1, 20);
+
+  // We place extra data after the IFD entries.
+  // IFD0: 2 (count) + 4 entries × 12 + 4 (next) = 54 bytes.
+  // GPS IFD: 2 + 4 entries × 12 + 4 = 54 bytes.
+  const ifd0Start = 8;
+  const ifd0Next = ifd0Start + 2 + 4 * 12 + 4; // = 8 + 54 = 62
+  const gpsIfdStart = ifd0Next;
+  const gpsIfdEnd = gpsIfdStart + 2 + 4 * 12 + 4; // = 62 + 54 = 116
+  let extra = gpsIfdEnd;
+
+  const extraMake = extra;
+  extra += make.length;
+  const extraModel = extra;
+  extra += model.length;
+  const extraDateTime = extra;
+  extra += dateTime.length;
+  const extraGpsLat = extra;
+  extra += gpsLat.length;
+  const extraGpsLon = extra;
+  extra += gpsLon.length;
+  extra += gpsRef.length; // gpsRef offset
+  extra += gpsLonRef.length; // gpsLonRef offset
+
+  const total = extra;
+  const buf = Buffer.alloc(total);
+
+  // TIFF header
+  buf.write("II", 0, "ascii");
+  buf.writeUInt16LE(42, 2);
+  buf.writeUInt32LE(ifd0Start, 4);
+
+  // IFD0: 3 entries (Make, Model, GPSInfo pointer)
+  buf.writeUInt16LE(3, ifd0Start);
+  let off = ifd0Start + 2;
+  // Make (0x010F, ASCII, 6, offset)
+  buf.writeUInt16LE(0x010f, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(6, off + 4);
+  buf.writeUInt32LE(extraMake, off + 8);
+  off += 12;
+  // Model (0x0110, ASCII, 14, offset)
+  buf.writeUInt16LE(0x0110, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(14, off + 4);
+  buf.writeUInt32LE(extraModel, off + 8);
+  off += 12;
+  // GPSInfo (0x8825, LONG, 1, value = offset to GPS IFD)
+  buf.writeUInt16LE(0x8825, off);
+  buf.writeUInt16LE(4, off + 2);
+  buf.writeUInt32LE(1, off + 4);
+  buf.writeUInt32LE(gpsIfdStart, off + 8);
+  off += 12;
+  // next IFD = 0
+  buf.writeUInt32LE(0, off);
+
+  // GPS IFD: 4 entries (GPSLatitudeRef, GPSLatitude, GPSLongitudeRef, GPSLongitude)
+  buf.writeUInt16LE(4, gpsIfdStart);
+  off = gpsIfdStart + 2;
+  // GPSLatitudeRef (0x0001, ASCII, 2, inline)
+  buf.writeUInt16LE(0x0001, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(2, off + 4);
+  gpsRef.copy(buf, off + 8);
+  off += 12;
+  // GPSLatitude (0x0002, RATIONAL, 3, offset)
+  buf.writeUInt16LE(0x0002, off);
+  buf.writeUInt16LE(5, off + 2);
+  buf.writeUInt32LE(3, off + 4);
+  buf.writeUInt32LE(extraGpsLat, off + 8);
+  off += 12;
+  // GPSLongitudeRef (0x0003, ASCII, 2, inline)
+  buf.writeUInt16LE(0x0003, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(2, off + 4);
+  gpsLonRef.copy(buf, off + 8);
+  off += 12;
+  // GPSLongitude (0x0004, RATIONAL, 3, offset)
+  buf.writeUInt16LE(0x0004, off);
+  buf.writeUInt16LE(5, off + 2);
+  buf.writeUInt32LE(3, off + 4);
+  buf.writeUInt32LE(extraGpsLon, off + 8);
+  off += 12;
+  // next IFD = 0
+  buf.writeUInt32LE(0, off);
+
+  // Extra data
+  make.copy(buf, extraMake);
+  model.copy(buf, extraModel);
+  dateTime.copy(buf, extraDateTime);
+  gpsLat.copy(buf, extraGpsLat);
+  gpsLon.copy(buf, extraGpsLon);
+  // gpsRef and gpsLonRef are inline, not in extra.
+
+  return buf;
+}
+
+/**
+ * Build a minimal faststart MP4/MOV with the real Apple video EXIF layout:
+ *
+ *   ftyp → moov → udta → uuid (Apple metadata UUID) → meta { hdlr, iloc, iinf }
+ *   mdat (EXIF payload)
+ *
+ * The iloc extent_offset points to the TIFF inside mdat.
+ */
+function buildFaststartVideo(
+  exifTiff: Buffer,
+  brand: string = "mp42",
+): { buffer: Buffer; tiffOffset: number } {
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftyp.write(brand, 8, 4, "ascii");
+  ftyp.writeUInt32BE(0, 12);
+  ftyp.write("isom", 16, 4, "ascii");
+
+  // hdlr
+  const hdlr = Buffer.alloc(33);
+  hdlr.writeUInt32BE(33, 0);
+  hdlr.write("hdlr", 4, 4, "ascii");
+  hdlr.writeUInt32BE(0, 8);
+  hdlr.writeUInt32BE(0, 12);
+  hdlr.write("pict", 16, 4, "ascii");
+  hdlr.writeUInt32BE(0, 20);
+  hdlr.writeUInt32BE(0, 24);
+  hdlr.writeUInt32BE(0, 28);
+  hdlr[32] = 0;
+
+  // iloc (30 bytes — extent_offset patched later)
+  const iloc = Buffer.alloc(30);
+  iloc.writeUInt32BE(30, 0);
+  iloc.write("iloc", 4, 4, "ascii");
+  iloc.writeUInt32BE(0, 8);
+  iloc[12] = 0x44;
+  iloc[13] = 0x00;
+  iloc.writeUInt16BE(1, 14);
+  iloc.writeUInt16BE(1, 16);
+  iloc.writeUInt16BE(0, 18);
+  iloc.writeUInt16BE(1, 20);
+  iloc.writeUInt32BE(exifTiff.length, 26);
+
+  // infe
+  const infe = Buffer.alloc(27);
+  infe.writeUInt32BE(27, 0);
+  infe.write("infe", 4, 4, "ascii");
+  infe.writeUInt32BE(0x02000000, 8);
+  infe.writeUInt32BE(1, 12);
+  infe.writeUInt16BE(0, 16);
+  infe.write("Exif", 18, 4, "ascii");
+  infe.write("Exif\0", 22, 5, "ascii");
+
+  // iinf
+  const iinf = Buffer.alloc(41);
+  iinf.writeUInt32BE(41, 0);
+  iinf.write("iinf", 4, 4, "ascii");
+  iinf.writeUInt32BE(0, 8);
+  iinf.writeUInt16BE(1, 12);
+  infe.copy(iinf, 14);
+
+  // meta (full box)
+  const meta = Buffer.alloc(116);
+  meta.writeUInt32BE(116, 0);
+  meta.write("meta", 4, 4, "ascii");
+  meta.writeUInt32BE(0, 8);
+  hdlr.copy(meta, 12);
+  iloc.copy(meta, 45);
+  iinf.copy(meta, 75);
+
+  // uuid (24-byte header + meta)
+  const uuid = Buffer.alloc(24 + meta.length);
+  uuid.writeUInt32BE(uuid.length, 0);
+  uuid.write("uuid", 4, 4, "ascii");
+  APPLE_METADATA_UUID.copy(uuid, 8);
+  meta.copy(uuid, 24);
+
+  // udta
+  const udta = Buffer.alloc(8 + uuid.length);
+  udta.writeUInt32BE(udta.length, 0);
+  udta.write("udta", 4, 4, "ascii");
+  uuid.copy(udta, 8);
+
+  // moov
+  const moov = Buffer.alloc(8 + udta.length);
+  moov.writeUInt32BE(moov.length, 0);
+  moov.write("moov", 4, 4, "ascii");
+  udta.copy(moov, 8);
+
+  // mdat
+  const mdat = Buffer.alloc(8 + exifTiff.length);
+  mdat.writeUInt32BE(mdat.length, 0);
+  mdat.write("mdat", 4, 4, "ascii");
+  exifTiff.copy(mdat, 8);
+
+  const buffer = Buffer.concat([ftyp, moov, mdat]);
+
+  // Absolute offset of TIFF in file = ftyp + moov + mdat header(8).
+  const tiffOffset = ftyp.length + moov.length + 8;
+
+  // Patch the iloc extent_offset.
+  // iloc starts at: ftyp(24) + moovHdr(8) + udtaHdr(8) + uuidHdr(24)
+  //               + metaFullHdr(12) + hdlr(33) = 109
+  // extent_offset = ilocStart + 22 = 131.
+  buffer.writeUInt32BE(tiffOffset, 131);
+
+  return { buffer, tiffOffset };
+}
+
+/**
+ * Build a non-faststart MP4/MOV where moov is at the end of the file and the
+ * EXIF payload lives inline after the meta box inside the uuid box (so a tail
+ * read finds it). The mdat is padded to push moov past MAX_EXIF_BYTES.
+ *
+ * Returns the complete buffer and the absolute offset of moov within it.
+ */
+function buildNonFaststartVideo(exifTiff: Buffer): {
+  buffer: Buffer;
+  moovStart: number;
+} {
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftyp.write("mp42", 8, 4, "ascii");
+  ftyp.writeUInt32BE(0, 12);
+  ftyp.write("isom", 16, 4, "ascii");
+
+  // Build the moov subtree with exif INLINE after meta inside uuid.
+  const hdlr = Buffer.alloc(33);
+  hdlr.writeUInt32BE(33, 0);
+  hdlr.write("hdlr", 4, 4, "ascii");
+  hdlr.writeUInt32BE(0, 8);
+  hdlr.writeUInt32BE(0, 12);
+  hdlr.write("pict", 16, 4, "ascii");
+  hdlr.writeUInt32BE(0, 20);
+  hdlr.writeUInt32BE(0, 24);
+  hdlr.writeUInt32BE(0, 28);
+  hdlr[32] = 0;
+
+  // iloc — extent_offset will be patched to point at inline exif.
+  const iloc = Buffer.alloc(30);
+  iloc.writeUInt32BE(30, 0);
+  iloc.write("iloc", 4, 4, "ascii");
+  iloc.writeUInt32BE(0, 8);
+  iloc[12] = 0x44;
+  iloc[13] = 0x00;
+  iloc.writeUInt16BE(1, 14);
+  iloc.writeUInt16BE(1, 16);
+  iloc.writeUInt16BE(0, 18);
+  iloc.writeUInt16BE(1, 20);
+  iloc.writeUInt32BE(exifTiff.length, 26);
+
+  const infe = Buffer.alloc(27);
+  infe.writeUInt32BE(27, 0);
+  infe.write("infe", 4, 4, "ascii");
+  infe.writeUInt32BE(0x02000000, 8);
+  infe.writeUInt32BE(1, 12);
+  infe.writeUInt16BE(0, 16);
+  infe.write("Exif", 18, 4, "ascii");
+  infe.write("Exif\0", 22, 5, "ascii");
+
+  const iinf = Buffer.alloc(41);
+  iinf.writeUInt32BE(41, 0);
+  iinf.write("iinf", 4, 4, "ascii");
+  iinf.writeUInt32BE(0, 8);
+  iinf.writeUInt16BE(1, 12);
+  infe.copy(iinf, 14);
+
+  const meta = Buffer.alloc(116);
+  meta.writeUInt32BE(116, 0);
+  meta.write("meta", 4, 4, "ascii");
+  meta.writeUInt32BE(0, 8);
+  hdlr.copy(meta, 12);
+  iloc.copy(meta, 45);
+  iinf.copy(meta, 75);
+
+  // uuid = 24-byte header + meta (116) + exif (inline)
+  const uuid = Buffer.alloc(24 + meta.length + exifTiff.length);
+  uuid.writeUInt32BE(uuid.length, 0);
+  uuid.write("uuid", 4, 4, "ascii");
+  APPLE_METADATA_UUID.copy(uuid, 8);
+  meta.copy(uuid, 24);
+  exifTiff.copy(uuid, 24 + meta.length); // inline after meta
+
+  const udta = Buffer.alloc(8 + uuid.length);
+  udta.writeUInt32BE(udta.length, 0);
+  udta.write("udta", 4, 4, "ascii");
+  uuid.copy(udta, 8);
+
+  const moov = Buffer.alloc(8 + udta.length);
+  moov.writeUInt32BE(moov.length, 0);
+  moov.write("moov", 4, 4, "ascii");
+  udta.copy(moov, 8);
+
+  // mdat — large enough to push moov past MAX_EXIF_BYTES.
+  const mdatPayloadSize = MAX_EXIF_BYTES;
+  const mdat = Buffer.alloc(8 + mdatPayloadSize);
+  mdat.writeUInt32BE(mdat.length, 0);
+  mdat.write("mdat", 4, 4, "ascii");
+  // Fill with zeroes (the mdat payload can be anything).
+
+  const buffer = Buffer.concat([ftyp, mdat, moov]);
+
+  const moovStart = ftyp.length + mdat.length;
+
+  // Patch iloc extent_offset to the absolute file offset of the inline
+  // EXIF (which starts moovStart + 156). Field layout from the iloc TYPE
+  // position: extent offset at +18, extent length at +22.
+  const ilocPos = buffer.indexOf(Buffer.from("iloc", "ascii"));
+  const exifPos = buffer.indexOf(exifTiff);
+  buffer.writeUInt32BE(exifPos, ilocPos + 18);
+  buffer.writeUInt32BE(exifTiff.length, ilocPos + 22);
+
+  return { buffer, moovStart };
+}
+
+describe("extractExifFromIsoBmffVideo", () => {
+  const brooklynTiff = extractExifFromJpeg(brooklynJpeg).tiff!;
+  const iphoneTiff = buildIphoneTiff();
+  const { buffer: faststartMp4 } = buildFaststartVideo(brooklynTiff, "mp42");
+  const { buffer: faststartMov } = buildFaststartVideo(brooklynTiff, "qt  ");
+  const { buffer: faststartIphone } = buildFaststartVideo(iphoneTiff, "mp42");
+
+  it("extracts TIFF from an MP4 with moov→udta→uuid→meta layout", () => {
+    const result = extractExifFromIsoBmffVideo(faststartMp4);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed).toBeDefined();
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("extracts TIFF from a MOV with qt brand", () => {
+    const result = extractExifFromIsoBmffVideo(faststartMov);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed).toBeDefined();
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("yields camera make/model/GPS from a synthetic iPhone EXIF", () => {
+    const result = extractExifFromIsoBmffVideo(faststartIphone);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed).toBeDefined();
+    expect(parsed.Image.Make).toBe("Apple");
+    expect(parsed.Image.Model).toBe("iPhone 14 Pro");
+    expect(parsed.GPSInfo).toBeDefined();
+    // GPSLatitude is an array of 3 rational numbers.
+    expect(parsed.GPSInfo.GPSLatitude).toBeDefined();
+    expect(parsed.GPSInfo.GPSLongitude).toBeDefined();
+  });
+
+  it("returns moovMissing:true when buffer has no moov box", () => {
+    // ftyp + mdat only (no moov).
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    const mdat = Buffer.alloc(16);
+    mdat.writeUInt32BE(16, 0);
+    mdat.write("mdat", 4, 4, "ascii");
+
+    const buf = Buffer.concat([ftyp, mdat]);
+
+    const result = extractExifFromIsoBmffVideo(buf);
+    expect(result.tiff).toBeNull();
+    expect(result.moovMissing).toBe(true);
+    expect(result.truncated).toBe(false);
+  });
+
+  it("returns moovMissing:false when moov present but no udta", () => {
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    // moov with no udta child.
+    const moov = Buffer.alloc(8);
+    moov.writeUInt32BE(8, 0);
+    moov.write("moov", 4, 4, "ascii");
+
+    const buf = Buffer.concat([ftyp, moov]);
+
+    const result = extractExifFromIsoBmffVideo(buf);
+    expect(result.tiff).toBeNull();
+    expect(result.moovMissing).toBe(false);
+  });
+
+  it("returns null for JPEG input", () => {
+    const result = extractExifFromIsoBmffVideo(brooklynJpeg);
+    expect(result.tiff).toBeNull();
+    // moovMissing is true: non-ISOBMFF input means "no moov located" — the
+    // mid-box moov scan (for truncated tails) may see stray "moov" bytes in
+    // binary data, but no parseable moov follows them.
+    expect(result.moovMissing).toBe(true);
+  });
+
+  it("returns null for PNG input", () => {
+    const result = extractExifFromIsoBmffVideo(losAngelesPng);
+    expect(result.tiff).toBeNull();
+    expect(result.moovMissing).toBe(true);
+  });
+
+  it("returns null for empty buffer", () => {
+    const result = extractExifFromIsoBmffVideo(Buffer.alloc(0));
+    expect(result.tiff).toBeNull();
+    expect(result.moovMissing).toBe(true);
+  });
+
+  it("returns null when udta present but no uuid box", () => {
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    // moov → udta (empty)
+    const udta = Buffer.alloc(8);
+    udta.writeUInt32BE(8, 0);
+    udta.write("udta", 4, 4, "ascii");
+
+    const moov = Buffer.alloc(8 + udta.length);
+    moov.writeUInt32BE(moov.length, 0);
+    moov.write("moov", 4, 4, "ascii");
+    udta.copy(moov, 8);
+
+    const buf = Buffer.concat([ftyp, moov]);
+
+    const result = extractExifFromIsoBmffVideo(buf);
+    expect(result.tiff).toBeNull();
+    expect(result.moovMissing).toBe(false);
+  });
+
+  it("detects truncation when Exif item extends beyond buffer", () => {
+    // Truncate the faststart video partway through the mdat payload.
+    const { tiffOffset } = buildFaststartVideo(brooklynTiff, "mp42");
+    const full = buildFaststartVideo(brooklynTiff, "mp42").buffer;
+    const truncated = full.slice(0, tiffOffset + 10);
+
+    const result = extractExifFromIsoBmffVideo(truncated);
+    expect(result.tiff).toBeNull();
+    expect(result.truncated).toBe(true);
+    expect(result.bytesNeeded).toBeGreaterThan(0);
+    expect(result.moovMissing).toBe(false);
+  });
+
+  it("handles baseOffset correctly for a tail-read buffer", () => {
+    // Using the non-faststart video, simulate a tail read by slicing the
+    // last MAX_EXIF_BYTES bytes and passing baseOffset = tailStart.
+    const { buffer: full } = buildNonFaststartVideo(brooklynTiff);
+    const tailStart = Math.max(0, full.length - MAX_EXIF_BYTES);
+    const tailBuffer = full.slice(tailStart);
+
+    const result = extractExifFromIsoBmffVideo(tailBuffer, tailStart);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("falls back to any uuid box when Apple UUID not matched", () => {
+    // Build a video with a NON-Apple UUID that still wraps a MetaBox.
+    const nonAppleUuid = Buffer.alloc(16, 0xff); // all-ffs UUID
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    const hdlr = Buffer.alloc(33);
+    hdlr.writeUInt32BE(33, 0);
+    hdlr.write("hdlr", 4, 4, "ascii");
+    hdlr.writeUInt32BE(0, 8);
+    hdlr.writeUInt32BE(0, 12);
+    hdlr.write("pict", 16, 4, "ascii");
+    hdlr.writeUInt32BE(0, 20);
+    hdlr.writeUInt32BE(0, 24);
+    hdlr.writeUInt32BE(0, 28);
+    hdlr[32] = 0;
+
+    const iloc = Buffer.alloc(30);
+    iloc.writeUInt32BE(30, 0);
+    iloc.write("iloc", 4, 4, "ascii");
+    iloc.writeUInt32BE(0, 8);
+    iloc[12] = 0x44;
+    iloc[13] = 0x00;
+    iloc.writeUInt16BE(1, 14);
+    iloc.writeUInt16BE(1, 16);
+    iloc.writeUInt16BE(0, 18);
+    iloc.writeUInt16BE(1, 20);
+    iloc.writeUInt32BE(brooklynTiff.length, 26);
+
+    const infe = Buffer.alloc(27);
+    infe.writeUInt32BE(27, 0);
+    infe.write("infe", 4, 4, "ascii");
+    infe.writeUInt32BE(0x02000000, 8);
+    infe.writeUInt32BE(1, 12);
+    infe.writeUInt16BE(0, 16);
+    infe.write("Exif", 18, 4, "ascii");
+    infe.write("Exif\0", 22, 5, "ascii");
+
+    const iinf = Buffer.alloc(41);
+    iinf.writeUInt32BE(41, 0);
+    iinf.write("iinf", 4, 4, "ascii");
+    iinf.writeUInt32BE(0, 8);
+    iinf.writeUInt16BE(1, 12);
+    infe.copy(iinf, 14);
+
+    const meta = Buffer.alloc(116);
+    meta.writeUInt32BE(116, 0);
+    meta.write("meta", 4, 4, "ascii");
+    meta.writeUInt32BE(0, 8);
+    hdlr.copy(meta, 12);
+    iloc.copy(meta, 45);
+    iinf.copy(meta, 75);
+
+    const uuid = Buffer.alloc(24 + meta.length);
+    uuid.writeUInt32BE(uuid.length, 0);
+    uuid.write("uuid", 4, 4, "ascii");
+    nonAppleUuid.copy(uuid, 8);
+    meta.copy(uuid, 24);
+
+    const udta = Buffer.alloc(8 + uuid.length);
+    udta.writeUInt32BE(udta.length, 0);
+    udta.write("udta", 4, 4, "ascii");
+    uuid.copy(udta, 8);
+
+    const moov = Buffer.alloc(8 + udta.length);
+    moov.writeUInt32BE(moov.length, 0);
+    moov.write("moov", 4, 4, "ascii");
+    udta.copy(moov, 8);
+
+    const mdat = Buffer.alloc(8 + brooklynTiff.length);
+    mdat.writeUInt32BE(mdat.length, 0);
+    mdat.write("mdat", 4, 4, "ascii");
+    brooklynTiff.copy(mdat, 8);
+
+    const buf = Buffer.concat([ftyp, moov, mdat]);
+    const tiffOffset = ftyp.length + moov.length + 8;
+    buf.writeUInt32BE(tiffOffset, 131);
+
+    const result = extractExifFromIsoBmffVideo(buf);
+    expect(result.tiff).not.toBeNull();
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("extracts camera make/model/GPS from a real-device-layout iPhone MOV", () => {
+    // iphoneRealLayoutMov replicates a real iPhone 14 Pro MOV trimmed to
+    // ftyp + free + moov(mvhd, trak(tkhd, mdia(mdhd, hdlr, minf(...))),
+    // udta(uuid)) + wide + mdat. The parser must skip the genuine sibling
+    // boxes before finding udta.
+    const result = extractExifFromIsoBmffVideo(iphoneRealLayoutMov);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+    expect(result.bytesNeeded).toBe(0);
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed).toBeDefined();
+    expect(parsed.Image.Make).toBe("Apple");
+    expect(parsed.Image.Model).toBe("iPhone 14 Pro");
+    expect(parsed.GPSInfo).toBeDefined();
+    expect(parsed.GPSInfo.GPSLatitude).toBeDefined();
+    expect(parsed.GPSInfo.GPSLongitude).toBeDefined();
+    // GPS: 34°3'0"N, 118°14'0"W
+    expect(parsed.GPSInfo.GPSLatitude[0]).toBe(34);
+    expect(parsed.GPSInfo.GPSLatitude[1]).toBe(3);
+    expect(parsed.GPSInfo.GPSLongitude[0]).toBe(118);
+    expect(parsed.GPSInfo.GPSLongitude[1]).toBe(14);
+  });
+
+  it("extracts a raw TIFF blob from the Apple uuid when no MetaBox is parseable", () => {
+    // Some Apple files store the EXIF as a raw blob inside the metadata uuid
+    // without a usable iloc/iinf MetaBox. The last-resort TIFF-marker scan
+    // must recover it.
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("qt  ", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    // uuid box wrapping a raw TIFF blob (no meta structure).
+    const uuid = Buffer.alloc(24 + iphoneTiff.length);
+    uuid.writeUInt32BE(uuid.length, 0);
+    uuid.write("uuid", 4, 4, "ascii");
+    APPLE_METADATA_UUID.copy(uuid, 8);
+    iphoneTiff.copy(uuid, 24);
+
+    const udta = Buffer.alloc(8 + uuid.length);
+    udta.writeUInt32BE(udta.length, 0);
+    udta.write("udta", 4, 4, "ascii");
+    uuid.copy(udta, 8);
+
+    const moov = Buffer.alloc(8 + udta.length);
+    moov.writeUInt32BE(moov.length, 0);
+    moov.write("moov", 4, 4, "ascii");
+    udta.copy(moov, 8);
+
+    const mdat = Buffer.alloc(16);
+    mdat.writeUInt32BE(16, 0);
+    mdat.write("mdat", 4, 4, "ascii");
+
+    const buf = Buffer.concat([ftyp, moov, mdat]);
+
+    const result = extractExifFromIsoBmffVideo(buf);
+    expect(result.tiff).not.toBeNull();
+    expect(result.truncated).toBe(false);
+    expect(result.moovMissing).toBe(false);
+
+    const parsed = exifReader(result.tiff);
+    expect(parsed.Image.Make).toBe("Apple");
+    expect(parsed.Image.Model).toBe("iPhone 14 Pro");
+  });
+});
+
+describe("extractExif (video routing)", () => {
+  const brooklynTiff = extractExifFromJpeg(brooklynJpeg).tiff!;
+  const { buffer: faststartMp4 } = buildFaststartVideo(brooklynTiff, "mp42");
+
+  it("routes video through extractExif when HEIF path fails", () => {
+    // faststartMp4 has NO top-level meta, only moov/udta/uuid/meta.
+    const result = extractExif(faststartMp4);
+    expect(result).not.toBeNull();
+    expect(Buffer.isBuffer(result!)).toBe(true);
+    const parsed = exifReader(result!);
+    expect(parsed.Image.Orientation).toBe(1);
+  });
+
+  it("routes a real-device-layout iPhone MOV through extractExif", () => {
+    const result = extractExif(iphoneRealLayoutMov);
+    expect(result).not.toBeNull();
+    expect(Buffer.isBuffer(result!)).toBe(true);
+
+    const parsed = exifReader(result!);
+    expect(parsed.Image.Make).toBe("Apple");
+    expect(parsed.Image.Model).toBe("iPhone 14 Pro");
+    expect(parsed.GPSInfo).toBeDefined();
+  });
+
+  it("extractExifWithRetry works for video with moov video path", async () => {
+    const { buffer: mp4 } = buildFaststartVideo(brooklynTiff, "mp42");
+    const fetchMore = jest.fn<Promise<Buffer | null>, [number, number]>();
+    const result = await extractExifWithRetry(mp4, 0, fetchMore);
+    expect(result).not.toBeNull();
+    expect(fetchMore).not.toHaveBeenCalled();
+  });
+
+  it("extractExifWithRetry handles a real-device-layout iPhone MOV in one read", async () => {
+    const fetchMore = jest.fn<Promise<Buffer | null>, [number, number]>();
+    const result = await extractExifWithRetry(
+      iphoneRealLayoutMov,
+      0,
+      fetchMore,
+    );
+    expect(result).not.toBeNull();
+    // moov is at the front — no follow-up should be needed.
+    expect(fetchMore).not.toHaveBeenCalled();
+
+    const parsed = exifReader(result!);
+    expect(parsed.Image.Make).toBe("Apple");
+    expect(parsed.Image.Model).toBe("iPhone 14 Pro");
+  });
+
+  it("extractExifWithRetry signals a follow-up on moovMissing (non-faststart)", async () => {
+    // Buffer: ftyp + partial mdat (no moov).
+    const ftyp = Buffer.alloc(24);
+    ftyp.writeUInt32BE(24, 0);
+    ftyp.write("ftyp", 4, 4, "ascii");
+    ftyp.write("mp42", 8, 4, "ascii");
+    ftyp.writeUInt32BE(0, 12);
+    ftyp.write("isom", 16, 4, "ascii");
+
+    const mdat = Buffer.alloc(40);
+    mdat.writeUInt32BE(40, 0);
+    mdat.write("mdat", 4, 4, "ascii");
+
+    const initial = Buffer.concat([ftyp, mdat]);
+
+    let fetchCallCount = 0;
+    const fetchMore = jest
+      .fn<Promise<Buffer | null>, [number, number]>()
+      .mockImplementation(async () => {
+        fetchCallCount++;
+        return null; // no more data
+      });
+
+    const result = await extractExifWithRetry(initial, 0, fetchMore);
+    // moovMissing → truncated+follow-up, but follow-up returns null → null.
+    expect(result).toBeNull();
+    expect(fetchCallCount).toBe(1);
   });
 });

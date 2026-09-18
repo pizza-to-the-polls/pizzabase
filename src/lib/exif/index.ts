@@ -3,6 +3,7 @@ export {
   extractExifFromJpeg,
   extractExifFromPng,
   extractExifFromHeif,
+  extractExifFromIsoBmffVideo,
   extractExifWithRetry,
   extractXmp,
   extractXmpFromJpeg,
@@ -17,6 +18,7 @@ export type {
   JpegExtractResult,
   PngExtractResult,
   HeifExtractResult,
+  IsoBmffVideoExtractResult,
   XmpExtractResult,
   FetchMoreBytes,
 } from "./extract";
