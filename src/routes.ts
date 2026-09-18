@@ -10,6 +10,7 @@ import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
 import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
+import { LinksController } from "./controller/LinksController";
 
 export const Routes = [
   {
@@ -215,5 +216,24 @@ export const Routes = [
     route: "/",
     controller: RootController,
     action: "root",
+  },
+  // ── Short Links ─────────────────────────────────────────────
+  {
+    method: "get",
+    route: "/l/:slug",
+    controller: LinksController,
+    action: "redirect",
+  },
+  {
+    method: "post",
+    route: "/links",
+    controller: LinksController,
+    action: "create",
+  },
+  {
+    method: "get",
+    route: "/links/:slug/clicks",
+    controller: LinksController,
+    action: "clicks",
   },
 ];
