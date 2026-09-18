@@ -6,10 +6,12 @@ import { TotalsController } from "./controller/TotalsController";
 import { OrdersController } from "./controller/OrdersController";
 import { UploadsController } from "./controller/UploadsController";
 import { SightEngineController } from "./controller/SightEngineController";
+import { ClipsController } from "./controller/ClipsController";
 import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
 import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
+import { LinksController } from "./controller/LinksController";
 
 export const Routes = [
   {
@@ -205,6 +207,42 @@ export const Routes = [
     action: "delete",
   },
   {
+    method: "post",
+    route: "/clips",
+    controller: ClipsController,
+    action: "create",
+  },
+  {
+    method: "get",
+    route: "/clips",
+    controller: ClipsController,
+    action: "index",
+  },
+  {
+    method: "get",
+    route: "/clips/:id",
+    controller: ClipsController,
+    action: "show",
+  },
+  {
+    method: "post",
+    route: "/clips/:id/approve",
+    controller: ClipsController,
+    action: "approve",
+  },
+  {
+    method: "post",
+    route: "/clips/:id/reject",
+    controller: ClipsController,
+    action: "reject",
+  },
+  {
+    method: "post",
+    route: "/clips/:id/requeue",
+    controller: ClipsController,
+    action: "requeue",
+  },
+  {
     method: "get",
     route: "/health",
     controller: RootController,
@@ -215,5 +253,24 @@ export const Routes = [
     route: "/",
     controller: RootController,
     action: "root",
+  },
+  // ── Short Links ─────────────────────────────────────────────
+  {
+    method: "get",
+    route: "/l/:slug",
+    controller: LinksController,
+    action: "redirect",
+  },
+  {
+    method: "post",
+    route: "/links",
+    controller: LinksController,
+    action: "create",
+  },
+  {
+    method: "get",
+    route: "/links/:slug/clicks",
+    controller: LinksController,
+    action: "clicks",
   },
 ];
