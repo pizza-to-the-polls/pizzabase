@@ -14,10 +14,10 @@ const handlerPromise = (async () => {
 module.exports.handler = (event, context, callback) => {
   // Keep the invocation alive after the HTTP response is delivered so
   // fire-and-forget work (socialPost) can finish. NOTE: this only works with
-  // callback-style handlers — async handlers end the invocation as soon as
-  // they resolve, freezing background promises at the next await point
-  // (observed on staging: socialPost died 6ms after "rendered message").
-  context.callbackWaitsForEmptyEventLoop = true;
+  // Respond as soon as the app handler resolves — social posting is now a
+  // separate onSocialPost Lambda invoked async (Event) from the controllers,
+  // so no in-process background work needs this invocation held open.
+  context.callbackWaitsForEmptyEventLoop = false;
   handlerPromise
     .then((resolvedHandler) => resolvedHandler(event, context))
     .then((result) => callback(null, result))

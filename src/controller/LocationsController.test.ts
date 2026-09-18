@@ -8,11 +8,11 @@ import { Report } from "../entity/Report";
 import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/geocode");
-jest.mock("../lib/social", () => ({
-  socialPost: jest.fn().mockResolvedValue(undefined),
+jest.mock("../lib/invoke-social-post", () => ({
+  invokeSocialPost: jest.fn(),
 }));
 
-import { socialPost } from "../lib/social";
+import { invokeSocialPost } from "../lib/invoke-social-post";
 
 let location: Location | null;
 const controller = new LocationsController();
@@ -440,7 +440,7 @@ describe("#truck", () => {
 });
 
 describe("#order", () => {
-  beforeEach(() => (socialPost as jest.Mock).mockClear());
+  beforeEach(() => (invokeSocialPost as jest.Mock).mockClear());
 
   it("returns validation errors", async () => {
     const { fullAddress } = location ? location : null;
@@ -479,9 +479,7 @@ describe("#order", () => {
 
     expect(order.cost).toEqual(500.23);
     expect(order.quantity).toEqual(32);
-    expect(socialPost).toHaveBeenCalledWith(
-      expect.objectContaining({ id: order.id }),
-    );
+    expect(invokeSocialPost).toHaveBeenCalledWith(order.id);
   });
 
   it("creates a donut order", async () => {
@@ -501,9 +499,7 @@ describe("#order", () => {
     expect(order.cost).toEqual(500.23);
     expect(order.orderType).toEqual("dozen donuts");
     expect(order.quantity).toEqual(5);
-    expect(socialPost).toHaveBeenCalledWith(
-      expect.objectContaining({ id: order.id }),
-    );
+    expect(invokeSocialPost).toHaveBeenCalledWith(order.id);
   });
 
   it("validates the order too", async () => {
