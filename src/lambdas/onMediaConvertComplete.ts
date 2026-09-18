@@ -7,7 +7,11 @@
  * Finds the Upload by job ID (stored in processed_file_path.jobId by
  * on-media-format), builds the MP4 output URL, and updates:
  *   media_status = 'ready' | 'failed'
- *   processed_file_path = { mp4: "https://..." }
+ *   processed_file_path = { mp4: "https://...", poster: <s3 key> }
+ *
+ * The poster is the frame-capture JPEG from the job's second output group
+ * (set up by on-media-format): the capture closest to 10% into the video,
+ * stored as a bare S3 key.
  */
 
 import { initializeDataSource } from "../data-source";
@@ -76,6 +80,24 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
     const outputs = outputGroupDetails?.[0]?.outputDetails || [];
     const mp4Path = outputs[0]?.outputFilePaths?.[0];
 
+    // Poster from the frame-capture output group (second group when present).
+    // Captures are named {input}_poster.00000NN.jpg — zero-padded, so a
+    // lexicographic sort is chronological. Index posterTargetIndex (set at
+    // CreateJob time) is the capture closest to 10% into the video; clamp to
+    // the last file for very short videos that produced fewer captures.
+    let posterKey: string | undefined;
+    const posterPaths = (outputGroupDetails?.[1]?.outputDetails || [])
+      .flatMap((o) => o.outputFilePaths || [])
+      .sort();
+    if (posterPaths.length > 0) {
+      const targetIndex = parseInt(userMetadata?.posterTargetIndex || "1", 10);
+      const index =
+        Number.isFinite(targetIndex) && targetIndex > 0
+          ? Math.min(targetIndex, posterPaths.length - 1)
+          : 0;
+      posterKey = posterPaths[index].replace(`s3://${PROCESSED_BUCKET}/`, "");
+    }
+
     if (mp4Path) {
       // MediaConvert outputs full S3 paths like s3://bucket/key_transcoded.mp4
       const key = mp4Path.replace(`s3://${PROCESSED_BUCKET}/`, "");
@@ -96,10 +118,16 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
       const mp4Url =
         cdnUrlForKey(key) ??
         `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${key}`;
-      // Keep jobId so redelivered events still resolve.
-      upload.processedFilePath = { mp4: mp4Url, jobId };
+      // Keep jobId so redelivered events still resolve. Poster is stored as
+      // a bare S3 key (not a URL) — consumers construct their own URLs.
+      upload.processedFilePath = {
+        mp4: mp4Url,
+        ...(posterKey ? { poster: posterKey } : {}),
+        jobId,
+      };
       console.log(
-        `[on-mediaconvert-complete] Upload ${upload.id} ready: ${mp4Url}`,
+        `[on-mediaconvert-complete] Upload ${upload.id} ready: ${mp4Url}` +
+          (posterKey ? ` (poster: ${posterKey})` : ""),
       );
     } else {
       console.warn(

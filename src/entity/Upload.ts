@@ -94,6 +94,9 @@ export class Upload extends BaseEntity {
   @OneToMany((_type) => Clip, (clip) => clip.upload)
   clips: Promise<Clip[]>;
 
+  @Column({ name: "failure_reason", type: "varchar", nullable: true })
+  failureReason: string | null;
+
   static async createOrReject(
     ipAddress: string,
     {

@@ -24,7 +24,11 @@ import {
 } from "@aws-sdk/client-mediaconvert";
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
-import { detectInputRotation } from "../lib/mp4-rotation";
+import {
+  detectInputRotation,
+  detectVideoDimensions,
+  detectVideoDuration,
+} from "../lib/mp4-rotation";
 import { cdnUrlForKey } from "../lib/media-cdn";
 import * as path from "path";
 
@@ -49,6 +53,24 @@ const IMAGE_EXTENSIONS = new Set([
   "heif",
 ]);
 const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm"]);
+
+const POSTER_MAX_DIMENSION = 1080;
+const POSTER_JPEG_QUALITY = 80;
+
+/**
+ * Scale {width, height} so the longest edge is at most `max`, preserving
+ * aspect ratio, and round to the even dimensions MediaConvert requires.
+ * Never upscales.
+ */
+function scaleToMaxDimension(
+  dims: { width: number; height: number },
+  max: number,
+): { width: number; height: number } {
+  const longest = Math.max(dims.width, dims.height);
+  const scale = longest > max ? max / longest : 1;
+  const even = (px: number) => Math.max(2, Math.round((px * scale) / 2) * 2);
+  return { width: even(dims.width), height: even(dims.height) };
+}
 
 let mediaConvertEndpoint: string | null = null;
 
@@ -112,8 +134,10 @@ export async function handler(event: S3Event): Promise<void> {
       } else if (VIDEO_EXTENSIONS.has(fileExt)) {
         await transcodeVideo(key, upload.id);
         // Transcoded MP4 carries no source metadata.
-        upload.exifScrubbed = true;
-        await upload.save();
+        // NOTE: transcodeVideo re-fetches and saves processedFilePath
+        // ({jobId}) — this stale instance must not clobber it, so update
+        // only the column we own here.
+        await Upload.update(upload.id, { exifScrubbed: true });
         // media_status flips to ready in on-mediaconvert-complete
         console.log(`[on-media-format] MediaConvert job started for ${key}`);
       } else {
@@ -197,6 +221,9 @@ async function processImage(
     processedPath.gif =
       cdnUrlForKey(gifKey) ??
       `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${gifKey}`;
+    // Poster: the resized image is its own thumbnail, so consumers never
+    // branch on media type. (Key, not URL — see processed_file_path docs.)
+    processedPath.poster = gifKey;
     return processedPath;
   }
 
@@ -252,6 +279,11 @@ async function processImage(
     cdnUrlForKey(jpegKey) ??
     `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${jpegKey}`;
 
+  // Poster: the resized JPEG (universally compatible as a thumbnail, already
+  // capped at IMAGE_MAX_DIMENSION) doubles as the image poster. Consumers
+  // read processed_file_path.poster without branching on media type.
+  processedPath.poster = jpegKey;
+
   return processedPath;
 }
 
@@ -282,8 +314,11 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
 
   // MediaConvert ignores the input's display-matrix rotation: a phone video
   // recorded portrait (landscape pixels + 90° matrix) comes out sideways.
-  // Detect the rotation from the raw tkhd and pass it to the job.
+  // Detect the rotation from the raw tkhd and pass it to the job. The same
+  // buffer also yields duration + dimensions for the poster frame capture.
   let rotate: "DEGREES_90" | "DEGREES_180" | "DEGREES_270" | undefined;
+  let durationSeconds: number | null = null;
+  let videoDims: { width: number; height: number } | null = null;
   try {
     const rawObject = await s3.send(
       new GetObjectCommand({ Bucket: RAW_BUCKET, Key: key }),
@@ -293,8 +328,12 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
         await rawObject.Body.transformToByteArray(),
       );
       rotate = detectInputRotation(rawBuffer) ?? undefined;
+      durationSeconds = detectVideoDuration(rawBuffer);
+      videoDims = detectVideoDimensions(rawBuffer);
       console.log(
-        `[on-media-format] input rotation for ${key}: ${rotate ?? "none"}`,
+        `[on-media-format] input rotation for ${key}: ${rotate ?? "none"}; ` +
+          `duration: ${durationSeconds ?? "unknown"}s; dims: ` +
+          (videoDims ? `${videoDims.width}x${videoDims.height}` : "unknown"),
       );
     }
   } catch (err) {
@@ -303,6 +342,25 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
       err,
     );
   }
+
+  // Poster frame: capture the frame closest to 10% into the video, JPEG,
+  // 1080px max dimension. Frame capture always encodes the first frame, then
+  // one frame every captureInterval seconds — so we set the interval to ~10%
+  // of the duration and mark which capture to use as the poster
+  // (posterTargetIndex, resolved in on-mediaconvert-complete). When duration
+  // is unknown we fall back to a 1s interval and take the second capture.
+  const captureInterval = durationSeconds
+    ? Math.min(10, Math.max(1, Math.round(durationSeconds / 10)))
+    : 1;
+  const posterTargetIndex = durationSeconds
+    ? Math.max(
+        1,
+        Math.min(11, Math.round(durationSeconds / 10 / captureInterval)),
+      )
+    : 1;
+  const posterDims = videoDims
+    ? scaleToMaxDimension(videoDims, POSTER_MAX_DIMENSION)
+    : null;
 
   const jobParams: CreateJobCommandInput = {
     Role: process.env.MEDIACONVERT_ROLE_ARN || "",
@@ -360,11 +418,49 @@ async function transcodeVideo(key: string, uploadId: number): Promise<void> {
             },
           ],
         },
+        {
+          // Poster frame capture — same processed destination as the main
+          // transcode output; files are named {input}_poster.00000NN.jpg.
+          OutputGroupSettings: {
+            Type: "FILE_GROUP_SETTINGS",
+            FileGroupSettings: {
+              Destination: `s3://${PROCESSED_BUCKET}/${outputPrefix}/`,
+            },
+          },
+          Outputs: [
+            {
+              ContainerSettings: { Container: "RAW" },
+              VideoDescription: {
+                CodecSettings: {
+                  Codec: "FRAME_CAPTURE",
+                  FrameCaptureSettings: {
+                    FramerateNumerator: 1,
+                    FramerateDenominator: captureInterval,
+                    MaxCaptures: posterTargetIndex + 1,
+                    Quality: POSTER_JPEG_QUALITY,
+                  },
+                },
+                // Dimensions: scale the source to a 1080px max edge (both
+                // edges specified so portrait and landscape both fit). When
+                // the source dims are unknown, cap height at 1080 and let
+                // MediaConvert preserve aspect ratio (phone videos are
+                // typically portrait, matching the transcode output).
+                ...(posterDims
+                  ? { Width: posterDims.width, Height: posterDims.height }
+                  : { Height: 1080 }),
+                ScalingBehavior: "DEFAULT",
+              },
+              Extension: "jpg",
+              NameModifier: "_poster",
+            },
+          ],
+        },
       ],
     },
     UserMetadata: {
       uploadId: String(uploadId),
       sourceKey: key,
+      posterTargetIndex: String(posterTargetIndex),
     },
   };
 

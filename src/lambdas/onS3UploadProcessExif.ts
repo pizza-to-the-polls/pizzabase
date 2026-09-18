@@ -15,7 +15,11 @@ import { S3Client, GetObjectCommand } from "@aws-sdk/client-s3";
 import { LambdaClient, InvokeCommand } from "@aws-sdk/client-lambda";
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
-import { extractExif } from "../lib/exif/extract";
+import {
+  extractExif,
+  isVideoIsoBmff,
+  extractDuration,
+} from "../lib/exif/extract";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const lambda = new LambdaClient({
@@ -30,6 +34,11 @@ const MEDIA_FORMAT_FUNCTION =
 
 const INITIAL_RANGE_BYTES = 65535;
 
+const MEDIA_MAX_DURATION_SECONDS = parseInt(
+  process.env.MEDIA_MAX_DURATION_SECONDS || "90",
+  10,
+);
+
 interface S3EventRecord {
   s3: {
     bucket: { name: string };
@@ -43,6 +52,8 @@ interface S3Event {
 
 export async function handler(event: S3Event): Promise<void> {
   await initializeDataSource();
+
+  const failedKeys = new Set<string>();
 
   for (const record of event.Records) {
     const key = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
@@ -85,6 +96,24 @@ export async function handler(event: S3Event): Promise<void> {
       }
 
       const initialBuffer = Buffer.from(await resp.Body.transformToByteArray());
+
+      // ── Video duration check (fail fast, before EXIF storage) ──
+      const isVideo = isVideoIsoBmff(initialBuffer);
+      const durationSeconds = isVideo ? extractDuration(initialBuffer) : null;
+      if (
+        durationSeconds !== null &&
+        durationSeconds > MEDIA_MAX_DURATION_SECONDS
+      ) {
+        upload.mediaStatus = "failed";
+        upload.failureReason = `video exceeds ${MEDIA_MAX_DURATION_SECONDS}s duration limit (duration: ${Math.round(durationSeconds)}s)`;
+        await upload.save();
+        failedKeys.add(key);
+        console.log(
+          `[on-s3-upload-process-exif] Video ${key} over duration limit: ${durationSeconds}s`,
+        );
+        continue;
+      }
+
       const tiffPayload = extractExif(initialBuffer);
 
       if (tiffPayload) {
@@ -109,6 +138,14 @@ export async function handler(event: S3Event): Promise<void> {
         console.log(`[on-s3-upload-process-exif] No EXIF found in ${key}`);
       }
 
+      if (durationSeconds !== null) {
+        // Store duration in existing exif_data JSONB.
+        upload.exifData = {
+          ...((upload.exifData as Record<string, unknown>) || {}),
+          duration_seconds: durationSeconds,
+        };
+      }
+
       upload.exifExtracted = true;
       await upload.save();
     } catch (err) {
@@ -116,21 +153,29 @@ export async function handler(event: S3Event): Promise<void> {
     }
   }
 
-  // Chain the media-format pass (image resize / video transcode) on the same
-  // event. Fire-and-forget: media-format is idempotent and handles its own
-  // errors; failures must not fail EXIF extraction.
-  try {
-    await lambda.send(
-      new InvokeCommand({
-        FunctionName: MEDIA_FORMAT_FUNCTION,
-        InvocationType: "Event",
-        Payload: JSON.stringify(event),
-      }),
-    );
-  } catch (err) {
-    console.error(
-      "[on-s3-upload-process-exif] Failed to invoke on-media-format:",
-      err,
-    );
+  // Chain the media-format pass (image resize / video transcode) on the
+  // remaining records — excluding ones we already failed (e.g., duration cap).
+  // Fire-and-forget: media-format is idempotent and handles its own errors;
+  // failures must not fail EXIF extraction.
+  const activeRecords = event.Records.filter((record) => {
+    const k = decodeURIComponent(record.s3.object.key.replace(/\+/g, " "));
+    return !failedKeys.has(k);
+  });
+
+  if (activeRecords.length > 0) {
+    try {
+      await lambda.send(
+        new InvokeCommand({
+          FunctionName: MEDIA_FORMAT_FUNCTION,
+          InvocationType: "Event",
+          Payload: JSON.stringify({ Records: activeRecords }),
+        }),
+      );
+    } catch (err) {
+      console.error(
+        "[on-s3-upload-process-exif] Failed to invoke on-media-format:",
+        err,
+      );
+    }
   }
 }
