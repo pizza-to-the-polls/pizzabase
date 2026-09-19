@@ -2,7 +2,9 @@ import * as http_mocks from "node-mocks-http";
 
 import { ClipsController } from "./ClipsController";
 import { invokeRenderClip } from "../lib/clip-render";
+import { notifyClipKit } from "../lib/clipKit";
 import { Clip, ClipStatus } from "../entity/Clip";
+import { Link } from "../entity/Link";
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
 
@@ -11,10 +13,17 @@ jest.mock("../lib/clip-render", () => ({
   invokeRenderClip: jest.fn().mockResolvedValue(undefined),
 }));
 
+// Slack kit distribution is tested in src/lib/clipKit.test.ts — here it is
+// mocked so approve-hook tests assert on the call, not the HTTP side effect.
+jest.mock("../lib/clipKit", () => ({
+  notifyClipKit: jest.fn().mockResolvedValue(undefined),
+}));
+
 type JsonResponse = Record<string, any>;
 
 const controller = new ClipsController();
 const mockInvokeRenderClip = invokeRenderClip as jest.Mock;
+const mockNotifyClipKit = notifyClipKit as jest.Mock;
 
 // Built lazily (not at module-eval time) because GOOD_API_KEY is only
 // generated in jest.setup.ts's beforeAll, which runs after this module
@@ -72,6 +81,8 @@ const makeClip = async (
 
 beforeEach(() => {
   mockInvokeRenderClip.mockClear();
+  mockNotifyClipKit.mockClear();
+  mockNotifyClipKit.mockResolvedValue(undefined);
 });
 
 describe("#create", () => {
@@ -182,20 +193,90 @@ describe("#create", () => {
     expect(response.statusCode).toEqual(200);
     expect(body.status).toEqual("queued");
     expect(body.id).toBeTruthy();
-    expect(body.kit).toEqual({
-      caption: "Long lines!",
-      hashtags: ["#votingrights", "#ElectionDay", "#OR", "#Portland"],
-      shortUrlSlug: null,
-    });
+    expect(body.kit.caption).toEqual("Long lines!");
+    expect(body.kit.hashtags).toEqual([
+      "#votingrights",
+      "#ElectionDay",
+      "#OR",
+      "#Portland",
+    ]);
+    // CLIP-003: every clip gets a trackable short link at creation.
+    expect(body.kit.shortUrlSlug).toMatch(/^[a-zA-Z0-9]{5}$/);
 
     const saved = await Clip.findOne({ where: { id: body.id } });
     expect(saved.status).toEqual("queued");
     expect(saved.kit.city).toEqual("Portland");
     expect(saved.kit.state).toEqual("OR");
     expect(saved.kit.reportedAt).toEqual("2024-11-05T14:30:00Z");
+    expect(saved.kit.shortUrlSlug).toEqual(body.kit.shortUrlSlug);
+
+    // The Link row is created with the clip's id as its campaign tag.
+    const link = await Link.findOne({ where: { clipId: saved.id } });
+    expect(link).toBeTruthy();
+    expect(link!.campaignTag).toEqual(`clip-${saved.id}`);
+    expect(link!.targetUrl).toEqual("https://www.polls.pizza/donate");
+    expect(link!.slug).toEqual(saved.kit.shortUrlSlug);
 
     expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
     expect(mockInvokeRenderClip).toHaveBeenCalledWith(saved.id);
+  });
+
+  it("creates the Link with the DONATE_LANDING_URL override when configured", async () => {
+    process.env.DONATE_LANDING_URL = "https://example.org/donate-now";
+    try {
+      const upload = await makeUpload();
+      const request = http_mocks.createRequest({
+        method: "POST",
+        body: { ...validBody(), uploadId: upload.id },
+        headers: authHeaders(),
+      });
+      const response = http_mocks.createResponse();
+
+      const body = (await controller.create(
+        request,
+        response,
+        () => undefined,
+      )) as JsonResponse;
+
+      const link = await Link.findOne({ where: { clipId: body.id } });
+      expect(link!.targetUrl).toEqual("https://example.org/donate-now");
+    } finally {
+      delete process.env.DONATE_LANDING_URL;
+    }
+  });
+
+  it("fails open when Link creation throws: clip still created + render fired, slug null", async () => {
+    const createWithSlug = jest
+      .spyOn(Link, "createWithSlug")
+      .mockRejectedValue(new Error("links table on fire"));
+
+    const upload = await makeUpload();
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { ...validBody(), uploadId: upload.id },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    try {
+      const body = (await controller.create(
+        request,
+        response,
+        () => undefined,
+      )) as JsonResponse;
+
+      expect(response.statusCode).toEqual(200);
+      expect(body.status).toEqual("queued");
+      expect(body.kit.shortUrlSlug).toBeNull();
+
+      const saved = await Clip.findOne({ where: { id: body.id } });
+      expect(saved.status).toEqual("queued");
+      expect(saved.kit.shortUrlSlug).toBeNull();
+      expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
+      expect(mockInvokeRenderClip).toHaveBeenCalledWith(saved.id);
+    } finally {
+      createWithSlug.mockRestore();
+    }
   });
 });
 
@@ -409,6 +490,244 @@ describe("#approve", () => {
 
     expect(response.statusCode).toEqual(404);
     expect(body).toBeFalsy();
+    expect(mockNotifyClipKit).not.toHaveBeenCalled();
+  });
+
+  it("fires the Slack kit notifier after saving the approved clip", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "ready");
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = (await controller.approve(
+      request,
+      response,
+      () => undefined,
+    )) as JsonResponse;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.status).toEqual("approved");
+    expect(mockNotifyClipKit).toHaveBeenCalledTimes(1);
+    expect(mockNotifyClipKit).toHaveBeenCalledWith(
+      expect.objectContaining({ id: clip.id, status: "approved" }),
+    );
+  });
+
+  it("does not fire the notifier when the transition is rejected", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "queued");
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    await controller.approve(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(400);
+    expect(mockNotifyClipKit).not.toHaveBeenCalled();
+  });
+
+  it("still approves successfully when the notifier crashes", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "ready");
+    mockNotifyClipKit.mockRejectedValue(new Error("Slack is down"));
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = (await controller.approve(
+      request,
+      response,
+      () => undefined,
+    )) as JsonResponse;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.status).toEqual("approved");
+
+    const saved = await Clip.findOne({ where: { id: clip.id } });
+    expect(saved.status).toEqual("approved");
+
+    // Wait for microtasks so the fire-and-forget .catch handler runs
+    // without an unhandled rejection leaking into other tests.
+    await new Promise(setImmediate);
+  });
+});
+
+describe("#publish", () => {
+  it("returns 401 without auth", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "approved");
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      body: { platform: "tiktok" },
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.publish(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(401);
+    expect(body).toEqual({ errors: ["Not authorized"] });
+  });
+
+  it("returns 404 for a nonexistent clip", async () => {
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: "999999" },
+      body: { platform: "tiktok" },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.publish(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toBeFalsy();
+  });
+
+  it("returns 400 for a queued clip (invalid transition)", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "queued");
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      body: { platform: "tiktok" },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = (await controller.publish(
+      request,
+      response,
+      () => undefined,
+    )) as JsonResponse;
+
+    expect(response.statusCode).toEqual(400);
+    expect(body.errors[0]).toMatch(/cannot publish clip in queued state/i);
+
+    const saved = await Clip.findOne({ where: { id: clip.id } });
+    expect(saved.status).toEqual("queued");
+    expect(saved.publishLog).toBeNull();
+  });
+
+  it("returns 400 when platform is missing", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "approved");
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      body: {},
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = (await controller.publish(
+      request,
+      response,
+      () => undefined,
+    )) as JsonResponse;
+
+    expect(response.statusCode).toEqual(400);
+    expect(body.errors[0]).toMatch(/platform is required/i);
+  });
+
+  it("appends a log entry and flips approved → published", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "approved");
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      body: { platform: "tiktok" },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const before = Date.now();
+    const body = (await controller.publish(
+      request,
+      response,
+      () => undefined,
+    )) as JsonResponse;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.status).toEqual("published");
+
+    const saved = await Clip.findOne({ where: { id: clip.id } });
+    expect(saved.status).toEqual("published");
+    expect(saved.publishLog).toHaveLength(1);
+    const [entry] = saved.publishLog as Array<Record<string, unknown>>;
+    expect(entry.platform).toEqual("tiktok");
+    expect(typeof entry.postedAt).toEqual("string");
+    const postedAtMs = new Date(entry.postedAt as string).getTime();
+    expect(postedAtMs).toBeGreaterThanOrEqual(before);
+    expect(entry.note).toBeUndefined();
+  });
+
+  it("records the optional note with the log entry", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "approved");
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      body: { platform: "reels", note: "Posted by @volunteer" },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    await controller.publish(request, response, () => undefined);
+
+    const saved = await Clip.findOne({ where: { id: clip.id } });
+    expect(saved.publishLog).toEqual([
+      {
+        platform: "reels",
+        postedAt: expect.any(String),
+        note: "Posted by @volunteer",
+      },
+    ]);
+  });
+
+  it("appends a second platform to an already-published clip without changing status", async () => {
+    const upload = await makeUpload();
+    const clip = await makeClip(upload, "published");
+    clip.publishLog = [
+      { platform: "tiktok", postedAt: "2024-11-05T18:00:00.000Z" },
+    ];
+    await clip.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      params: { id: `${clip.id}` },
+      body: { platform: "shorts" },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = (await controller.publish(
+      request,
+      response,
+      () => undefined,
+    )) as JsonResponse;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body.status).toEqual("published");
+
+    const saved = await Clip.findOne({ where: { id: clip.id } });
+    expect(saved.status).toEqual("published");
+    expect(saved.publishLog).toHaveLength(2);
+    expect(saved.publishLog![0].platform).toEqual("tiktok");
+    expect(saved.publishLog![1].platform).toEqual("shorts");
   });
 });
 

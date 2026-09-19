@@ -18,7 +18,8 @@
  *      duration) → rendering → rejected with failureReason.
  *   5. Render via ffmpeg Lambda layer (args from the pure clipTemplate
  *      module): 1080x1920 center-crop, burned-in caption + city/state
- *      lower third, 2s branded end-card, H.264/AAC, ≤90s.
+ *      lower third, 2s branded end-card with short-link QR + URL, H.264/AAC,
+ *      ≤90s.
  *   6. Upload the bundle to clips/{clipId}/ (clip.mp4, clip.srt,
  *      poster.jpg, kit.json) and set status=ready with outputPaths.
  *   7. Any failure after the rendering transition → rejected + reason
@@ -29,6 +30,7 @@ import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
 import { MoreThan } from "typeorm";
+import * as QRCode from "qrcode";
 import {
   S3Client,
   GetObjectCommand,
@@ -48,6 +50,7 @@ const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const FFMPEG_BIN = process.env.FFMPEG_PATH || "/opt/bin/ffmpeg";
 const DEFAULT_DAILY_BUDGET = 50;
+const QR_SIZE_PX = 200;
 
 /**
  * Deterministic scratch directory for a clip's render artifacts. Exported
@@ -95,6 +98,40 @@ function kitStringArray(
   return Array.isArray(value) && value.every((v) => typeof v === "string")
     ? (value as string[])
     : null;
+}
+
+/**
+ * Generate the end-card QR PNG for the clip's short link. Returns the path
+ * on success, or null when there is no slug or generation fails — a QR
+ * failure degrades the end-card to the text-only variant (fail-open, same
+ * philosophy as short-link creation) rather than failing the whole render.
+ */
+export async function writeQrPng(
+  workDir: string,
+  slug: string | null,
+): Promise<string | null> {
+  if (!slug) return null;
+  const qrPath = path.join(workDir, "endcard-qr.png");
+  try {
+    // Short domain for the QR payload. The real short domain is pending
+    // registration; the fallback matches the /l/:slug redirect route shape.
+    const shortUrlBase = process.env.SHORT_URL_BASE || "https://polls.pizza/l";
+    await QRCode.toFile(qrPath, `${shortUrlBase}/${slug}`, {
+      type: "png",
+      width: QR_SIZE_PX,
+      margin: 1,
+      // Dark modules on a solid white tile so the code stays scannable
+      // over the dark end-card background.
+      color: { dark: "#101418ff", light: "#ffffffff" },
+    });
+    return qrPath;
+  } catch (err) {
+    console.warn(
+      `[render-clip] QR generation failed — rendering end-card without QR: ` +
+        (err instanceof Error ? err.message : String(err)),
+    );
+    return null;
+  }
 }
 
 async function rejectClip(clip: Clip, reason: string): Promise<void> {
@@ -228,12 +265,16 @@ export async function handler(event: { clipId?: number }): Promise<void> {
     const inputPath = path.join(workDir, "input.mp4");
     await fs.writeFile(inputPath, sourceBytes);
 
+    const shortUrlSlug = kitString(kit, "shortUrlSlug");
+    const qrCodePath = await writeQrPng(workDir, shortUrlSlug);
+
     const plan = buildRenderPlan({
       captionText: kitString(kit, "caption"),
       city: kitString(kit, "city") ?? "",
       state: kitString(kit, "state") ?? "",
       reportedAt: kitString(kit, "reportedAt") ?? "",
-      shortUrlSlug: kitString(kit, "shortUrlSlug"),
+      shortUrlSlug,
+      qrCodePath,
       hashtags: kitStringArray(kit, "hashtags"),
       sourceDuration,
       inputPath,
