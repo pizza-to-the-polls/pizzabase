@@ -3,6 +3,7 @@ import * as http_mocks from "node-mocks-http";
 import { ClipsController } from "./ClipsController";
 import { invokeRenderClip } from "../lib/clip-render";
 import { Clip, ClipStatus } from "../entity/Clip";
+import { Link } from "../entity/Link";
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
 
@@ -182,20 +183,90 @@ describe("#create", () => {
     expect(response.statusCode).toEqual(200);
     expect(body.status).toEqual("queued");
     expect(body.id).toBeTruthy();
-    expect(body.kit).toEqual({
-      caption: "Long lines!",
-      hashtags: ["#votingrights", "#ElectionDay", "#OR", "#Portland"],
-      shortUrlSlug: null,
-    });
+    expect(body.kit.caption).toEqual("Long lines!");
+    expect(body.kit.hashtags).toEqual([
+      "#votingrights",
+      "#ElectionDay",
+      "#OR",
+      "#Portland",
+    ]);
+    // CLIP-003: every clip gets a trackable short link at creation.
+    expect(body.kit.shortUrlSlug).toMatch(/^[a-zA-Z0-9]{5}$/);
 
     const saved = await Clip.findOne({ where: { id: body.id } });
     expect(saved.status).toEqual("queued");
     expect(saved.kit.city).toEqual("Portland");
     expect(saved.kit.state).toEqual("OR");
     expect(saved.kit.reportedAt).toEqual("2024-11-05T14:30:00Z");
+    expect(saved.kit.shortUrlSlug).toEqual(body.kit.shortUrlSlug);
+
+    // The Link row is created with the clip's id as its campaign tag.
+    const link = await Link.findOne({ where: { clipId: saved.id } });
+    expect(link).toBeTruthy();
+    expect(link!.campaignTag).toEqual(`clip-${saved.id}`);
+    expect(link!.targetUrl).toEqual("https://www.polls.pizza/donate");
+    expect(link!.slug).toEqual(saved.kit.shortUrlSlug);
 
     expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
     expect(mockInvokeRenderClip).toHaveBeenCalledWith(saved.id);
+  });
+
+  it("creates the Link with the DONATE_LANDING_URL override when configured", async () => {
+    process.env.DONATE_LANDING_URL = "https://example.org/donate-now";
+    try {
+      const upload = await makeUpload();
+      const request = http_mocks.createRequest({
+        method: "POST",
+        body: { ...validBody(), uploadId: upload.id },
+        headers: authHeaders(),
+      });
+      const response = http_mocks.createResponse();
+
+      const body = (await controller.create(
+        request,
+        response,
+        () => undefined,
+      )) as JsonResponse;
+
+      const link = await Link.findOne({ where: { clipId: body.id } });
+      expect(link!.targetUrl).toEqual("https://example.org/donate-now");
+    } finally {
+      delete process.env.DONATE_LANDING_URL;
+    }
+  });
+
+  it("fails open when Link creation throws: clip still created + render fired, slug null", async () => {
+    const createWithSlug = jest
+      .spyOn(Link, "createWithSlug")
+      .mockRejectedValue(new Error("links table on fire"));
+
+    const upload = await makeUpload();
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { ...validBody(), uploadId: upload.id },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    try {
+      const body = (await controller.create(
+        request,
+        response,
+        () => undefined,
+      )) as JsonResponse;
+
+      expect(response.statusCode).toEqual(200);
+      expect(body.status).toEqual("queued");
+      expect(body.kit.shortUrlSlug).toBeNull();
+
+      const saved = await Clip.findOne({ where: { id: body.id } });
+      expect(saved.status).toEqual("queued");
+      expect(saved.kit.shortUrlSlug).toBeNull();
+      expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
+      expect(mockInvokeRenderClip).toHaveBeenCalledWith(saved.id);
+    } finally {
+      createWithSlug.mockRestore();
+    }
   });
 });
 

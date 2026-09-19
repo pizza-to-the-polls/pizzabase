@@ -66,6 +66,10 @@ provider:
 
     THREADS_USER_ID: ${env:THREADS_USER_ID, ''}
 
+    # Clip Factory — short links / end-card QR (domain pending registration).
+    SHORT_URL_BASE: ${env:SHORT_URL_BASE, 'https://polls.pizza/l'}
+    DONATE_LANDING_URL: ${env:DONATE_LANDING_URL, 'https://www.polls.pizza/donate'}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:
@@ -190,6 +194,28 @@ functions:
               status:
                 - "COMPLETE"
                 - "ERROR"
+
+  renderClip:
+    # Clip Factory renderer (CF-6). No event sources: fired by the app lambda
+    # via fire-and-forget async invoke (src/lib/clip-render.ts), payload
+    # { clipId }. 900s/3009MB for the ffmpeg encode; see docs/clip-render-infra.md
+    # for the ffmpeg layer build (fonts + static ffmpeg with freetype).
+    handler: build/lambdas/renderClip.handler
+    timeout: 900
+    memorySize: 3009
+    layers:
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1
+    environment:
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      RENDER_DAILY_BUDGET: ${env:RENDER_DAILY_BUDGET, '50'}
+      FFMPEG_PATH: /opt/bin/ffmpeg
+      RENDER_FONT_FILE: /opt/fonts/DejaVuSans-Bold.ttf
+      # Clip Factory — end-card QR short URL base (short domain pending
+      # registration; keep in sync with the /l/:slug redirect route).
+      SHORT_URL_BASE: ${env:SHORT_URL_BASE, 'https://polls.pizza/l'}
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
 
 custom:
   customDomain:
