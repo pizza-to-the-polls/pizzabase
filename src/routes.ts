@@ -232,6 +232,12 @@ export const Routes = [
   },
   {
     method: "post",
+    route: "/clips/:id/publish",
+    controller: ClipsController,
+    action: "publish",
+  },
+  {
+    method: "post",
     route: "/clips/:id/reject",
     controller: ClipsController,
     action: "reject",

@@ -5,6 +5,7 @@ import { Upload } from "../entity/Upload";
 import { checkAuthorization, findOr404 } from "./helper";
 import { deriveHashtags } from "../lib/clip-hashtags";
 import { invokeRenderClip } from "../lib/clip-render";
+import { notifyClipKit } from "../lib/clipKit";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { Link } from "../entity/Link";
 
@@ -199,6 +200,71 @@ export class ClipsController {
     clip.approvedBy =
       (request.body || {}).approvedBy || `apikey:${apiKey.slice(0, 8)}…`;
     clip.approvedAt = new Date();
+
+    await clip.save();
+
+    // Fire-and-forget Slack kit distribution (DIST-001): the response
+    // returns immediately and a failed notification never breaks clip
+    // approval. notifyClipKit never throws (it logs + Bugsnags internally);
+    // the .catch is purely defensive, mirroring the socialPost pattern.
+    notifyClipKit(clip).catch((err) =>
+      console.error("notifyClipKit crashed:", err),
+    );
+
+    return clip.asJSON();
+  }
+
+  /**
+   * Publish confirmation (DIST-001, manual-first): a volunteer posted the
+   * clip natively on a platform and closes the loop. Appends
+   * { platform, postedAt, note? } to the clip's publishLog; the first
+   * entry flips an approved clip to published. Allowed from approved or
+   * published (repeats append more platforms to the same clip).
+   */
+  async publish(request: Request, response: Response, next: NextFunction) {
+    if (!(await checkAuthorization(request))) {
+      response.status(401);
+      return { errors: ["Not authorized"] };
+    }
+
+    const clip = await findOr404(
+      await Clip.findOne({ where: { id: Number(request.params.id || "") } }),
+      response,
+      next,
+    );
+    if (!clip) return;
+
+    if (
+      !Clip.canTransition(clip.status, "published") &&
+      clip.status !== "published"
+    ) {
+      response.status(400);
+      return { errors: [`Cannot publish clip in ${clip.status} state`] };
+    }
+
+    const { platform, note } = request.body || {};
+    if (!platform || typeof platform !== "string") {
+      response.status(400);
+      return { errors: ["platform is required"] };
+    }
+
+    const entry: Record<string, unknown> = {
+      platform,
+      postedAt: new Date().toISOString(),
+    };
+    if (note && typeof note === "string") {
+      entry.note = note;
+    }
+
+    // New array (not an in-place push) so TypeORM's jsonb change
+    // detection reliably persists the append.
+    clip.publishLog = [...(clip.publishLog || []), entry];
+
+    // Only flip to published on the first entry; later confirmations just
+    // append another platform to the same clip's log.
+    if (clip.status !== "published") {
+      clip.status = "published";
+    }
 
     await clip.save();
 
