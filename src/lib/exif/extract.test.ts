@@ -991,7 +991,6 @@ describe("extractExifFromHeif (video containers)", () => {
   });
 });
 
-// ---------------------------------------------------------------------------
 // Video duration parsing (ISO BMFF mvhd)
 // ---------------------------------------------------------------------------
 
@@ -999,154 +998,6 @@ describe("extractExifFromHeif (video containers)", () => {
  * Build a minimal ftyp-only ISO BMFF container with the given major brand.
  */
 function buildFtypBox(brand: string, compatBrand = "isom"): Buffer {
-// Apple MOV/MP4 video EXIF extraction (moov → udta → uuid MetaBox)
-// ---------------------------------------------------------------------------
-
-/** Apple metadata usertype UUID for the uuid box under moov/udta. */
-const APPLE_METADATA_UUID = Buffer.from([
-  0x85, 0xc0, 0xb6, 0x87, 0xf4, 0x5c, 0x46, 0xda, 0x9d, 0x5d, 0x9f, 0x90, 0x49,
-  0xb8, 0xe2, 0xae,
-]);
-
-/**
- * Build a minimal TIFF file containing Apple iPhone-style EXIF metadata
- * (Make, Model, DateTime, GPS). The TIFF is little-endian and contains an
- * Image IFD with Make/Model plus a GPS IFD pointed by tag 0x8825.
- */
-function buildIphoneTiff(): Buffer {
-  // IFD entries for Image IFD (IFD0).
-  const make = Buffer.from("Apple\0", "ascii"); // 6 bytes
-  const model = Buffer.from("iPhone 14 Pro\0", "ascii"); // 14 bytes
-  const dateTime = Buffer.from("2024:01:15 10:30:00\0", "ascii"); // 20 bytes
-
-  // GPS IFD entries: lat 34°3'0"N, lon 118°14'0"W.
-  const gpsRef = Buffer.from("N\0", "ascii"); // 2 bytes
-  const gpsLonRef = Buffer.from("W\0", "ascii"); // 2 bytes
-
-  // Rational: 3 values × 8 bytes (num+denom) = 24 bytes per coordinate.
-  const gpsLat = Buffer.alloc(24);
-  gpsLat.writeUInt32LE(34, 0);
-  gpsLat.writeUInt32LE(1, 4);
-  gpsLat.writeUInt32LE(3, 8);
-  gpsLat.writeUInt32LE(1, 12);
-  gpsLat.writeUInt32LE(0, 16);
-  gpsLat.writeUInt32LE(1, 20);
-
-  const gpsLon = Buffer.alloc(24);
-  gpsLon.writeUInt32LE(118, 0);
-  gpsLon.writeUInt32LE(1, 4);
-  gpsLon.writeUInt32LE(14, 8);
-  gpsLon.writeUInt32LE(1, 12);
-  gpsLon.writeUInt32LE(0, 16);
-  gpsLon.writeUInt32LE(1, 20);
-
-  // We place extra data after the IFD entries.
-  // IFD0: 2 (count) + 4 entries × 12 + 4 (next) = 54 bytes.
-  // GPS IFD: 2 + 4 entries × 12 + 4 = 54 bytes.
-  const ifd0Start = 8;
-  const ifd0Next = ifd0Start + 2 + 4 * 12 + 4; // = 8 + 54 = 62
-  const gpsIfdStart = ifd0Next;
-  const gpsIfdEnd = gpsIfdStart + 2 + 4 * 12 + 4; // = 62 + 54 = 116
-  let extra = gpsIfdEnd;
-
-  const extraMake = extra;
-  extra += make.length;
-  const extraModel = extra;
-  extra += model.length;
-  const extraDateTime = extra;
-  extra += dateTime.length;
-  const extraGpsLat = extra;
-  extra += gpsLat.length;
-  const extraGpsLon = extra;
-  extra += gpsLon.length;
-  extra += gpsRef.length; // gpsRef offset
-  extra += gpsLonRef.length; // gpsLonRef offset
-
-  const total = extra;
-  const buf = Buffer.alloc(total);
-
-  // TIFF header
-  buf.write("II", 0, "ascii");
-  buf.writeUInt16LE(42, 2);
-  buf.writeUInt32LE(ifd0Start, 4);
-
-  // IFD0: 3 entries (Make, Model, GPSInfo pointer)
-  buf.writeUInt16LE(3, ifd0Start);
-  let off = ifd0Start + 2;
-  // Make (0x010F, ASCII, 6, offset)
-  buf.writeUInt16LE(0x010f, off);
-  buf.writeUInt16LE(2, off + 2);
-  buf.writeUInt32LE(6, off + 4);
-  buf.writeUInt32LE(extraMake, off + 8);
-  off += 12;
-  // Model (0x0110, ASCII, 14, offset)
-  buf.writeUInt16LE(0x0110, off);
-  buf.writeUInt16LE(2, off + 2);
-  buf.writeUInt32LE(14, off + 4);
-  buf.writeUInt32LE(extraModel, off + 8);
-  off += 12;
-  // GPSInfo (0x8825, LONG, 1, value = offset to GPS IFD)
-  buf.writeUInt16LE(0x8825, off);
-  buf.writeUInt16LE(4, off + 2);
-  buf.writeUInt32LE(1, off + 4);
-  buf.writeUInt32LE(gpsIfdStart, off + 8);
-  off += 12;
-  // next IFD = 0
-  buf.writeUInt32LE(0, off);
-
-  // GPS IFD: 4 entries (GPSLatitudeRef, GPSLatitude, GPSLongitudeRef, GPSLongitude)
-  buf.writeUInt16LE(4, gpsIfdStart);
-  off = gpsIfdStart + 2;
-  // GPSLatitudeRef (0x0001, ASCII, 2, inline)
-  buf.writeUInt16LE(0x0001, off);
-  buf.writeUInt16LE(2, off + 2);
-  buf.writeUInt32LE(2, off + 4);
-  gpsRef.copy(buf, off + 8);
-  off += 12;
-  // GPSLatitude (0x0002, RATIONAL, 3, offset)
-  buf.writeUInt16LE(0x0002, off);
-  buf.writeUInt16LE(5, off + 2);
-  buf.writeUInt32LE(3, off + 4);
-  buf.writeUInt32LE(extraGpsLat, off + 8);
-  off += 12;
-  // GPSLongitudeRef (0x0003, ASCII, 2, inline)
-  buf.writeUInt16LE(0x0003, off);
-  buf.writeUInt16LE(2, off + 2);
-  buf.writeUInt32LE(2, off + 4);
-  gpsLonRef.copy(buf, off + 8);
-  off += 12;
-  // GPSLongitude (0x0004, RATIONAL, 3, offset)
-  buf.writeUInt16LE(0x0004, off);
-  buf.writeUInt16LE(5, off + 2);
-  buf.writeUInt32LE(3, off + 4);
-  buf.writeUInt32LE(extraGpsLon, off + 8);
-  off += 12;
-  // next IFD = 0
-  buf.writeUInt32LE(0, off);
-
-  // Extra data
-  make.copy(buf, extraMake);
-  model.copy(buf, extraModel);
-  dateTime.copy(buf, extraDateTime);
-  gpsLat.copy(buf, extraGpsLat);
-  gpsLon.copy(buf, extraGpsLon);
-  // gpsRef and gpsLonRef are inline, not in extra.
-
-  return buf;
-}
-
-/**
- * Build a minimal faststart MP4/MOV with the real Apple video EXIF layout:
- *
- *   ftyp → moov → udta → uuid (Apple metadata UUID) → meta { hdlr, iloc, iinf }
- *   mdat (EXIF payload)
- *
- * The iloc extent_offset points to the TIFF inside mdat.
- */
-function buildFaststartVideo(
-  exifTiff: Buffer,
-  brand: string = "mp42",
-): { buffer: Buffer; tiffOffset: number } {
   const ftyp = Buffer.alloc(24);
   ftyp.writeUInt32BE(24, 0);
   ftyp.write("ftyp", 4, 4, "ascii");
@@ -1300,6 +1151,164 @@ describe("extractDuration", () => {
 
   it("returns null when timescale is zero", () => {
     expect(extractDuration(buildMp4WithMvhd(0, 3000, 0))).toBeNull();
+  });
+});
+
+// ---
+// ---------------------------------------------------------------------------
+// Apple MOV/MP4 video EXIF extraction (moov → udta → uuid MetaBox)
+// ---------------------------------------------------------------------------
+
+/** Apple metadata usertype UUID for the uuid box under moov/udta. */
+const APPLE_METADATA_UUID = Buffer.from([
+  0x85, 0xc0, 0xb6, 0x87, 0xf4, 0x5c, 0x46, 0xda, 0x9d, 0x5d, 0x9f, 0x90, 0x49,
+  0xb8, 0xe2, 0xae,
+]);
+
+/**
+ * Build a minimal TIFF file containing Apple iPhone-style EXIF metadata
+ * (Make, Model, DateTime, GPS). The TIFF is little-endian and contains an
+ * Image IFD with Make/Model plus a GPS IFD pointed by tag 0x8825.
+ */
+function buildIphoneTiff(): Buffer {
+  // IFD entries for Image IFD (IFD0).
+  const make = Buffer.from("Apple\0", "ascii"); // 6 bytes
+  const model = Buffer.from("iPhone 14 Pro\0", "ascii"); // 14 bytes
+  const dateTime = Buffer.from("2024:01:15 10:30:00\0", "ascii"); // 20 bytes
+
+  // GPS IFD entries: lat 34°3'0"N, lon 118°14'0"W.
+  const gpsRef = Buffer.from("N\0", "ascii"); // 2 bytes
+  const gpsLonRef = Buffer.from("W\0", "ascii"); // 2 bytes
+
+  // Rational: 3 values × 8 bytes (num+denom) = 24 bytes per coordinate.
+  const gpsLat = Buffer.alloc(24);
+  gpsLat.writeUInt32LE(34, 0);
+  gpsLat.writeUInt32LE(1, 4);
+  gpsLat.writeUInt32LE(3, 8);
+  gpsLat.writeUInt32LE(1, 12);
+  gpsLat.writeUInt32LE(0, 16);
+  gpsLat.writeUInt32LE(1, 20);
+
+  const gpsLon = Buffer.alloc(24);
+  gpsLon.writeUInt32LE(118, 0);
+  gpsLon.writeUInt32LE(1, 4);
+  gpsLon.writeUInt32LE(14, 8);
+  gpsLon.writeUInt32LE(1, 12);
+  gpsLon.writeUInt32LE(0, 16);
+  gpsLon.writeUInt32LE(1, 20);
+
+  // We place extra data after the IFD entries.
+  // IFD0: 2 (count) + 4 entries × 12 + 4 (next) = 54 bytes.
+  // GPS IFD: 2 + 4 entries × 12 + 4 = 54 bytes.
+  const ifd0Start = 8;
+  const ifd0Next = ifd0Start + 2 + 4 * 12 + 4; // = 8 + 54 = 62
+  const gpsIfdStart = ifd0Next;
+  const gpsIfdEnd = gpsIfdStart + 2 + 4 * 12 + 4; // = 62 + 54 = 116
+  let extra = gpsIfdEnd;
+
+  const extraMake = extra;
+  extra += make.length;
+  const extraModel = extra;
+  extra += model.length;
+  const extraDateTime = extra;
+  extra += dateTime.length;
+  const extraGpsLat = extra;
+  extra += gpsLat.length;
+  const extraGpsLon = extra;
+  extra += gpsLon.length;
+  extra += gpsRef.length; // gpsRef offset
+  extra += gpsLonRef.length; // gpsLonRef offset
+
+  const total = extra;
+  const buf = Buffer.alloc(total);
+
+  // TIFF header
+  buf.write("II", 0, "ascii");
+  buf.writeUInt16LE(42, 2);
+  buf.writeUInt32LE(ifd0Start, 4);
+
+  // IFD0: 3 entries (Make, Model, GPSInfo pointer)
+  buf.writeUInt16LE(3, ifd0Start);
+  let off = ifd0Start + 2;
+  // Make (0x010F, ASCII, 6, offset)
+  buf.writeUInt16LE(0x010f, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(6, off + 4);
+  buf.writeUInt32LE(extraMake, off + 8);
+  off += 12;
+  // Model (0x0110, ASCII, 14, offset)
+  buf.writeUInt16LE(0x0110, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(14, off + 4);
+  buf.writeUInt32LE(extraModel, off + 8);
+  off += 12;
+  // GPSInfo (0x8825, LONG, 1, value = offset to GPS IFD)
+  buf.writeUInt16LE(0x8825, off);
+  buf.writeUInt16LE(4, off + 2);
+  buf.writeUInt32LE(1, off + 4);
+  buf.writeUInt32LE(gpsIfdStart, off + 8);
+  off += 12;
+  // next IFD = 0
+  buf.writeUInt32LE(0, off);
+
+  // GPS IFD: 4 entries (GPSLatitudeRef, GPSLatitude, GPSLongitudeRef, GPSLongitude)
+  buf.writeUInt16LE(4, gpsIfdStart);
+  off = gpsIfdStart + 2;
+  // GPSLatitudeRef (0x0001, ASCII, 2, inline)
+  buf.writeUInt16LE(0x0001, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(2, off + 4);
+  gpsRef.copy(buf, off + 8);
+  off += 12;
+  // GPSLatitude (0x0002, RATIONAL, 3, offset)
+  buf.writeUInt16LE(0x0002, off);
+  buf.writeUInt16LE(5, off + 2);
+  buf.writeUInt32LE(3, off + 4);
+  buf.writeUInt32LE(extraGpsLat, off + 8);
+  off += 12;
+  // GPSLongitudeRef (0x0003, ASCII, 2, inline)
+  buf.writeUInt16LE(0x0003, off);
+  buf.writeUInt16LE(2, off + 2);
+  buf.writeUInt32LE(2, off + 4);
+  gpsLonRef.copy(buf, off + 8);
+  off += 12;
+  // GPSLongitude (0x0004, RATIONAL, 3, offset)
+  buf.writeUInt16LE(0x0004, off);
+  buf.writeUInt16LE(5, off + 2);
+  buf.writeUInt32LE(3, off + 4);
+  buf.writeUInt32LE(extraGpsLon, off + 8);
+  off += 12;
+  // next IFD = 0
+  buf.writeUInt32LE(0, off);
+
+  // Extra data
+  make.copy(buf, extraMake);
+  model.copy(buf, extraModel);
+  dateTime.copy(buf, extraDateTime);
+  gpsLat.copy(buf, extraGpsLat);
+  gpsLon.copy(buf, extraGpsLon);
+  // gpsRef and gpsLonRef are inline, not in extra.
+
+  return buf;
+}
+
+/**
+ * Build a minimal faststart MP4/MOV with the real Apple video EXIF layout:
+ *
+ *   ftyp → moov → udta → uuid (Apple metadata UUID) → meta { hdlr, iloc, iinf }
+ *   mdat (EXIF payload)
+ *
+ * The iloc extent_offset points to the TIFF inside mdat.
+ */
+function buildFaststartVideo(
+  exifTiff: Buffer,
+  brand: string = "mp42",
+): { buffer: Buffer; tiffOffset: number } {
+  const ftyp = Buffer.alloc(24);
+  ftyp.writeUInt32BE(24, 0);
+  ftyp.write("ftyp", 4, 4, "ascii");
+  ftyp.write(brand, 8, 4, "ascii");
+  ftyp.writeUInt32BE(0, 12);
   ftyp.write("isom", 16, 4, "ascii");
 
   // hdlr
