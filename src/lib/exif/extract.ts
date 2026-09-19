@@ -64,6 +64,16 @@ export interface HeifExtractResult {
   bytesNeeded: number;
 }
 
+export interface IsoBmffVideoExtractResult {
+  tiff: Buffer | null;
+  /** True when an Exif item was found but extends beyond the buffer. */
+  truncated: boolean;
+  /** Total bytes needed (from buffer start) to capture the full EXIF item. */
+  bytesNeeded: number;
+  /** Set when the buffer contains no moov box at all (non-faststart hint). */
+  moovMissing: boolean;
+}
+
 // ---------------------------------------------------------------------------
 // JPEG extraction
 // ---------------------------------------------------------------------------
@@ -271,7 +281,12 @@ export function extractExif(buffer: Buffer): Buffer | null {
 
   // HEIF/HEIC/MP4/MOV detection: ISO BMFF container with ftyp box.
   if (isAnyIsoBmff(buffer)) {
-    return extractExifFromHeif(buffer).tiff;
+    // Try HEIF photo path first (top-level meta box).
+    const heifResult = extractExifFromHeif(buffer);
+    if (heifResult.tiff) return heifResult.tiff;
+
+    // Fall back to video path (moov → udta → uuid).
+    return extractExifFromIsoBmffVideo(buffer).tiff;
   }
 
   return null;
@@ -529,6 +544,16 @@ const HEIF_BRANDS = ["heic", "mif1", "heix", "heim", "heis", "hevc", "avif"];
 const VIDEO_BMFF_BRANDS = ["mp42", "mp41", "isom", "qt  ", "MSNV", "avc1"];
 const ALL_ISO_BMFF_BRANDS = [...HEIF_BRANDS, ...VIDEO_BMFF_BRANDS];
 
+/**
+ * Apple metadata UUID for the uuid box under moov/udta that wraps a
+ * MetaBox containing iloc/iinf pointing to the EXIF payload.
+ * UUID: 85C0B687-F45C-46DA-9D5D-9F9049B8E2AE
+ */
+const APPLE_METADATA_UUID = Buffer.from([
+  0x85, 0xc0, 0xb6, 0x87, 0xf4, 0x5c, 0x46, 0xda, 0x9d, 0x5d, 0x9f, 0x90, 0x49,
+  0xb8, 0xe2, 0xae,
+]);
+
 const HEIF_FTYP_BOX = "ftyp";
 const HEIF_META_BOX = "meta";
 const HEIF_ILOC_BOX = "iloc";
@@ -765,8 +790,7 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
     return { tiff: null, truncated: false, bytesNeeded: 0 };
   }
 
-  // ---- 1. Locate meta box ----
-  // Skip past ftyp: read its header to find where it ends.
+  // Locate the top-level meta box (HEIF photo layout).
   const ftypHeader = readBoxHeader(buffer, 0);
   if (!ftypHeader) return { tiff: null, truncated: false, bytesNeeded: 0 };
 
@@ -780,266 +804,506 @@ export function extractExifFromHeif(buffer: Buffer): HeifExtractResult {
     return { tiff: null, truncated: false, bytesNeeded: 0 };
   }
 
-  // ---- 2. Parse iloc (Item Location Box) ----
   // The meta box is a full box (4 bytes version+flags), so children
   // start at dataStart + 4, not dataStart.
-  const metaChildrenStart = metaHeader.dataStart + 4;
-  const metaChildrenEnd = metaHeader.end;
-  interface IlocEntry {
-    itemId: number;
-    offset: number;
-    length: number;
+  return extractExifFromMetaChildren(
+    buffer,
+    metaHeader.dataStart + 4,
+    metaHeader.end,
+    0,
+  );
+}
+
+/** A single iloc (ItemLocation) entry pointing at an item's payload bytes. */
+interface IlocEntry {
+  itemId: number;
+  /** Absolute file offset of the payload (construction method 0). */
+  offset: number;
+  length: number;
+}
+
+/**
+ * Parse an iloc (ItemLocation) box, returning the file-offset entries.
+ *
+ * Returns null for malformed input or when no file-offset (construction
+ * method 0) entries are present.
+ */
+function parseIloc(buffer: Buffer, header: BoxHeader): IlocEntry[] | null {
+  // iloc is a full box (4-byte version/flags after header).
+  let off = header.dataStart;
+  if (off + 4 > header.end) return null;
+  const version = buffer[off];
+  off += 4;
+
+  // version 0/1/2 differ in field widths.
+  const offsetSize = (buffer[off] >> 4) & 0x0f;
+  const lengthSize = buffer[off] & 0x0f;
+  const baseOffsetSize = (buffer[off + 1] >> 4) & 0x0f;
+  off += 2;
+
+  let itemCount: number;
+  if (version < 2) {
+    if (off + 2 > header.end) return null;
+    itemCount = buffer.readUInt16BE(off);
+    off += 2;
+  } else {
+    if (off + 4 > header.end) return null;
+    itemCount = buffer.readUInt32BE(off);
+    off += 4;
   }
 
-  let ilocEntries: IlocEntry[] | null = null;
+  const entries: IlocEntry[] = [];
+  for (let i = 0; i < itemCount; i++) {
+    let itemId: number;
+    if (version < 2) {
+      if (off + 2 > header.end) return null;
+      itemId = buffer.readUInt16BE(off);
+      off += 2;
+    } else {
+      if (off + 4 > header.end) return null;
+      itemId = buffer.readUInt32BE(off);
+      off += 4;
+    }
 
+    // construction method: version 1+ has 2 bits reserved, then
+    // construction_method in low 4 bits of a 2-byte field.
+    let constructionMethod = 0;
+    if (version >= 1) {
+      if (off + 2 > header.end) return null;
+      constructionMethod = buffer.readUInt16BE(off) & 0x000f;
+      off += 2;
+    }
+
+    if (off + 2 > header.end) return null;
+    buffer.readUInt16BE(off); // dataReferenceIndex
+    off += 2;
+
+    let baseOffset = 0;
+    if (baseOffsetSize > 0) {
+      if (off + baseOffsetSize > header.end) return null;
+      baseOffset = buffer.readUIntBE(off, baseOffsetSize);
+      off += baseOffsetSize;
+    }
+
+    if (off + 2 > header.end) return null;
+    const extentCount = buffer.readUInt16BE(off);
+    off += 2;
+
+    let extentOffset = 0;
+    let extentLength = 0;
+
+    for (let e = 0; e < extentCount; e++) {
+      if (
+        (offsetSize > 0 && off + offsetSize > header.end) ||
+        (lengthSize > 0 && off + offsetSize + lengthSize > header.end)
+      ) {
+        return null;
+      }
+      if (offsetSize > 0) {
+        extentOffset = buffer.readUIntBE(off, offsetSize);
+        off += offsetSize;
+      }
+      if (lengthSize > 0) {
+        extentLength = buffer.readUIntBE(off, lengthSize);
+        off += lengthSize;
+      }
+    }
+
+    // Only file-offset items (construction method 0).
+    if (constructionMethod === 0 && extentLength > 0) {
+      entries.push({
+        itemId,
+        offset: baseOffset + extentOffset,
+        length: extentLength,
+      });
+    }
+  }
+
+  return entries;
+}
+
+/**
+ * Parse an iinf (ItemInfo) box and return the item ID whose item_type is
+ * "Exif", or null if no Exif item is present.
+ */
+function findExifItemId(buffer: Buffer, header: BoxHeader): number | null {
+  // iinf is a full box.
+  let off = header.dataStart;
+  if (off + 4 > header.end) return null;
+  const version = buffer[off];
+  off += 4;
+
+  let entryCount: number;
+  if (version === 0) {
+    if (off + 2 > header.end) return null;
+    entryCount = buffer.readUInt16BE(off);
+    off += 2;
+  } else {
+    if (off + 4 > header.end) return null;
+    entryCount = buffer.readUInt32BE(off);
+    off += 4;
+  }
+
+  const iinfEnd = header.end;
+
+  for (let i = 0; i < entryCount; i++) {
+    if (off + 8 > iinfEnd) return null;
+    // Read infe header.
+    const infeHeader = readBoxHeader(buffer, off);
+    if (!infeHeader || infeHeader.type !== HEIF_INFE_BOX) {
+      // Unexpected — may be a different box type.
+      break;
+    }
+
+    // infe is a full box.
+    let infeOff = infeHeader.dataStart;
+    if (infeOff + 4 > infeHeader.end) return null;
+    const infeVersion = buffer[infeOff];
+    infeOff += 4;
+
+    let itemId: number;
+    if (infeVersion >= 2) {
+      if (infeOff + 4 > infeHeader.end) return null;
+      itemId = buffer.readUInt32BE(infeOff);
+      infeOff += 4;
+    } else {
+      if (infeOff + 2 > infeHeader.end) return null;
+      itemId = buffer.readUInt16BE(infeOff);
+      infeOff += 2;
+    }
+
+    if (infeVersion >= 2) {
+      if (infeOff + 2 > infeHeader.end) return null;
+      // itemProtectionIndex — read but not used for EXIF detection.
+      buffer.readUInt16BE(infeOff);
+      infeOff += 2;
+    }
+
+    // item_type: 4-char code.
+    if (infeOff + 4 > infeHeader.end) return null;
+    const itemType = buffer.toString("ascii", infeOff, infeOff + 4);
+
+    if (itemType === "Exif" || itemType === "exif") {
+      return itemId;
+    }
+
+    // Move to next infe.
+    off = infeHeader.end;
+  }
+
+  return null;
+}
+
+/**
+ * Shared ISO BMFF MetaBox payload extraction, used by both the HEIF photo
+ * path (top-level meta) and the Apple video path (meta inside moov/udta/uuid).
+ *
+ * `metaChildrenStart`/`metaChildrenEnd` delimit the children of a meta full
+ * box (i.e. after the 4-byte version/flags). `baseOffset` is the absolute
+ * file offset of `buffer[0]` — 0 for front reads, nonzero for tail reads —
+ * used to translate iloc file offsets into buffer-local offsets.
+ */
+function extractExifFromMetaChildren(
+  buffer: Buffer,
+  metaChildrenStart: number,
+  metaChildrenEnd: number,
+  baseOffset: number,
+): { tiff: Buffer | null; truncated: boolean; bytesNeeded: number } {
+  // ---- 1. Parse iloc (Item Location Box) ----
+  let ilocEntries: IlocEntry[] | null = null;
   findChildBox(
     buffer,
     metaChildrenStart,
     metaChildrenEnd,
     HEIF_ILOC_BOX,
     (h) => {
-      // iloc is a full box (4-byte version/flags after header).
-      let off = h.dataStart;
-      if (off + 4 > h.end) return null;
-      const version = buffer[off];
-      // const flags = buffer.readUIntBE(off + 1, 3);
-      off += 4;
-
-      // version 0/1/2 differ in field widths.
-      // tslint:disable-next-line:no-bitwise
-      const offsetSize = (buffer[off] >> 4) & 0x0f;
-      // tslint:disable-next-line:no-bitwise
-      const lengthSize = buffer[off] & 0x0f;
-      // tslint:disable-next-line:no-bitwise
-      const baseOffsetSize = (buffer[off + 1] >> 4) & 0x0f;
-      off += 2;
-
-      let itemCount: number;
-      if (version < 2) {
-        if (off + 2 > h.end) return null;
-        itemCount = buffer.readUInt16BE(off);
-        off += 2;
-      } else {
-        if (off + 4 > h.end) return null;
-        itemCount = buffer.readUInt32BE(off);
-        off += 4;
-      }
-
-      const entries: IlocEntry[] = [];
-      for (let i = 0; i < itemCount; i++) {
-        let itemId: number;
-        if (version < 2) {
-          if (off + 2 > h.end) return null;
-          itemId = buffer.readUInt16BE(off);
-          off += 2;
-        } else {
-          if (off + 4 > h.end) return null;
-          itemId = buffer.readUInt32BE(off);
-          off += 4;
-        }
-
-        // construction method: version 1+ has 2 bits reserved, then
-        // construction_method in low 4 bits of a 2-byte field.
-        let constructionMethod = 0;
-        if (version >= 1) {
-          if (off + 2 > h.end) return null;
-          // tslint:disable-next-line:no-bitwise
-          constructionMethod = buffer.readUInt16BE(off) & 0x000f;
-          off += 2;
-        }
-
-        if (off + 2 > h.end) return null;
-        buffer.readUInt16BE(off); // dataReferenceIndex
-        off += 2;
-
-        let baseOffset = 0;
-        if (baseOffsetSize > 0) {
-          if (off + baseOffsetSize > h.end) return null;
-          baseOffset = buffer.readUIntBE(off, baseOffsetSize);
-          off += baseOffsetSize;
-        }
-
-        if (off + 2 > h.end) return null;
-        const extentCount = buffer.readUInt16BE(off);
-        off += 2;
-
-        let extentOffset = 0;
-        let extentLength = 0;
-
-        for (let e = 0; e < extentCount; e++) {
-          if (
-            (offsetSize > 0 && off + offsetSize > h.end) ||
-            (lengthSize > 0 && off + offsetSize + lengthSize > h.end)
-          ) {
-            return null;
-          }
-          if (offsetSize > 0) {
-            extentOffset = buffer.readUIntBE(off, offsetSize);
-            off += offsetSize;
-          }
-          if (lengthSize > 0) {
-            extentLength = buffer.readUIntBE(off, lengthSize);
-            off += lengthSize;
-          }
-        }
-
-        // Only file-offset items (construction method 0).
-        if (constructionMethod === 0 && extentLength > 0) {
-          entries.push({
-            itemId,
-            offset: baseOffset + extentOffset,
-            length: extentLength,
-          });
-        }
-      }
-
-      ilocEntries = entries;
-      return entries; // signal found
+      ilocEntries = parseIloc(buffer, h);
+      return ilocEntries; // signal found
     },
   );
 
   if (!ilocEntries || ilocEntries.length === 0) {
+    console.error(
+      "[DBG] meta children: no iloc entries",
+      metaChildrenStart,
+      metaChildrenEnd,
+    );
     return { tiff: null, truncated: false, bytesNeeded: 0 };
   }
 
-  // ---- 3. Parse iinf (Item Information Box) to find Exif item ID ----
+  // ---- 2. Parse iinf (Item Information Box) to find Exif item ID ----
   let exifItemId: number | null = null;
-
   findChildBox(
     buffer,
     metaChildrenStart,
     metaChildrenEnd,
     HEIF_IINF_BOX,
     (h) => {
-      // iinf is a full box.
-      let off = h.dataStart;
-      if (off + 4 > h.end) return null;
-      const version = buffer[off];
-      off += 4;
-
-      let entryCount: number;
-      if (version === 0) {
-        if (off + 2 > h.end) return null;
-        entryCount = buffer.readUInt16BE(off);
-        off += 2;
-      } else {
-        if (off + 4 > h.end) return null;
-        entryCount = buffer.readUInt32BE(off);
-        off += 4;
-      }
-
-      const iinfEnd = h.end;
-
-      for (let i = 0; i < entryCount; i++) {
-        if (off + 8 > iinfEnd) return null;
-        // Read infe header.
-        const infeHeader = readBoxHeader(buffer, off);
-        if (!infeHeader || infeHeader.type !== HEIF_INFE_BOX) {
-          // Unexpected — may be a different box type.
-          break;
-        }
-
-        // infe is a full box.
-        let infeOff = infeHeader.dataStart;
-        if (infeOff + 4 > infeHeader.end) return null;
-        const infeVersion = buffer[infeOff];
-        infeOff += 4;
-
-        let itemId: number;
-        if (infeVersion >= 2) {
-          if (infeOff + 4 > infeHeader.end) return null;
-          itemId = buffer.readUInt32BE(infeOff);
-          infeOff += 4;
-        } else {
-          if (infeOff + 2 > infeHeader.end) return null;
-          itemId = buffer.readUInt16BE(infeOff);
-          infeOff += 2;
-        }
-
-        if (infeVersion >= 2) {
-          if (infeOff + 2 > infeHeader.end) return null;
-          // itemProtectionIndex — read but not used for EXIF detection.
-          buffer.readUInt16BE(infeOff);
-          infeOff += 2;
-        }
-
-        // item_type: 4-char code.
-        if (infeOff + 4 > infeHeader.end) return null;
-        const itemType = buffer.toString("ascii", infeOff, infeOff + 4);
-        infeOff += 4;
-
-        // item_name: null-terminated string (if any space remains) — skipped.
-
-        if (itemType === "Exif" || itemType === "exif") {
-          exifItemId = itemId;
-          return itemId; // signal found
-        }
-
-        // Move to next infe.
-        off = infeHeader.end;
-      }
-
-      return null;
+      exifItemId = findExifItemId(buffer, h);
+      return exifItemId; // signal found
     },
   );
 
   if (exifItemId === null) {
+    console.error("[DBG] meta children: no exif item id");
     return { tiff: null, truncated: false, bytesNeeded: 0 };
   }
 
-  // ---- 4. Look up the offset in iloc entries ----
+  // ---- 3. Look up the offset in iloc entries ----
   const entry = ilocEntries.find((e) => e.itemId === exifItemId);
   if (!entry) {
+    console.error(
+      "[DBG] meta children: no entry for item",
+      exifItemId,
+      JSON.stringify(ilocEntries),
+    );
     return { tiff: null, truncated: false, bytesNeeded: 0 };
   }
+  console.error(
+    "[DBG] meta children: entry",
+    JSON.stringify(entry),
+    "baseOffset",
+    baseOffset,
+  );
 
-  // ---- 5. Check truncation ----
-  const payloadEnd = entry.offset + entry.length;
-  if (payloadEnd > buffer.length) {
+  // ---- 4. Translate the absolute file offset into a buffer-local offset ----
+  const localStart = entry.offset - baseOffset;
+  const localEnd = localStart + entry.length;
+
+  // ---- 5. Check truncation / out-of-window ----
+  if (localStart < 0 || localEnd > buffer.length) {
     return {
       tiff: null,
       truncated: true,
-      bytesNeeded: payloadEnd,
+      bytesNeeded: Math.max(0, localEnd),
     };
   }
 
   // ---- 6. Extract TIFF payload ----
-  const dataStart = entry.offset;
-
-  // The Exif item often starts with a 4-byte zero prefix + "Exif" + 1 zero byte
-  // (6 bytes total), but this is embedded in mdat and the exact format varies.
-  // We check for common TIFF byte-order markers (II or MM) and strip any
-  // Exif header prefix.
-  if (
-    dataStart + 6 <= payloadEnd &&
-    buffer.toString("ascii", dataStart, dataStart + 6) ===
-      "\x00\x00\x00\x00Exif"
-  ) {
-    // Skip the 6-byte prefix: 4 zero bytes + "Exif" (but we already have the 'f'
-    // from the "Exif" string — wait, that's 4 zeros + 'E' 'x' 'i' 'f' = 8 bytes.
-    // Actually the string is: 4 null bytes, then "Exif". That's 8 bytes.
-    // Let me re-check: "\x00\x00\x00\x00Exif" is 8 chars = 8 bytes.
-  }
-
-  // More reliably: look for TIFF byte order marker.
-  // HEIF stores EXIF as: [4 zero bytes]["Exif"][4 more bytes padding varies]
-  // then TIFF starts with "II" or "MM".
-  const tiffStart = findTiffStart(buffer, dataStart, payloadEnd);
+  // The Exif item often starts with a 4-byte zero prefix + "Exif" + padding,
+  // followed by the TIFF header. findTiffStart locates "II*\0" or "MM*\0".
+  const tiffStart = findTiffStart(buffer, localStart, localEnd);
   if (tiffStart === -1) {
     // No TIFF marker found — return the data as-is for exif-reader to try.
     return {
-      tiff: buffer.slice(dataStart, payloadEnd),
+      tiff: buffer.slice(localStart, localEnd),
       truncated: false,
       bytesNeeded: 0,
     };
   }
 
   return {
-    tiff: buffer.slice(tiffStart, payloadEnd),
+    tiff: buffer.slice(tiffStart, localEnd),
     truncated: false,
     bytesNeeded: 0,
   };
+}
+
+/**
+ * Walk the direct children of a container looking for "uuid" boxes, calling
+ * `visitor` for each with the resolved payload range (after the 24-byte
+ * size+type+usertype header) and the 16-byte usertype value. Stops when the
+ * visitor returns a non-null value.
+ */
+function findUuidBox<T>(
+  buffer: Buffer,
+  parentStart: number,
+  parentEnd: number,
+  visitor: (dataStart: number, dataEnd: number, uuid: Buffer) => T | null,
+): T | null {
+  let off = parentStart;
+  while (off + 8 <= parentEnd) {
+    const header = readBoxHeader(buffer, off);
+    if (!header || header.end > parentEnd) break;
+
+    if (header.type === "uuid") {
+      // uuid box: [size][type="uuid"][16-byte usertype][payload]
+      const usertypeStart = off + 8;
+      const payloadStart = off + 24;
+      if (payloadStart <= header.end) {
+        const uuid = buffer.slice(usertypeStart, payloadStart);
+        const result = visitor(payloadStart, header.end, uuid);
+        if (result !== null) return result;
+      }
+    }
+
+    off = header.end;
+    if (off <= parentStart) break; // safety
+  }
+  return null;
+}
+
+/**
+ * Find a MetaBox inside a uuid box payload and extract its Exif item.
+ */
+function extractExifFromUuidPayload(
+  buffer: Buffer,
+  uuidDataStart: number,
+  uuidDataEnd: number,
+  baseOffset: number,
+): { tiff: Buffer | null; truncated: boolean; bytesNeeded: number } {
+  let metaHeader: BoxHeader | null = null;
+  findChildBox(buffer, uuidDataStart, uuidDataEnd, HEIF_META_BOX, (h) => {
+    metaHeader = h;
+    return h;
+  });
+
+  if (!metaHeader) {
+    return { tiff: null, truncated: false, bytesNeeded: 0 };
+  }
+
+  return extractExifFromMetaChildren(
+    buffer,
+    metaHeader.dataStart + 4,
+    metaHeader.end,
+    baseOffset,
+  );
+}
+
+/**
+ * Extract the raw TIFF/EXIF payload from an Apple MOV/MP4 video container.
+ *
+ * Apple stores video EXIF in a uuid box under moov/udta:
+ *
+ *   moov → udta → uuid (85C0B687-...) → MetaBox { hdlr, iloc, iinf }
+ *
+ * The uuid box wraps a standard ISO BMFF MetaBox whose iloc/iinf describe an
+ * Exif item exactly like the HEIF photo path — except the MetaBox lives under
+ * moov/udta rather than at the top level.
+ *
+ * `baseOffset` is the absolute file offset of `buffer[0]` (default 0). When
+ * extracting from a tail read of a non-faststart file, pass the tail start so
+ * iloc file offsets are translated correctly.
+ */
+export function extractExifFromIsoBmffVideo(
+  buffer: Buffer,
+  baseOffset: number = 0,
+): IsoBmffVideoExtractResult {
+  if (!isAnyIsoBmff(buffer)) {
+    // The buffer doesn't start with a valid ftyp — this happens on tail
+    // reads of non-faststart files, where the read begins mid-box (inside
+    // mdat padding). Scan for a moov box header anywhere in the buffer and
+    // parse from there; the moov is fully contained even when the mdat
+    // before it is truncated.
+    return findMoovInTruncatedBuffer(buffer, baseOffset);
+  }
+
+  const ftypHeader = readBoxHeader(buffer, 0);
+  if (!ftypHeader) {
+    return { tiff: null, truncated: false, bytesNeeded: 0, moovMissing: false };
+  }
+
+  // ---- 1. Find moov ----
+  let moovHeader: BoxHeader | null = null;
+  findChildBox(buffer, ftypHeader.end, buffer.length, "moov", (h) => {
+    moovHeader = h;
+    return h;
+  });
+
+  if (!moovHeader) {
+    // No moov box in this buffer — a non-faststart hint when reading the
+    // front of the file, or a genuinely absent moov.
+    return { tiff: null, truncated: false, bytesNeeded: 0, moovMissing: true };
+  }
+
+  return extractFromMoov(buffer, moovHeader, baseOffset);
+}
+
+/**
+ * Parse udta → uuid → meta → Exif out of a located moov box.
+ */
+function extractFromMoov(
+  buffer: Buffer,
+  moovHeader: BoxHeader,
+  baseOffset: number,
+): IsoBmffVideoExtractResult {
+  // ---- 2. Find udta inside moov ----
+  let udtaHeader: BoxHeader | null = null;
+  findChildBox(buffer, moovHeader.dataStart, moovHeader.end, "udta", (h) => {
+    udtaHeader = h;
+    return h;
+  });
+
+  if (!udtaHeader) {
+    return { tiff: null, truncated: false, bytesNeeded: 0, moovMissing: false };
+  }
+
+  // ---- 3. Find the Apple metadata uuid box and extract its MetaBox Exif ----
+  // Prefer the known Apple metadata UUID; fall back to any uuid box that
+  // carries a MetaBox with an Exif item (robustness against UUID changes).
+  const appleResult = findUuidBox(
+    buffer,
+    udtaHeader.dataStart,
+    udtaHeader.end,
+    (payloadStart, payloadEnd, uuid) => {
+      if (!uuid.equals(APPLE_METADATA_UUID)) return null;
+      return extractExifFromUuidPayload(
+        buffer,
+        payloadStart,
+        payloadEnd,
+        baseOffset,
+      );
+    },
+  );
+
+  if (appleResult && (appleResult.tiff || appleResult.truncated)) {
+    return {
+      tiff: appleResult.tiff,
+      truncated: appleResult.truncated,
+      bytesNeeded: appleResult.bytesNeeded,
+      moovMissing: false,
+    };
+  }
+
+  // Fallback probe: any uuid box containing a usable MetaBox.
+  const fallbackResult = findUuidBox(
+    buffer,
+    udtaHeader.dataStart,
+    udtaHeader.end,
+    (payloadStart, payloadEnd) =>
+      extractExifFromUuidPayload(buffer, payloadStart, payloadEnd, baseOffset),
+  );
+
+  if (fallbackResult && (fallbackResult.tiff || fallbackResult.truncated)) {
+    return {
+      tiff: fallbackResult.tiff,
+      truncated: fallbackResult.truncated,
+      bytesNeeded: fallbackResult.bytesNeeded,
+      moovMissing: false,
+    };
+  }
+
+  // Last-resort probe: some Apple files store the EXIF as a raw TIFF blob
+  // inside the Apple metadata uuid without a parseable iloc/iinf MetaBox.
+  // Scan the Apple uuid payload for a TIFF byte-order marker. Restricted to
+  // the Apple UUID to avoid false positives on unrelated uuid box types
+  // (e.g. XMP uuid boxes carrying arbitrary binary data).
+  const rawResult = findUuidBox(
+    buffer,
+    udtaHeader.dataStart,
+    udtaHeader.end,
+    (payloadStart, payloadEnd, uuid) => {
+      if (!uuid.equals(APPLE_METADATA_UUID)) return null;
+      const tiffStart = findTiffStart(buffer, payloadStart, payloadEnd);
+      if (tiffStart === -1) return null;
+      return {
+        tiff: buffer.slice(tiffStart, payloadEnd),
+        truncated: false,
+        bytesNeeded: 0,
+      };
+    },
+  );
+
+  if (rawResult) {
+    return {
+      tiff: rawResult.tiff,
+      truncated: false,
+      bytesNeeded: 0,
+      moovMissing: false,
+    };
+  }
+
+  return { tiff: null, truncated: false, bytesNeeded: 0, moovMissing: false };
 }
 
 /**
@@ -1058,17 +1322,28 @@ function findTiffStart(buffer: Buffer, start: number, end: number): number {
       }
     }
   }
-  // TIFF can also start with "Exif\x00\x00" prefix.
-  for (let i = start; i + 6 <= end; i++) {
+  // TIFF can also start with an "Exif\x00\x00" prefix (JPEG APP1 / Apple
+  // item-data convention): the TIFF header follows the 6-byte prefix, so
+  // return the position of the actual TIFF marker, not the prefix.
+  for (let i = start; i + 10 <= end; i++) {
     if (
       buffer[i] === 0x45 && // E
       buffer[i + 1] === 0x78 && // x
       buffer[i + 2] === 0x69 && // i
       buffer[i + 3] === 0x66 && // f
       buffer[i + 4] === 0x00 &&
-      buffer[i + 5] === 0x00
+      buffer[i + 5] === 0x00 &&
+      // the real TIFF byte-order marker must immediately follow
+      ((buffer[i + 6] === 0x49 &&
+        buffer[i + 7] === 0x49 &&
+        buffer[i + 8] === 0x2a &&
+        buffer[i + 9] === 0x00) ||
+        (buffer[i + 6] === 0x4d &&
+          buffer[i + 7] === 0x4d &&
+          buffer[i + 8] === 0x00 &&
+          buffer[i + 9] === 0x2a))
     ) {
-      return i;
+      return i + 6;
     }
   }
   return -1;
@@ -1116,12 +1391,29 @@ export async function extractExifWithRetry(
 
   // Try extraction.
   let result: JpegExtractResult | PngExtractResult | HeifExtractResult;
+  let videoResult: IsoBmffVideoExtractResult | null = null;
+
   if (isJpeg) {
     result = extractExifFromJpeg(initialBuffer);
   } else if (isPng) {
     result = extractExifFromPng(initialBuffer);
   } else {
-    result = extractExifFromHeif(initialBuffer);
+    const heifResult = extractExifFromHeif(initialBuffer);
+    if (heifResult.tiff) {
+      return heifResult.tiff;
+    }
+    // Fall back to video path.
+    videoResult = extractExifFromIsoBmffVideo(initialBuffer);
+    if (videoResult.tiff) {
+      return videoResult.tiff;
+    }
+    // If moov is missing entirely, signal truncation so the caller can
+    // issue a tail read for non-faststart files.
+    if (videoResult.moovMissing) {
+      result = { tiff: null, truncated: true, bytesNeeded: MAX_EXIF_BYTES };
+    } else {
+      result = videoResult;
+    }
   }
 
   if (result.tiff) {
@@ -1169,7 +1461,11 @@ export async function extractExifWithRetry(
   } else if (isPng) {
     result = extractExifFromPng(combined);
   } else {
-    result = extractExifFromHeif(combined);
+    // ISO BMFF: retry both the HEIF photo path and the Apple video path.
+    const heifCombined = extractExifFromHeif(combined);
+    if (heifCombined.tiff) return heifCombined.tiff;
+    const videoCombined = extractExifFromIsoBmffVideo(combined);
+    return videoCombined.tiff;
   }
 
   return result.tiff;
@@ -1249,4 +1545,38 @@ export async function extractXmpWithRetry(
   }
 
   return result.xmpXml;
+}
+
+/**
+ * Scan a truncated tail buffer for a moov box header and attempt the Apple
+ * uuid/Exif parse from there. Returns moovMissing=true when no plausible
+ * moov header is found.
+ */
+function findMoovInTruncatedBuffer(
+  buffer: Buffer,
+  baseOffset: number,
+): IsoBmffVideoExtractResult {
+  const notFound: IsoBmffVideoExtractResult = {
+    tiff: null,
+    truncated: false,
+    bytesNeeded: 0,
+    moovMissing: true,
+  };
+
+  let idx = buffer.indexOf("moov", "latin1");
+  while (idx !== -1) {
+    const boxStart = idx - 4;
+    if (boxStart >= 0) {
+      const header = readBoxHeader(buffer, boxStart);
+      // A real moov header: its payload must fit inside the buffer.
+      if (header && header.type === "moov" && header.end <= buffer.length) {
+        const result = extractFromMoov(buffer, header, baseOffset);
+        if (result.tiff || result.truncated) {
+          return { ...result, moovMissing: false };
+        }
+      }
+    }
+    idx = buffer.indexOf("moov", idx + 1, "latin1");
+  }
+  return notFound;
 }

@@ -10,6 +10,8 @@ import {
   brooklynJpeg,
   redondoJpeg,
   losAngelesPng,
+  nonFaststartMp4,
+  iphoneRealLayoutMov,
 } from "../../tests/fixtures/exif";
 
 // ---------------------------------------------------------------------------
@@ -434,5 +436,107 @@ describe("extractExifAndReview", () => {
       const roundTripped = JSON.parse(JSON.stringify(result.exif));
       expect(roundTripped).toEqual(result.exif);
     })();
+  });
+
+  // ---- Non-faststart MP4 tail read ----------------------------------------
+
+  it("extracts EXIF from a non-faststart MP4 via a bounded tail read", async () => {
+    const full = nonFaststartMp4;
+    const fileSize = full.length;
+    const videoKey = "uploads/video.mp4";
+
+    const send = jest
+      .fn()
+      .mockImplementation(
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          // Reject XMP / C2PA sidecar lookups (no sidecar for .mp4).
+          if (
+            command.input.Key === `${videoKey}.xmp` ||
+            command.input.Key === `${videoKey}.c2pa`
+          ) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          // HEAD request returns ContentLength.
+          const cmdName =
+            command.constructor && (command.constructor as any).name;
+          if (cmdName === "HeadObjectCommand") {
+            return Promise.resolve({ ContentLength: fileSize });
+          }
+          // GET with Range — return the appropriate slice.
+          const range = command.input.Range || "";
+          const match = range.match(/^bytes=(\d+)-(\d+)$/);
+          if (match) {
+            const start = parseInt(match[1], 10);
+            const end = parseInt(match[2], 10) + 1;
+            const body = full.slice(start, Math.min(end, fileSize));
+            return Promise.resolve({ Body: body });
+          }
+          return Promise.reject(new Error("NoSuchKey"));
+        },
+      );
+
+    const result = await extractExifAndReview(
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath: videoKey, includeReview: false },
+    );
+
+    expect(result.exif).not.toBeNull();
+    const exif = result.exif as any;
+    expect(exif.Image?.Make).toBe("Apple");
+    expect(exif.Image?.Model).toBe("iPhone 14 Pro");
+    expect(exif.GPSInfo).toBeDefined();
+    expect(exif.GPSInfo?.GPSLatitude).toBeDefined();
+  });
+
+  it("extracts camera make/model/GPS from a faststart iPhone MOV in one read", async () => {
+    // Real-device-layout MOV: moov (with udta/uuid EXIF) sits at the front,
+    // so the initial 64 KiB range read suffices — no tail read, no follow-up.
+    const videoKey = "uploads/iphone.mov";
+    let headCalled = false;
+
+    const send = jest
+      .fn()
+      .mockImplementation(
+        (command: {
+          input: { Bucket: string; Key: string; Range?: string };
+        }) => {
+          if (
+            command.input.Key === `${videoKey}.xmp` ||
+            command.input.Key === `${videoKey}.c2pa`
+          ) {
+            return Promise.reject(new Error("NoSuchKey"));
+          }
+          const cmdName =
+            command.constructor && (command.constructor as any).name;
+          if (cmdName === "HeadObjectCommand") {
+            headCalled = true;
+            return Promise.resolve({
+              ContentLength: iphoneRealLayoutMov.length,
+            });
+          }
+          if (command.input.Key === videoKey) {
+            // Ignore Range and return the whole (small) fixture.
+            return Promise.resolve({ Body: iphoneRealLayoutMov });
+          }
+          return Promise.reject(new Error("NoSuchKey"));
+        },
+      );
+
+    const result = await extractExifAndReview(
+      { s3Client: { send } as any, bucket: "test-bucket" },
+      { filePath: videoKey, includeReview: false },
+    );
+
+    // Faststart layout: the moov/udta/uuid EXIF is in the initial window.
+    expect(headCalled).toBe(false);
+    expect(result.exif).not.toBeNull();
+    const exif = result.exif as any;
+    expect(exif.Image?.Make).toBe("Apple");
+    expect(exif.Image?.Model).toBe("iPhone 14 Pro");
+    expect(exif.GPSInfo).toBeDefined();
+    expect(exif.GPSInfo?.GPSLatitude).toBeDefined();
+    expect(exif.GPSInfo?.GPSLongitude).toBeDefined();
   });
 });

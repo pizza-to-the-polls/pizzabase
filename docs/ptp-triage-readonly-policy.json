@@ -1,0 +1,72 @@
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    {
+      "Sid": "LogsRead",
+      "Effect": "Allow",
+      "Action": [
+        "logs:DescribeLogGroups",
+        "logs:DescribeLogStreams",
+        "logs:GetLogEvents",
+        "logs:FilterLogEvents"
+      ],
+      "Resource": "arn:aws:logs:us-west-2:320802729995:log-group:/aws/lambda/pizzabase-*"
+    },
+    {
+      "Sid": "MediaConvertRead",
+      "Effect": "Allow",
+      "Action": [
+        "mediaconvert:GetJob",
+        "mediaconvert:ListJobs",
+        "mediaconvert:DescribeEndpoints"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "EventsRead",
+      "Effect": "Allow",
+      "Action": ["events:ListRules", "events:DescribeRule"],
+      "Resource": "*"
+    },
+    {
+      "Sid": "LambdaRead",
+      "Effect": "Allow",
+      "Action": [
+        "lambda:ListFunctions",
+        "lambda:GetFunction",
+        "lambda:ListLayers",
+        "lambda:GetLayerVersion",
+        "lambda:ListLayerVersions"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "CloudFormationRead",
+      "Effect": "Allow",
+      "Action": [
+        "cloudformation:DescribeStacks",
+        "cloudformation:DescribeStackEvents",
+        "cloudformation:DescribeChangeSet",
+        "cloudformation:CreateChangeSet",
+        "cloudformation:DeleteChangeSet",
+        "cloudformation:ValidateTemplate"
+      ],
+      "Resource": "*"
+    },
+    {
+      "Sid": "S3MediaRead",
+      "Effect": "Allow",
+      "Action": ["s3:ListBucket", "s3:GetObject"],
+      "Resource": [
+        "arn:aws:s3:::raw.polls.pizza",
+        "arn:aws:s3:::raw.polls.pizza/*",
+        "arn:aws:s3:::reports.polls.pizza",
+        "arn:aws:s3:::reports.polls.pizza/*",
+        "arn:aws:s3:::scrubbed-uploads",
+        "arn:aws:s3:::scrubbed-uploads/*",
+        "arn:aws:s3:::processed-uploads",
+        "arn:aws:s3:::processed-uploads/*"
+      ]
+    }
+  ]
+}

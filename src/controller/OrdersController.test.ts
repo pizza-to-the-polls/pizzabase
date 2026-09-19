@@ -7,11 +7,11 @@ import { Location } from "../entity/Location";
 import { ADDRESS_ERROR, COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/geocode");
-jest.mock("../lib/social", () => ({
-  socialPost: jest.fn().mockResolvedValue(undefined),
+jest.mock("../lib/invoke-social-post", () => ({
+  invokeSocialPost: jest.fn(),
 }));
 
-import { socialPost } from "../lib/social";
+import { invokeSocialPost } from "../lib/invoke-social-post";
 
 const controller = new OrdersController();
 
@@ -117,7 +117,7 @@ describe("#index", () => {
 });
 
 describe("#create", () => {
-  beforeEach(() => (socialPost as jest.Mock).mockClear());
+  beforeEach(() => (invokeSocialPost as jest.Mock).mockClear());
 
   it("returns validation errors", async () => {
     const response = http_mocks.createResponse();
@@ -167,9 +167,7 @@ describe("#create", () => {
     expect(order.quantity).toEqual(32);
     expect(order.restaurant).toBeNull();
     expect(location.validatedAt).toBeTruthy();
-    expect(socialPost).toHaveBeenCalledWith(
-      expect.objectContaining({ id: order.id }),
-    );
+    expect(invokeSocialPost).toHaveBeenCalledWith(order.id);
   });
 
   it("can create an order on a new location", async () => {
@@ -192,8 +190,6 @@ describe("#create", () => {
       "550 Different Address City OR 12345",
     );
     expect(order.location.validatedAt).toBeTruthy();
-    expect(socialPost).toHaveBeenCalledWith(
-      expect.objectContaining({ id: order.id }),
-    );
+    expect(invokeSocialPost).toHaveBeenCalledWith(order.id);
   });
 });
