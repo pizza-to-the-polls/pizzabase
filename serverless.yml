@@ -139,6 +139,15 @@ functions:
     events:
       - schedule: rate(45 days)
 
+  onSocialPost:
+    handler: build/social-post-handler.handler
+    timeout: 300
+    memorySize: 1024
+    environment:
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+
   on-s3-upload-process-exif:
     handler: build/lambdas/onS3UploadProcessExif.handler
     timeout: 60

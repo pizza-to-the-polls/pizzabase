@@ -10,7 +10,7 @@ import {
   zapNewTruck,
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
-import { socialPost } from "../lib/social";
+import { invokeSocialPost } from "../lib/invoke-social-post";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -170,9 +170,7 @@ export class LocationsController {
     await zapNewOrder(placedOrder);
 
     // Fire-and-forget: social posting never blocks the response.
-    socialPost(placedOrder).catch((err) =>
-      console.error("socialPost crashed:", err),
-    );
+    invokeSocialPost(placedOrder.id);
 
     return { success: true };
   }
