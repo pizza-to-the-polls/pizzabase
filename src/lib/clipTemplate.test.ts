@@ -31,6 +31,7 @@ function renderInput(
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
     shortUrlSlug: null,
+    qrCodePath: null,
     hashtags: ["#votingrights", "#ElectionDay", "#OR", "#Portland"],
     sourceDuration: 45,
     inputPath: "/tmp/render/input.mp4",
@@ -212,7 +213,9 @@ describe("buildRenderPlan", () => {
   });
 
   it("builds the branded end-card text (no URL line without a slug)", () => {
-    const plan = buildRenderPlan(renderInput());
+    const plan = buildRenderPlan(
+      renderInput({ qrCodePath: "/tmp/render/endcard-qr.png" }),
+    );
 
     const brandFile = plan.textFiles.find((f) =>
       f.path.endsWith("endcard-brand.txt"),
@@ -225,6 +228,11 @@ describe("buildRenderPlan", () => {
     expect(
       plan.textFiles.find((f) => f.path.endsWith("endcard-url.txt")),
     ).toBeUndefined();
+    // A stray QR path without a slug must not add a QR input or overlay.
+    expect(plan.clipRenderArgs).not.toContain("/tmp/render/endcard-qr.png");
+    const graph =
+      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
+    expect(graph).not.toContain("[qr]");
   });
 
   it("includes the short URL slug on the end-card when present", () => {
@@ -236,6 +244,52 @@ describe("buildRenderPlan", () => {
     const graph =
       plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
     expect(graph).toContain("endcard-url.txt");
+  });
+
+  it("composites the QR PNG over the end-card and moves the URL beneath it", () => {
+    const plan = buildRenderPlan(
+      renderInput({
+        shortUrlSlug: "abc12",
+        qrCodePath: "/tmp/render/endcard-qr.png",
+      }),
+    );
+
+    // QR arrives as a third ffmpeg input, after the lavfi end-card source.
+    const args = plan.clipRenderArgs;
+    expect(args).toContain("/tmp/render/endcard-qr.png");
+    const lavfiColorIndex = args.indexOf("color=c=0x101418:size=1080x1920");
+    expect(args.indexOf("/tmp/render/endcard-qr.png")).toBeGreaterThan(
+      lavfiColorIndex,
+    );
+
+    const graph = args[args.indexOf("-filter_complex") + 1];
+    // Normalized QR stream, centered over the card at y=980.
+    expect(graph).toContain("[2:v]format=yuv420p[qr]");
+    expect(graph).toContain("[card][qr]overlay=(W-w)/2:980[cardwqr]");
+    expect(graph).toMatch(
+      /\[base\]\[cardwqr\]overlay=0:0:enable='gte\(t,43\)'\[out\]/,
+    );
+    // Readable URL text sits underneath the QR (y=1220, not the y=990
+    // text-only position).
+    expect(graph).toContain("endcard-url.txt");
+    expect(graph).toContain("y=1220");
+    expect(graph).not.toContain("y=990");
+  });
+
+  it("keeps the text-only URL line at y=990 when the slug exists but no QR was generated", () => {
+    const plan = buildRenderPlan(
+      renderInput({ shortUrlSlug: "abc123", qrCodePath: null }),
+    );
+
+    const args = plan.clipRenderArgs;
+    expect(args).not.toContain("/tmp/render/endcard-qr.png");
+    const graph = args[args.indexOf("-filter_complex") + 1];
+    expect(graph).toContain("endcard-url.txt");
+    expect(graph).toContain("y=990");
+    expect(graph).not.toContain("[qr]");
+    expect(graph).not.toContain("cardwqr");
+    // No third input, no intermediate overlay label.
+    expect(graph).toMatch(/\[base\]\[card\]overlay=0:0/);
   });
 
   it("passes the layer font to every drawtext filter when configured", () => {
