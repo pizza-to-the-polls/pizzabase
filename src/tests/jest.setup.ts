@@ -40,4 +40,4 @@ beforeAll(async () => {
 afterEach(async () => {
   await dbHelper.cleanAll();
   (global.fetch as jest.Mock).mockClear();
-});
+}, 30000);

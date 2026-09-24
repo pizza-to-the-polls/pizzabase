@@ -11,12 +11,14 @@ import {
   MoreThan,
 } from "typeorm";
 import { Location } from "./Location";
+import { Report } from "./Report";
 import { NormalAddress } from "../lib/validator";
 import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
 export type MediaStatus = "none" | "processing" | "ready" | "failed";
 export type ModerationStatus = "pending" | "clean" | "flagged" | "rejected";
+export type UploadSource = "web" | "mms";
 
 @Entity({ name: "uploads" })
 export class Upload extends BaseEntity {
@@ -89,6 +91,26 @@ export class Upload extends BaseEntity {
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;
 
+  @Column({
+    name: "source",
+    type: "enum",
+    enum: ["web", "mms"],
+    enumName: "upload_source",
+    default: "web",
+  })
+  source: UploadSource;
+
+  // MMS direction: one report can have many inbound text-message media
+  // uploads. (reports.upload_id is the reverse direction for web uploads.)
+  @ManyToOne((_type) => Report, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "report_id" })
+  @Index()
+  report: Report | null;
+
+  // Normalized E.164 sender phone for MMS-origin uploads.
+  @Column({ name: "source_phone", type: "varchar", nullable: true })
+  sourcePhone: string | null;
+
   static async createOrReject(
     ipAddress: string,
     {
@@ -132,6 +154,60 @@ export class Upload extends BaseEntity {
     upload.rawFilePath = generatedPath;
     upload.rawBucket = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
     upload.mediaStatus = "processing";
+
+    await upload.save();
+
+    return [upload, false];
+  }
+
+  static async createFromMms(
+    report: Report,
+    {
+      fileExt,
+      fileHash,
+      sourcePhone,
+    }: { fileExt: string; fileHash: string; sourcePhone: string },
+  ): Promise<[Upload, boolean]> {
+    const exists = await this.findOne({
+      where: { fileHash },
+    });
+    if (exists) return [exists, true];
+
+    // Rate-limit keyed on the sender phone rather than IP; ipAddress is set
+    // to a fixed marker so MMS counts can never collide with web uploads.
+    const count = await this.count({
+      where: {
+        ipAddress: "mms",
+        sourcePhone,
+        createdAt: MoreThan(new Date(Number(new Date()) - UPLOAD_DECAY)),
+      },
+    });
+
+    if (count + 1 > UPLOAD_MAX) {
+      throw new Error(
+        "Whoops! You've had too many uploads recently - slow your roll",
+      );
+    }
+    const upload = new this();
+
+    upload.location = report.location;
+    const { city, state } = report.location;
+
+    upload.ipAddress = "mms";
+    upload.sourcePhone = sourcePhone;
+    upload.fileHash = fileHash;
+    upload.sightengineScore = null;
+    const generatedPath = `uploads/${city}-${state}-${
+      uuidv4().split("-")[0]
+    }.${fileExt}`
+      .toLowerCase()
+      .replace(/\s/g, "-");
+    upload.filePath = generatedPath;
+    upload.rawFilePath = generatedPath;
+    upload.rawBucket = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
+    upload.mediaStatus = "processing";
+    upload.source = "mms";
+    upload.report = report;
 
     await upload.save();
 
