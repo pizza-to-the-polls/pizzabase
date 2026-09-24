@@ -190,7 +190,6 @@ async function processImage(
         Key: gifKey,
         Body: resized,
         ContentType: "image/gif",
-        ACL: "public-read",
       }),
     );
 
@@ -223,7 +222,6 @@ async function processImage(
       Key: webpKey,
       Body: webpBuffer,
       ContentType: "image/webp",
-      ACL: "public-read",
     }),
   );
 
@@ -244,7 +242,6 @@ async function processImage(
       Key: jpegKey,
       Body: jpegBuffer,
       ContentType: "image/jpeg",
-      ACL: "public-read",
     }),
   );
 
