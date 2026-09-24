@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
   MoreThan,
   IsNull,
+  Not,
 } from "typeorm";
 import { Location } from "./Location";
 import { Order } from "./Order";
@@ -17,6 +18,7 @@ import { Truck } from "./Truck";
 import { Upload } from "./Upload";
 import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
+import { normalizePhone } from "../lib/validator/normalizeContact";
 
 const OPEN_QUERY = {
   order: IsNull(),
@@ -140,6 +142,64 @@ export class Report extends BaseEntity {
       ...OPEN_QUERY,
     });
   }
+
+  /**
+   * Find the newest fulfilled report (pizza ordered or truck assigned) made
+   * within the last `windowDays` by a sender phone number. Used by the MMS
+   * reply workflow to resolve which report an inbound media message is
+   * replying about.
+   *
+   * NOTE: contactInfo is matched against the normalized (digits/+ only) form
+   * of the input phone. Reports submitted via the web flow store whatever
+   * formatting the user typed (e.g. "555-234-2345"), so only reports whose
+   * contactInfo is stored E.164-ish will match here today.
+   */
+  static async findRecentFulfilledByPhone(
+    phone: string,
+    windowDays = 30,
+  ): Promise<Report | null> {
+    const normalized = normalizePhone(phone);
+    const days = Number(process.env.MMS_MATCH_WINDOW_DAYS) || windowDays;
+    const since = new Date(Number(new Date()) - days * 24 * 60 * 60 * 1000);
+
+    const report = await this.findOne({
+      where: [
+        {
+          contactInfo: normalized,
+          order: Not(IsNull()),
+          createdAt: MoreThan(since),
+        },
+        {
+          contactInfo: normalized,
+          truck: Not(IsNull()),
+          createdAt: MoreThan(since),
+        },
+      ],
+      order: { createdAt: "DESC" },
+    });
+
+    return report ?? null;
+  }
+  /**
+   * Resolve a report from a numeric id or its reportURL (the public URL the
+   * report was created from). Mirrors Location.fidByIdOrFullAddress: any
+   * value containing a lowercase letter is treated as a reportURL, anything
+   * else as a numeric id.
+   *
+   * The web upload relation is loaded eagerly so callers get the report's
+   * original upload (reports.upload_id) in the same round trip.
+   */
+  static async findByIdOrReportUrl(
+    idOrAddress: string,
+  ): Promise<Report | null> {
+    return this.findOne({
+      where: idOrAddress.match(/[a-z]/g)
+        ? { reportURL: idOrAddress }
+        : { id: Number(idOrAddress) },
+      relations: ["upload"],
+    });
+  }
+
   static async updateOpen(location: Location, set): Promise<void> {
     const query = {
       location: { id: location.id },

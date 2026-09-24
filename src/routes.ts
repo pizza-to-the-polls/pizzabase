@@ -10,6 +10,7 @@ import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
 import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
+import { TwilioInboundController } from "./controller/TwilioInboundController";
 
 export const Routes = [
   {
@@ -77,6 +78,12 @@ export const Routes = [
     route: "/reports/",
     controller: ReportsController,
     action: "index",
+  },
+  {
+    method: "get",
+    route: "/reports/:idOrAddress/media",
+    controller: ReportsController,
+    action: "media",
   },
   {
     method: "get",
@@ -173,6 +180,12 @@ export const Routes = [
     route: "/webhook",
     controller: DonationsController,
     action: "webhook",
+  },
+  {
+    method: "post",
+    route: "/twilio/inbound",
+    controller: TwilioInboundController,
+    action: "inbound",
   },
   {
     method: "post",

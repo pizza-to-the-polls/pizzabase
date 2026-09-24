@@ -786,3 +786,305 @@ describe("#show", () => {
     });
   });
 });
+
+describe("#media", () => {
+  const TEST_ADDRESS = {
+    latitude: 41.79907,
+    longitude: -87.58413,
+    fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+    address: "5335 S Kimbark Ave",
+    city: "Chicago",
+    state: "IL",
+    zip: "60615",
+  };
+
+  let report: Report;
+
+  const createMmsUpload = async (n: number): Promise<Upload> => {
+    const [upload] = await Upload.createFromMms(report, {
+      fileExt: "jpg",
+      fileHash: `mms-test-${report.id}-${n}-${Math.random()}`,
+      sourcePhone: `+1555000${1000 + n}`,
+    });
+    return upload;
+  };
+
+  // Pin createdAt so "newest first" ordering is deterministic regardless
+  // of how fast the inserts run.
+  const pinCreatedAt = async (upload: Upload, minutesAgo: number) => {
+    await Upload.createQueryBuilder()
+      .update()
+      .set({ createdAt: new Date(Date.now() - minutesAgo * 60_000) } as any)
+      .where("id = :id", { id: upload.id })
+      .execute();
+  };
+
+  const createWebUpload = async (): Promise<Upload> => {
+    const upload = new Upload();
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = `uploads/chicago-il-web${report.id}.png`;
+    upload.location = report.location;
+    await upload.save();
+    return upload;
+  };
+
+  const mediaRequest = (idOrAddress: string) =>
+    http_mocks.createRequest({
+      method: "GET",
+      params: { idOrAddress },
+      headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+    });
+
+  beforeEach(async () => {
+    [report] = await Report.createNewReport(
+      "555-555-0001",
+      `http://twitter.com/status/media-${Date.now()}`,
+      TEST_ADDRESS,
+    );
+  });
+
+  it("returns 401 without auth", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.media(
+      http_mocks.createRequest({
+        method: "GET",
+        params: { idOrAddress: `${report.id}` },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(401);
+    expect(body).toEqual({ errors: ["Not authorized"] });
+  });
+
+  it("returns 401 with a bad API key", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.media(
+      http_mocks.createRequest({
+        method: "GET",
+        params: { idOrAddress: `${report.id}` },
+        headers: { Authorization: "Basic not-a-real-key" },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(401);
+    expect(body).toEqual({ errors: ["Not authorized"] });
+  });
+
+  it("returns 404 for a nonexistent report", async () => {
+    const response = http_mocks.createResponse();
+    const body = await controller.media(
+      mediaRequest("999999"),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toBeUndefined();
+  });
+
+  it("resolves the report by numeric id", async () => {
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.report).toEqual({ id: report.id, reportURL: report.reportURL });
+  });
+
+  it("resolves the report by reportURL", async () => {
+    const body = await controller.media(
+      mediaRequest(report.reportURL),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.report).toEqual({ id: report.id, reportURL: report.reportURL });
+  });
+
+  it("returns MMS uploads newest first", async () => {
+    const first = await createMmsUpload(1);
+    const second = await createMmsUpload(2);
+    const third = await createMmsUpload(3);
+    await pinCreatedAt(first, 30);
+    await pinCreatedAt(second, 20);
+    await pinCreatedAt(third, 10);
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.media.map((m) => m.id)).toEqual([
+      third.id,
+      second.id,
+      first.id,
+    ]);
+    expect(body.media.map((m) => m.source)).toEqual(["mms", "mms", "mms"]);
+  });
+
+  it("returns correct response shape for a ready MMS upload", async () => {
+    const upload = await createMmsUpload(4);
+    upload.mediaStatus = "ready";
+    upload.moderationStatus = "pending";
+    upload.sightengineScore = 0.04;
+    upload.processedFilePath = {
+      webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+      jobId: "mediaconvert-job-123",
+    };
+    await upload.save();
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.report).toEqual({ id: report.id, reportURL: report.reportURL });
+    expect(body.media).toEqual([
+      {
+        id: upload.id,
+        source: "mms",
+        mediaStatus: "ready",
+        moderationStatus: "pending",
+        sightengineScore: 0.04,
+        createdAt: upload.createdAt,
+        cdnUrl: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+        processedUrls: {
+          webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+        },
+      },
+    ]);
+  });
+
+  it("includes the report's web upload when present", async () => {
+    const mms = await createMmsUpload(5);
+    const web = await createWebUpload();
+    report.upload = web;
+    await report.save();
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    const ids = body.media.map((m) => m.id);
+    expect(ids).toContain(mms.id);
+    expect(ids).toContain(web.id);
+
+    const webItem = body.media.find((m) => m.id === web.id);
+    expect(webItem.source).toEqual("web");
+    const mmsItem = body.media.find((m) => m.id === mms.id);
+    expect(mmsItem.source).toEqual("mms");
+  });
+
+  it("omits the web upload when the report has none", async () => {
+    const mms = await createMmsUpload(6);
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.media.map((m) => m.id)).toEqual([mms.id]);
+  });
+
+  it("returns cdnUrl null for media that is not ready", async () => {
+    const upload = await createMmsUpload(7);
+    // createFromMms leaves mediaStatus as "processing"
+    expect(upload.mediaStatus).toEqual("processing");
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.media).toHaveLength(1);
+    expect(body.media[0].mediaStatus).toEqual("processing");
+    expect(body.media[0].cdnUrl).toBeNull();
+    expect(body.media[0].processedUrls).toEqual({});
+  });
+
+  it("returns cdnUrl null for failed media even with processed output", async () => {
+    const upload = await createMmsUpload(8);
+    upload.mediaStatus = "failed";
+    upload.processedFilePath = {
+      webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
+    };
+    await upload.save();
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.media[0].mediaStatus).toEqual("failed");
+    expect(body.media[0].cdnUrl).toBeNull();
+  });
+
+  it("rewrites processed URLs against the media CDN", async () => {
+    const previousDomain = process.env.MEDIA_CDN_DOMAIN;
+    process.env.MEDIA_CDN_DOMAIN = "media.polls.pizza";
+
+    try {
+      const upload = await createMmsUpload(9);
+      upload.mediaStatus = "ready";
+      upload.processedFilePath = {
+        mp4: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test_transcoded.mp4`,
+      };
+      await upload.save();
+
+      const body = await controller.media(
+        mediaRequest(`${report.id}`),
+        http_mocks.createResponse(),
+        () => undefined,
+      );
+
+      expect(body.media[0].cdnUrl).toEqual(
+        `https://media.polls.pizza/uploads/${upload.id}/test_transcoded.mp4`,
+      );
+      expect(body.media[0].cdnUrl).not.toContain("s3.us-west-2.amazonaws.com");
+    } finally {
+      if (previousDomain === undefined) {
+        delete process.env.MEDIA_CDN_DOMAIN;
+      } else {
+        process.env.MEDIA_CDN_DOMAIN = previousDomain;
+      }
+    }
+  });
+
+  it("picks mp4 as the primary URL for video and webp for images", async () => {
+    const video = await createMmsUpload(10);
+    video.mediaStatus = "ready";
+    video.processedFilePath = {
+      mp4: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${video.id}/video.mp4`,
+    };
+    await video.save();
+
+    const image = await createMmsUpload(11);
+    image.mediaStatus = "ready";
+    image.processedFilePath = {
+      webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${image.id}/image.webp`,
+    };
+    await image.save();
+
+    const body = await controller.media(
+      mediaRequest(`${report.id}`),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    const byId = new Map(body.media.map((m) => [m.id, m]));
+    expect(byId.get(video.id).cdnUrl).toContain("video.mp4");
+    expect(byId.get(image.id).cdnUrl).toContain("image.webp");
+  });
+});

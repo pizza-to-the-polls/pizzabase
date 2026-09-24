@@ -18,6 +18,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { cdnUrlForKey } from "../lib/media-cdn";
+import { notifySlackMmsUpload } from "../lib/slack/mmsNotify";
 
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -116,6 +117,20 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
   }
 
   await upload.save();
+
+  // Slack heads-up for processed MMS media (COMPLETE only). Fire-and-forget
+  // in its own try/catch: a Slack failure must never fail this lambda or
+  // trigger EventBridge retries.
+  if (status === "COMPLETE") {
+    try {
+      await notifySlackMmsUpload(upload);
+    } catch (notifyErr) {
+      console.error(
+        "[on-mediaconvert-complete] Slack notify failed (swallowed):",
+        notifyErr,
+      );
+    }
+  }
 }
 
 /**
