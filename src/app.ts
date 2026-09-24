@@ -32,6 +32,8 @@ app.use(
 );
 app.use("/webhook", bodyParser.raw({ type: "*/*" }));
 app.use(bodyParser.json());
+// Twilio inbound webhooks POST application/x-www-form-urlencoded (MMS-003).
+app.use(bodyParser.urlencoded({ extended: false }));
 
 app.set("trust proxy", true);
 
