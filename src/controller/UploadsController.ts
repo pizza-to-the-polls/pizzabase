@@ -215,7 +215,10 @@ export class UploadsController {
       cdnUrlFromStoredUrl(processed?.poster) ||
       cdnUrlFromStoredUrl(processed?.webp) ||
       cdnUrlFromStoredUrl(processed?.jpeg) ||
-      cdnUrlFromStoredUrl(processed?.gif);
+      cdnUrlFromStoredUrl(processed?.gif) ||
+      // Legacy uploads (pre-pipeline): the object itself IS the best
+      // available preview — serve it via the CDN.
+      cdnUrlForKey(upload.filePath);
 
     if (poster) {
       return response.redirect(302, poster);
