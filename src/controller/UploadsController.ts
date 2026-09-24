@@ -187,6 +187,45 @@ export class UploadsController {
   }
 
   /**
+   * GET /uploads/:fileName/poster
+   *
+   * Thumbnail-grade preview for ANY upload type — designed for embedding
+   * (HelpScout tickets, Retool panels, social link previews):
+   *   - image → its processed WebP (the actual media, resized)
+   *   - video → poster frame (once #232 lands on master); until then 404
+   *   - legacy uploads → the original object via the CDN
+   *   - still processing / failed → 404
+   *
+   * Keeps callers from caring about the media type at all.
+   */
+  async showPoster(request: Request, response: Response, _next: NextFunction) {
+    const { fileName } = request.params;
+    const pathKey = `uploads/${fileName}`;
+
+    const upload = await Upload.findOne({
+      where: [{ rawFilePath: pathKey }, { filePath: pathKey }] as any,
+    });
+    if (!upload) {
+      response.status(404);
+      return { errors: ["Not found"] };
+    }
+
+    const processed = upload.processedFilePath as Record<string, string> | null;
+    const poster =
+      cdnUrlFromStoredUrl(processed?.poster) ||
+      cdnUrlFromStoredUrl(processed?.webp) ||
+      cdnUrlFromStoredUrl(processed?.jpeg) ||
+      cdnUrlFromStoredUrl(processed?.gif);
+
+    if (poster) {
+      return response.redirect(302, poster);
+    }
+
+    response.status(404);
+    return { errors: ["Poster not available"] };
+  }
+
+  /**
    * Callback from the formatting Lambda when media processing completes.
    * POST /uploads/media-format-callback
    */

@@ -146,6 +146,12 @@ export const Routes = [
   },
   {
     method: "get",
+    route: "/uploads/:fileName/poster",
+    controller: UploadsController,
+    action: "showPoster",
+  },
+  {
+    method: "get",
     route: "/uploads/:fileName/sightengine",
     controller: SightEngineController,
     action: "getSightEngineScore",
