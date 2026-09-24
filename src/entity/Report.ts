@@ -10,6 +10,7 @@ import {
   UpdateDateColumn,
   MoreThan,
   IsNull,
+  Not,
 } from "typeorm";
 import { Location } from "./Location";
 import { Order } from "./Order";
@@ -17,6 +18,7 @@ import { Truck } from "./Truck";
 import { Upload } from "./Upload";
 import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
+import { normalizePhone } from "../lib/validator/normalizeContact";
 
 const OPEN_QUERY = {
   order: IsNull(),
@@ -139,6 +141,44 @@ export class Report extends BaseEntity {
       location: { id: location.id },
       ...OPEN_QUERY,
     });
+  }
+
+  /**
+   * Find the newest fulfilled report (pizza ordered or truck assigned) made
+   * within the last `windowDays` by a sender phone number. Used by the MMS
+   * reply workflow to resolve which report an inbound media message is
+   * replying about.
+   *
+   * NOTE: contactInfo is matched against the normalized (digits/+ only) form
+   * of the input phone. Reports submitted via the web flow store whatever
+   * formatting the user typed (e.g. "555-234-2345"), so only reports whose
+   * contactInfo is stored E.164-ish will match here today.
+   */
+  static async findRecentFulfilledByPhone(
+    phone: string,
+    windowDays = 30,
+  ): Promise<Report | null> {
+    const normalized = normalizePhone(phone);
+    const days = Number(process.env.MMS_MATCH_WINDOW_DAYS) || windowDays;
+    const since = new Date(Number(new Date()) - days * 24 * 60 * 60 * 1000);
+
+    const report = await this.findOne({
+      where: [
+        {
+          contactInfo: normalized,
+          order: Not(IsNull()),
+          createdAt: MoreThan(since),
+        },
+        {
+          contactInfo: normalized,
+          truck: Not(IsNull()),
+          createdAt: MoreThan(since),
+        },
+      ],
+      order: { createdAt: "DESC" },
+    });
+
+    return report ?? null;
   }
   static async updateOpen(location: Location, set): Promise<void> {
     const query = {
