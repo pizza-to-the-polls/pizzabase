@@ -31,6 +31,7 @@ import {
 } from "../lib/mp4-rotation";
 import { zapNewUpload } from "../lib/zapier";
 import { cdnUrlForKey } from "../lib/media-cdn";
+import { notifySlackMmsUpload } from "../lib/slack/mmsNotify";
 import * as path from "path";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -128,6 +129,18 @@ export async function handler(event: S3Event): Promise<void> {
         upload.exifScrubbed = true;
         upload.mediaStatus = "ready";
         await upload.save();
+
+        // Slack heads-up for processed MMS media. Fire-and-forget inside
+        // its own try/catch: a Slack failure must never mark media failed.
+        try {
+          await notifySlackMmsUpload(upload);
+        } catch (notifyErr) {
+          console.error(
+            "[on-media-format] Slack notify failed (swallowed):",
+            notifyErr,
+          );
+        }
+
         console.log(
           `[on-media-format] Image ${key} processed:`,
           JSON.stringify(result),
