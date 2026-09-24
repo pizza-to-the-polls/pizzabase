@@ -49,6 +49,10 @@ provider:
     IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
     MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
 
+    # Slack webhook for MMS media notifications (optional; notify is a no-op
+    # when unset). Consumed by on-media-format and on-mediaconvert-complete.
+    MMS_SLACK_WEBHOOK_URL: ${env:MMS_SLACK_WEBHOOK_URL, ''}
+
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
     STRIPE_SECRET_WH: ${env:STRIPE_SECRET_WH}
     STRIPE_PRODUCT_ID: ${env:STRIPE_PRODUCT_ID}
