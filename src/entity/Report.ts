@@ -180,6 +180,26 @@ export class Report extends BaseEntity {
 
     return report ?? null;
   }
+  /**
+   * Resolve a report from a numeric id or its reportURL (the public URL the
+   * report was created from). Mirrors Location.fidByIdOrFullAddress: any
+   * value containing a lowercase letter is treated as a reportURL, anything
+   * else as a numeric id.
+   *
+   * The web upload relation is loaded eagerly so callers get the report's
+   * original upload (reports.upload_id) in the same round trip.
+   */
+  static async findByIdOrReportUrl(
+    idOrAddress: string,
+  ): Promise<Report | null> {
+    return this.findOne({
+      where: idOrAddress.match(/[a-z]/g)
+        ? { reportURL: idOrAddress }
+        : { id: Number(idOrAddress) },
+      relations: ["upload"],
+    });
+  }
+
   static async updateOpen(location: Location, set): Promise<void> {
     const query = {
       location: { id: location.id },
