@@ -49,6 +49,16 @@ provider:
     IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
     MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
 
+    # Twilio auth token for X-Twilio-Signature verification on the inbound
+    # webhook. Required once the Twilio number points at /twilio/inbound —
+    # every request is rejected with 403 when unset.
+    TWILIO_AUTH_TOKEN: ${env:TWILIO_AUTH_TOKEN, ''}
+
+    # Days after pizza delivery during which an MMS reply is matched to a
+    # fulfilled report (Report.findRecentFulfilledByPhone). Optional;
+    # defaults to 30 in code.
+    MMS_MATCH_WINDOW_DAYS: ${env:MMS_MATCH_WINDOW_DAYS, '30'}
+
     # Slack webhook for MMS media notifications (optional; notify is a no-op
     # when unset). Consumed by on-media-format and on-mediaconvert-complete.
     MMS_SLACK_WEBHOOK_URL: ${env:MMS_SLACK_WEBHOOK_URL, ''}
