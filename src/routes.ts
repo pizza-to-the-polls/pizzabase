@@ -83,6 +83,12 @@ export const Routes = [
   },
   {
     method: "get",
+    route: "/reports/:idOrAddress/media",
+    controller: ReportsController,
+    action: "media",
+  },
+  {
+    method: "get",
     route: "/reports/:id",
     controller: ReportsController,
     action: "show",
