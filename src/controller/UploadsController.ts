@@ -3,7 +3,6 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
-import { zapNewUpload } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { isAuthorized, findOr404 } from "./helper";
 import { cdnUrlForKey, cdnUrlFromStoredUrl } from "../lib/media-cdn";
@@ -58,7 +57,9 @@ export class UploadsController {
           isDuplicate: true,
         };
       } else {
-        await zapNewUpload(upload);
+        // The feed zap fires when the media pipeline finishes (onMediaFormat /
+        // onMediaConvertComplete) — creation-time links pointed at a private
+        // raw object and fired before media existed.
         return await presignUpload(upload);
       }
     } catch (e) {

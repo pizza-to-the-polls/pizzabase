@@ -25,6 +25,7 @@ import {
 import { initializeDataSource } from "../data-source";
 import { Upload } from "../entity/Upload";
 import { detectInputRotation } from "../lib/mp4-rotation";
+import { zapNewUpload } from "../lib/zapier";
 import { cdnUrlForKey } from "../lib/media-cdn";
 import * as path from "path";
 
@@ -109,6 +110,9 @@ export async function handler(event: S3Event): Promise<void> {
           `[on-media-format] Image ${key} processed:`,
           JSON.stringify(result),
         );
+        // Feed zap fires HERE, not at upload creation: media exists, and the
+        // payload's permalink resolves to the processed output.
+        await zapNewUpload(upload);
       } else if (VIDEO_EXTENSIONS.has(fileExt)) {
         await transcodeVideo(key, upload.id);
         // Transcoded MP4 carries no source metadata.
