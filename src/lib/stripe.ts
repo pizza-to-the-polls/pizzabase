@@ -23,20 +23,52 @@ const initStripe = (maxNetworkRetries: number = 6, timeout: number = 5_000) =>
     timeout,
   });
 
+const CRUST_CLUB_PRICE_KEYS = [
+  "crustclub-monthly5usd",
+  "crustclub-monthly10usd",
+  "crustclub-monthly20usd",
+  "crustclub-monthly50usd",
+  "crustclub-monthly100usd",
+];
+
+const findMonthlyPrice = (prices: Stripe.Price[], amountUsd: number) =>
+  prices.find(
+    ({ unit_amount, recurring }) =>
+      unit_amount === amountUsd * 100 && recurring?.interval === "month",
+  );
+
 const processSubscription = async (body: NewSubscription): Promise<string> => {
   const { amountUsd, referrer, url } = body;
   const stripe = initStripe();
 
-  const { data } = await stripe.prices.list({
+  // Primary lookup: resolve via the crustclub-* lookup keys attached to
+  // the Crust Club monthly prices in the Stripe dashboard.
+  const { data: keyed } = await stripe.prices.list({
     type: "recurring",
     active: true,
+    currency: "usd",
+    lookup_keys: CRUST_CLUB_PRICE_KEYS,
   });
 
-  const { id: price } = data.find(
-    ({ unit_amount }) => unit_amount === amountUsd * 100,
-  ) || { id: null };
+  let price = findMonthlyPrice(keyed, amountUsd)?.id;
 
-  if (!price) throw new Error("Not a valid subscription level!");
+  if (!price) {
+    // Fallback: lookup keys missing or out of date (e.g. renamed in the
+    // dashboard, or a Stripe account without them) — match by attributes
+    // across the whole active catalog, narrowed to monthly prices by the
+    // API itself.
+    const { data } = await stripe.prices.list({
+      type: "recurring",
+      active: true,
+      currency: "usd",
+      recurring: { interval: "month" },
+      limit: 100,
+    });
+
+    price = findMonthlyPrice(data, amountUsd)?.id;
+  }
+
+  if (!price) throw new Error(`No active monthly price for $${amountUsd}`);
 
   const { id } = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
