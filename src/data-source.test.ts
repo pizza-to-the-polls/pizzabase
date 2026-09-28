@@ -22,6 +22,19 @@ function fakeSleep(): Promise<void> {
 }
 
 /**
+ * Error shaped like the AWS SDK v3 `InternalServerErrorException` that
+ * surfaces from the RDS Data API client bundled inside
+ * typeorm-aurora-data-api-driver during Aurora resume windows
+ * (BUG-011: opaque HTTP 500 "UnknownError" after a ~10–14s hang).
+ */
+function dataApi500Error(): Error {
+  return Object.assign(new Error("UnknownError"), {
+    name: "InternalServerErrorException",
+    $metadata: { httpStatusCode: 500, requestId: "test-request-id" },
+  });
+}
+
+/**
  * Builds a minimal fake driver that records params when query() is called.
  * The fake's createQueryRunner returns a queryRunner stub that stores
  * every (query, parameters, useStructuredResult) triple in recordedCalls
@@ -216,6 +229,52 @@ describe("installAuroraCompatibilityPatches", () => {
 
     expect(recordedCalls).toHaveLength(1);
     expect(recordedCalls[0].parameters).toEqual([]);
+  });
+
+  // ── BUG-011: RDS Data API 500 UnknownError handling ────────────
+
+  it("retries Data API 500 (UnknownError) on SELECT queries", async () => {
+    let calls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: async () => {
+          calls++;
+          if (calls < 2) throw dataApi500Error();
+          return "rows";
+        },
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver, fakeSleep);
+
+    const qr = (driver as any).createQueryRunner();
+    const result = await qr.query("SELECT 1");
+
+    expect(result).toBe("rows");
+    expect(calls).toBe(2);
+  });
+
+  it("does NOT retry Data API 500 on write queries (idempotency guard)", async () => {
+    let calls = 0;
+    const driver = {
+      createQueryRunner: (_mode?: any) => ({
+        query: async () => {
+          calls++;
+          throw dataApi500Error();
+        },
+      }),
+    };
+
+    installAuroraCompatibilityPatches(driver, fakeSleep);
+
+    const qr = (driver as any).createQueryRunner();
+    await expect(
+      qr.query('INSERT INTO "order" (id) VALUES ($1)', [1]),
+    ).rejects.toThrow("UnknownError");
+
+    // Propagated immediately — a 500 after a long hang is ambiguous and
+    // retrying a write could duplicate it.
+    expect(calls).toBe(1);
   });
 });
 

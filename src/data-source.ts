@@ -142,9 +142,14 @@ export const installAuroraCompatibilityPatches = (
       useStructuredResult?: boolean,
     ) => {
       const sanitized = sanitizeQueryParameters(parameters);
+      // Pass the query text so the retry helper can apply its 5xx
+      // idempotency guard: Data API 500s are only auto-retried for
+      // read-only (SELECT/WITH) statements. Transaction methods below
+      // have no SQL text, so 5xx on BEGIN/COMMIT/ROLLBACK is retried as
+      // the safer default (those are idempotent state transitions).
       return withDatabaseResumeRetry(
         () => originalQuery(query, sanitized, useStructuredResult),
-        retryOpts,
+        { ...retryOpts, queryText: query },
       );
     }) as any;
 
