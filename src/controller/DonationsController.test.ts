@@ -24,10 +24,14 @@ describe("#create", () => {
             {
               unit_amount: 20_00,
               id: "price_blahblah",
+              currency: "usd",
+              recurring: { interval: "month" },
             },
             {
               unit_amount: 10_00,
               id: "price_other",
+              currency: "usd",
+              recurring: { interval: "month" },
             },
           ],
         })),
@@ -145,6 +149,8 @@ describe("#create", () => {
     expect(mockStripeClient.prices.list).toHaveBeenCalledWith({
       active: true,
       type: "recurring",
+      currency: "usd",
+      limit: 100,
     });
 
     expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
@@ -169,6 +175,117 @@ describe("#create", () => {
         },
       },
     });
+  });
+
+  it("never matches a yearly price for a monthly subscription", async () => {
+    // Mirrors production: a $100/year price appears first (newest) with the
+    // same unit_amount as the $100/month price, which sits further down.
+    mockStripeClient.prices.list.mockResolvedValueOnce({
+      data: [
+        {
+          unit_amount: 100_00,
+          id: "price_yearly_collision",
+          currency: "usd",
+          recurring: { interval: "year" },
+        },
+        {
+          unit_amount: 100_00,
+          id: "price_monthly_correct",
+          currency: "usd",
+          recurring: { interval: "month" },
+        },
+      ],
+    });
+
+    await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 100,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_monthly_correct", quantity: 1 }],
+      }),
+    );
+  });
+
+  it("finds a monthly price positioned beyond the default 10-price page", async () => {
+    // Mirrors production: Crust Club prices created in 2022 sit past the
+    // 10th position once newer prices are prepended; the lookup must request
+    // the full (limit 100) list, not the default 10-price page.
+    const fillerPrices = Array.from({ length: 11 }, (_, i) => ({
+      unit_amount: 1_00 + i,
+      id: `price_filler_${i}`,
+      currency: "usd",
+      recurring: { interval: "month" },
+    }));
+    mockStripeClient.prices.list.mockResolvedValueOnce({
+      data: [
+        ...fillerPrices,
+        {
+          unit_amount: 20_00,
+          id: "price_crustclub_monthly_20",
+          currency: "usd",
+          recurring: { interval: "month" },
+        },
+      ],
+    });
+
+    await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 20,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_crustclub_monthly_20", quantity: 1 }],
+      }),
+    );
+  });
+
+  it("returns the requested amount when no monthly price matches", async () => {
+    mockStripeClient.prices.list.mockResolvedValueOnce({
+      data: [
+        {
+          unit_amount: 20_00,
+          id: "price_yearly_only",
+          currency: "usd",
+          recurring: { interval: "year" },
+        },
+      ],
+    });
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 20,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body).toEqual({
+      success: false,
+      message: "No active monthly price for $20",
+    });
+    expect(mockStripeClient.checkout.sessions.create).not.toHaveBeenCalled();
   });
 });
 

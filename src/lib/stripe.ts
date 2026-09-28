@@ -30,13 +30,16 @@ const processSubscription = async (body: NewSubscription): Promise<string> => {
   const { data } = await stripe.prices.list({
     type: "recurring",
     active: true,
+    currency: "usd",
+    limit: 100,
   });
 
   const { id: price } = data.find(
-    ({ unit_amount }) => unit_amount === amountUsd * 100,
+    ({ unit_amount, recurring }) =>
+      unit_amount === amountUsd * 100 && recurring?.interval === "month",
   ) || { id: null };
 
-  if (!price) throw new Error("Not a valid subscription level!");
+  if (!price) throw new Error(`No active monthly price for $${amountUsd}`);
 
   const { id } = await stripe.checkout.sessions.create({
     payment_method_types: ["card"],
