@@ -66,7 +66,10 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
     // as string-wrapped JSON, which makes the ->> extraction return NULL —
     // if this path logs "No upload found" for a job that HAS UserMetadata,
     // the metadata path above is the reliable one.
+    // leftJoinAndSelect: query builders bypass eager relations, and
+    // zapNewUpload needs upload.location downstream.
     upload = await Upload.createQueryBuilder("u")
+      .leftJoinAndSelect("u.location", "location")
       .where("u.processed_file_path ->> 'jobId' = :jobId", { jobId })
       .getOne();
   }
