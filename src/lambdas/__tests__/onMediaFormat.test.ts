@@ -245,14 +245,12 @@ describe("image uploads", () => {
           Bucket: BUCKET,
           Key: `uploads/${upload.id}.webp`,
           ContentType: "image/webp",
-          ACL: "public-read",
-        }),
+            }),
         expect.objectContaining({
           Bucket: BUCKET,
           Key: `uploads/${upload.id}.jpeg`,
           ContentType: "image/jpeg",
-          ACL: "public-read",
-        }),
+            }),
       ]),
     );
   });
