@@ -264,27 +264,33 @@ export function buildRenderPlan(input: ClipRenderInput): ClipRenderPlan {
     );
   });
 
-  const lowerThirdPath = addTextFile(
-    "lowerthird-city.txt",
-    `${input.city}, ${input.state}`.trim().replace(/^,\s*/, ""),
-  );
-  baseChain.push(
-    `drawtext=textfile=${escapeFilterPath(lowerThirdPath)}:${fontSpec}` +
-      "fontcolor=white:fontsize=44:box=1:boxcolor=black@0.55:" +
-      "boxborderw=14:x=64:y=h-440",
-  );
-
-  const reportedTime = formatReportedTime(input.reportedAt);
-  if (reportedTime) {
-    const reportedPath = addTextFile(
-      "lowerthird-reported.txt",
-      `reported ${reportedTime}`,
+  // Compilation mode: captionText === null means "no overlays on photos" —
+  // lower third and reported-time lines are skipped entirely. (Product
+  // feedback: compilations are clean; quirky text lives in baked cards and
+  // the Slack summary instead.)
+  if (captionLines.length > 0) {
+    const lowerThirdPath = addTextFile(
+      "lowerthird-city.txt",
+      `${input.city}, ${input.state}`.trim().replace(/^,\s*/, ""),
     );
     baseChain.push(
-      `drawtext=textfile=${escapeFilterPath(reportedPath)}:${fontSpec}` +
-        "fontcolor=white:fontsize=30:box=1:boxcolor=black@0.55:" +
-        "boxborderw=10:x=64:y=h-372",
+      `drawtext=textfile=${escapeFilterPath(lowerThirdPath)}:${fontSpec}` +
+        "fontcolor=white:fontsize=44:box=1:boxcolor=black@0.55:" +
+        "boxborderw=14:x=64:y=h-440",
     );
+
+    const reportedTime = formatReportedTime(input.reportedAt);
+    if (reportedTime) {
+      const reportedPath = addTextFile(
+        "lowerthird-reported.txt",
+        `reported ${reportedTime}`,
+      );
+      baseChain.push(
+        `drawtext=textfile=${escapeFilterPath(reportedPath)}:${fontSpec}` +
+          "fontcolor=white:fontsize=30:box=1:boxcolor=black@0.55:" +
+          "boxborderw=10:x=64:y=h-372",
+      );
+    }
   }
 
   // ── Branded end-card (composited over the last 2s) ──
