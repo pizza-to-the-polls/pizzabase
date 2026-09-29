@@ -87,6 +87,15 @@ jobs:
         run: bash scripts/health-check.sh https://base.polls.pizza/health
         continue-on-error: true
 
+      - name: Unstick CloudFormation stack if needed
+        run: |
+          STATE=$(aws cloudformation describe-stacks --stack-name pizzabase-prod --query "Stacks[0].StackStatus" --output text --region us-west-2)
+          echo "Stack state: $STATE"
+          if [ "$STATE" = "UPDATE_ROLLBACK_FAILED" ]; then
+            aws cloudformation continue-update-rollback --stack-name pizzabase-prod --region us-west-2
+            aws cloudformation wait stack-update-complete --stack-name pizzabase-prod --region us-west-2
+          fi
+
       - name: Ensure ffmpeg Lambda layer (renderClip)
         run: |
           if aws lambda get-layer-version --layer-name ffmpeg --version-number 1 --region us-west-2 >/dev/null 2>&1; then
