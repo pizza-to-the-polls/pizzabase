@@ -127,6 +127,21 @@ jobs:
         run: bash scripts/health-check.sh https://base-next.polls.pizza/health
         continue-on-error: true
 
+      - name: Ensure ffmpeg Lambda layer (renderClip)
+        run: |
+          if aws lambda get-layer-version --layer-name ffmpeg --version-number 1 --region us-west-2 >/dev/null 2>&1; then
+            echo "ffmpeg layer already published"
+          else
+            echo "Publishing ffmpeg layer (one-time infra)"
+            bash scripts/build-ffmpeg-layer.sh
+            aws lambda publish-layer-version \
+              --layer-name ffmpeg \
+              --description "Static ffmpeg + DejaVu Sans Bold for renderClip compilations" \
+              --zip-file fileb://ffmpeg-layer.zip \
+              --compatible-runtimes nodejs22.x \
+              --region us-west-2
+          fi
+
       - name: deploy to aws
         uses: serverless/github-action@v4.0.0
         with:
