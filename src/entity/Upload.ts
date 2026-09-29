@@ -5,11 +5,13 @@ import {
   PrimaryGeneratedColumn,
   Column,
   ManyToOne,
+  OneToMany,
   JoinColumn,
   CreateDateColumn,
   UpdateDateColumn,
   MoreThan,
 } from "typeorm";
+import { Clip } from "./Clip";
 import { Location } from "./Location";
 import { NormalAddress } from "../lib/validator";
 import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
@@ -88,6 +90,12 @@ export class Upload extends BaseEntity {
 
   @Column({ name: "sightengine_score", type: "float", nullable: true })
   sightengineScore: number | null;
+
+  @OneToMany((_type) => Clip, (clip) => clip.upload)
+  clips: Promise<Clip[]>;
+
+  @Column({ name: "failure_reason", type: "varchar", nullable: true })
+  failureReason: string | null;
 
   static async createOrReject(
     ipAddress: string,

@@ -87,6 +87,39 @@ jobs:
         run: bash scripts/health-check.sh https://base.polls.pizza/health
         continue-on-error: true
 
+      - name: Unstick CloudFormation stack if needed
+        run: |
+          STATE=$(aws cloudformation describe-stacks --stack-name pizzabase-prod --query "Stacks[0].StackStatus" --output text --region us-west-2)
+          echo "Stack state: $STATE"
+          if [ "$STATE" = "UPDATE_ROLLBACK_FAILED" ]; then
+            aws cloudformation continue-update-rollback --stack-name pizzabase-dev --region us-west-2
+            # Roll back to the last stable state (UPDATE_ROLLBACK_COMPLETE is
+            # a success here — the deploy below reapplies the update).
+            for i in $(seq 1 30); do
+              STATE=$(aws cloudformation describe-stacks --stack-name pizzabase-dev --query "Stacks[0].StackStatus" --output text --region us-west-2)
+              echo "rollback progress: $STATE"
+              case "$STATE" in
+                *_IN_PROGRESS) sleep 10;;
+                *) break;;
+              esac
+            done
+          fi
+
+      - name: Ensure ffmpeg Lambda layer (renderClip)
+        run: |
+          if aws lambda get-layer-version --layer-name ffmpeg --version-number 1 --region us-west-2 >/dev/null 2>&1; then
+            echo "ffmpeg layer already published"
+          else
+            echo "Publishing ffmpeg layer (one-time infra)"
+            bash scripts/build-ffmpeg-layer.sh
+            aws lambda publish-layer-version \
+              --layer-name ffmpeg \
+              --description "Static ffmpeg + DejaVu Sans Bold for renderClip compilations" \
+              --zip-file fileb://ffmpeg-layer.zip \
+              --compatible-runtimes nodejs22.x \
+              --region us-west-2
+          fi
+
       - name: deploy to aws
         uses: serverless/github-action@v4.0.0
         with:
