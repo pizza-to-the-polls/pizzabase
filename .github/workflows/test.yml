@@ -133,7 +133,16 @@ jobs:
           echo "Stack state: $STATE"
           if [ "$STATE" = "UPDATE_ROLLBACK_FAILED" ]; then
             aws cloudformation continue-update-rollback --stack-name pizzabase-dev --region us-west-2
-            aws cloudformation wait stack-update-complete --stack-name pizzabase-dev --region us-west-2
+            # Roll back to the last stable state (UPDATE_ROLLBACK_COMPLETE is
+            # a success here — the deploy below reapplies the update).
+            for i in $(seq 1 30); do
+              STATE=$(aws cloudformation describe-stacks --stack-name pizzabase-dev --query "Stacks[0].StackStatus" --output text --region us-west-2)
+              echo "rollback progress: $STATE"
+              case "$STATE" in
+                *_IN_PROGRESS) sleep 10;;
+                *) break;;
+              esac
+            done
           fi
 
       - name: Ensure ffmpeg Lambda layer (renderClip)
