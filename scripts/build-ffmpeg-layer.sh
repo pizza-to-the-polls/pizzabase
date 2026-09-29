@@ -21,7 +21,7 @@ WORKDIR=$(mktemp -d)
 trap 'rm -rf "$WORKDIR"' EXIT
 
 FFMPEG_URL="https://johnvansickle.com/ffmpeg/releases/ffmpeg-release-amd64-static.tar.xz"
-FONT_URL="https://github.com/dejavu-fonts/dejavu-fonts/raw/master/ttf/DejaVuSans-Bold.ttf"
+FONT_URL="https://github.com/dejavu-fonts/dejavu-fonts/releases/download/version_2_37/dejavu-fonts-ttf-2.37.zip"
 
 echo "==> Downloading static ffmpeg build..."
 curl -fsSL "$FFMPEG_URL" -o "$WORKDIR/ffmpeg.tar.xz"
@@ -32,9 +32,22 @@ test -x "$FFMPEG_DIR/ffmpeg" || {
   exit 1
 }
 
-echo "==> Downloading DejaVu Sans Bold font..."
+echo "==> Locating DejaVu Sans Bold font..."
 mkdir -p "$WORKDIR/stage/bin" "$WORKDIR/stage/fonts"
-curl -fsSL "$FONT_URL" -o "$WORKDIR/stage/fonts/DejaVuSans-Bold.ttf"
+SYSTEM_FONT=$(find /usr/share/fonts -name "DejaVuSans-Bold.ttf" 2>/dev/null | head -n 1)
+if [ -n "$SYSTEM_FONT" ]; then
+  echo "Using system font: $SYSTEM_FONT"
+  cp "$SYSTEM_FONT" "$WORKDIR/stage/fonts/DejaVuSans-Bold.ttf"
+else
+  echo "Fetching DejaVu fonts release tarball..."
+  curl -fsSL "$FONT_URL" -o "$WORKDIR/dejavu.zip"
+  unzip -j "$WORKDIR/dejavu.zip" "*/ttf/DejaVuSans-Bold.ttf" \
+    -d "$WORKDIR/stage/fonts" >/dev/null
+fi
+test -f "$WORKDIR/stage/fonts/DejaVuSans-Bold.ttf" || {
+  echo "DejaVuSans-Bold.ttf not found" >&2
+  exit 1
+}
 
 cp "$FFMPEG_DIR/ffmpeg" "$WORKDIR/stage/bin/ffmpeg"
 
