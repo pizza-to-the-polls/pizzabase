@@ -22,6 +22,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { cdnUrlForKey } from "../lib/media-cdn";
+import { zapNewUpload } from "../lib/zapier";
 
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -74,6 +75,10 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
     console.warn(`[on-mediaconvert-complete] No upload found for job ${jobId}`);
     return;
   }
+
+  // Event invocations can be redelivered — the feed zap fires only on the
+  // transition into "ready" (first completion), never on re-processing.
+  const firstCompletion = upload.mediaStatus !== "ready";
 
   if (status === "COMPLETE") {
     // Build MP4 URL from output paths
@@ -129,6 +134,11 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
         `[on-mediaconvert-complete] Upload ${upload.id} ready: ${mp4Url}` +
           (posterKey ? ` (poster: ${posterKey})` : ""),
       );
+      // Feed zap fires HERE, not at upload creation: media exists, and the
+      // payload's permalink resolves to the transcoded output.
+      if (firstCompletion) {
+        await zapNewUpload(upload);
+      }
     } else {
       console.warn(
         `[on-mediaconvert-complete] No output paths for job ${jobId}`,

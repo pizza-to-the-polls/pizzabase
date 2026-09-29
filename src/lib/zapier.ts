@@ -51,6 +51,9 @@ const zapUpload = async (upload: Upload, hook: ZapHooks): Promise<void> =>
       upload: {
         filePath: upload.filePath,
         ipAddress: upload.ipAddress,
+        // Stable permalink (302s to the processed output) — the legacy
+        // filePath key sits in the private raw bucket and no longer serves.
+        permalink: `${process.env.PIZZABASE_API_URL || "https://base.polls.pizza"}/uploads/${upload.filePath.split("/").pop()}`,
       },
     },
     hook,
