@@ -3,7 +3,6 @@ import { S3Client } from "@aws-sdk/client-s3";
 import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
-import { zapNewUpload } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { isAuthorized, findOr404 } from "./helper";
 import { cdnUrlForKey, cdnUrlFromStoredUrl } from "../lib/media-cdn";
@@ -58,7 +57,9 @@ export class UploadsController {
           isDuplicate: true,
         };
       } else {
-        await zapNewUpload(upload);
+        // The feed zap fires when the media pipeline finishes (onMediaFormat /
+        // onMediaConvertComplete) — creation-time links pointed at a private
+        // raw object and fired before media existed.
         return await presignUpload(upload);
       }
     } catch (e) {
@@ -184,6 +185,48 @@ export class UploadsController {
     // Still processing or failed — raw files are private, never served.
     response.status(404);
     return { errors: ["Media not available"] };
+  }
+
+  /**
+   * GET /uploads/:fileName/poster
+   *
+   * Thumbnail-grade preview for ANY upload type — designed for embedding
+   * (HelpScout tickets, Retool panels, social link previews):
+   *   - image → its processed WebP (the actual media, resized)
+   *   - video → poster frame (once #232 lands on master); until then 404
+   *   - legacy uploads → the original object via the CDN
+   *   - still processing / failed → 404
+   *
+   * Keeps callers from caring about the media type at all.
+   */
+  async showPoster(request: Request, response: Response, _next: NextFunction) {
+    const { fileName } = request.params;
+    const pathKey = `uploads/${fileName}`;
+
+    const upload = await Upload.findOne({
+      where: [{ rawFilePath: pathKey }, { filePath: pathKey }] as any,
+    });
+    if (!upload) {
+      response.status(404);
+      return { errors: ["Not found"] };
+    }
+
+    const processed = upload.processedFilePath as Record<string, string> | null;
+    const poster =
+      cdnUrlFromStoredUrl(processed?.poster) ||
+      cdnUrlFromStoredUrl(processed?.webp) ||
+      cdnUrlFromStoredUrl(processed?.jpeg) ||
+      cdnUrlFromStoredUrl(processed?.gif) ||
+      // Legacy uploads (pre-pipeline): the object itself IS the best
+      // available preview — serve it via the CDN.
+      cdnUrlForKey(upload.filePath);
+
+    if (poster) {
+      return response.redirect(302, poster);
+    }
+
+    response.status(404);
+    return { errors: ["Poster not available"] };
   }
 
   /**

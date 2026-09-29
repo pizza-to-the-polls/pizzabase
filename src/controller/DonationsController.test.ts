@@ -24,10 +24,14 @@ describe("#create", () => {
             {
               unit_amount: 20_00,
               id: "price_blahblah",
+              currency: "usd",
+              recurring: { interval: "month" },
             },
             {
               unit_amount: 10_00,
               id: "price_other",
+              currency: "usd",
+              recurring: { interval: "month" },
             },
           ],
         })),
@@ -143,8 +147,16 @@ describe("#create", () => {
     );
 
     expect(mockStripeClient.prices.list).toHaveBeenCalledWith({
-      active: true,
       type: "recurring",
+      active: true,
+      currency: "usd",
+      lookup_keys: [
+        "crustclub-monthly5usd",
+        "crustclub-monthly10usd",
+        "crustclub-monthly20usd",
+        "crustclub-monthly50usd",
+        "crustclub-monthly100usd",
+      ],
     });
 
     expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith({
@@ -169,6 +181,131 @@ describe("#create", () => {
         },
       },
     });
+  });
+
+  it("never matches a yearly price for a monthly subscription", async () => {
+    // Mirrors production: a $100/year price appears first (newest) with the
+    // same unit_amount as the $100/month price, which sits further down.
+    // The keyed lookup returns both; the yearly one must never win.
+    mockStripeClient.prices.list.mockResolvedValueOnce({
+      data: [
+        {
+          unit_amount: 100_00,
+          id: "price_yearly_collision",
+          currency: "usd",
+          recurring: { interval: "year" },
+        },
+        {
+          unit_amount: 100_00,
+          id: "price_monthly_correct",
+          currency: "usd",
+          recurring: { interval: "month" },
+        },
+      ],
+    });
+
+    await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 100,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_monthly_correct", quantity: 1 }],
+      }),
+    );
+  });
+
+  it("falls back to attribute matching when lookup keys are missing", async () => {
+    // Mirrors production history: Crust Club prices sat past the 10th
+    // position of the default page, so the fallback must request the full
+    // (limit 100) monthly-filtered list, not the default 10-price page.
+    const fillerPrices = Array.from({ length: 11 }, (_, i) => ({
+      unit_amount: 1_00 + i,
+      id: `price_filler_${i}`,
+      currency: "usd",
+      recurring: { interval: "month" },
+    }));
+    mockStripeClient.prices.list
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          ...fillerPrices,
+          {
+            unit_amount: 20_00,
+            id: "price_crustclub_monthly_20",
+            currency: "usd",
+            recurring: { interval: "month" },
+          },
+        ],
+      });
+
+    await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 20,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(mockStripeClient.prices.list).toHaveBeenNthCalledWith(2, {
+      type: "recurring",
+      active: true,
+      currency: "usd",
+      recurring: { interval: "month" },
+      limit: 100,
+    });
+
+    expect(mockStripeClient.checkout.sessions.create).toHaveBeenCalledWith(
+      expect.objectContaining({
+        line_items: [{ price: "price_crustclub_monthly_20", quantity: 1 }],
+      }),
+    );
+  });
+
+  it("returns the requested amount when no monthly price matches", async () => {
+    // Neither the keyed lookup nor the attribute fallback finds a match.
+    mockStripeClient.prices.list
+      .mockResolvedValueOnce({ data: [] })
+      .mockResolvedValueOnce({
+        data: [
+          {
+            unit_amount: 20_00,
+            id: "price_yearly_only",
+            currency: "usd",
+            recurring: { interval: "year" },
+          },
+        ],
+      });
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        body: {
+          type: "subscription",
+          amountUsd: 20,
+          url: "http://polls.pizza/donate",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body).toEqual({
+      success: false,
+      message: "No active monthly price for $20",
+    });
+    expect(mockStripeClient.checkout.sessions.create).not.toHaveBeenCalled();
   });
 });
 
