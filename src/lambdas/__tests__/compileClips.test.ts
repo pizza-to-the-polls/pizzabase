@@ -83,7 +83,6 @@ const makeMember = async (
   clip.upload = upload;
   clip.status = status;
   clip.kit = {
-    caption: "Around the block",
     city: "Portland",
     state: "OR",
     photoLinks: [],

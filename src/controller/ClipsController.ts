@@ -35,8 +35,7 @@ export class ClipsController {
       return { errors: ["Not authorized"] };
     }
 
-    const { uploadId, city, state, reportedAt, captionText } =
-      request.body || {};
+    const { uploadId, city, state, reportedAt } = request.body || {};
 
     if (!uploadId || !city || !state || !reportedAt) {
       response.status(400);
@@ -73,7 +72,6 @@ export class ClipsController {
     clip.upload = upload;
     clip.status = "queued";
     clip.kit = {
-      caption: captionText || null,
       city,
       state,
       reportedAt,

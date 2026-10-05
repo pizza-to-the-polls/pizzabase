@@ -7,7 +7,7 @@
  * the rendered pixels before publishing a new ffmpeg layer version.
  *
  * Usage:
- *   npx ts-node scripts/renderClipSmoke.ts sample.mp4 ["caption text"]
+ *   npx ts-node scripts/renderClipSmoke.ts sample.mp4
  *
  * Options via env:
  *   FFMPEG_PATH       path to an ffmpeg binary (default: `ffmpeg` on PATH)
@@ -15,7 +15,7 @@
  *
  * Output lands in a fresh /tmp/clip-smoke-* directory: clip.mp4, clip.srt,
  * poster.jpg. Open clip.mp4 and check the 9:16 crop, the bottom-third
- * caption (≤2 lines), the city/state lower third, and the 2s branded
+ * clean 9:16 video, and the 2s branded
  * end-card on the tail.
  */
 import * as fs from "fs/promises";
@@ -26,11 +26,9 @@ import { runFfmpeg } from "../src/lib/ffmpeg-exec";
 import { detectVideoDuration } from "../src/lib/mp4-rotation";
 
 async function main(): Promise<void> {
-  const [inputArg, captionArg] = process.argv.slice(2);
+  const [inputArg] = process.argv.slice(2);
   if (!inputArg) {
-    console.error(
-      "Usage: npx ts-node scripts/renderClipSmoke.ts <sample.mp4> [caption]",
-    );
+    console.error("Usage: npx ts-node scripts/renderClipSmoke.ts <sample.mp4>");
     process.exit(1);
   }
 
@@ -45,7 +43,6 @@ async function main(): Promise<void> {
 
   const outputDir = await fs.mkdtemp(path.join("/tmp", "clip-smoke-"));
   const plan = buildRenderPlan({
-    captionText: captionArg ?? "The line is around the block!",
     city: "Portland",
     state: "OR",
     reportedAt: new Date().toISOString(),

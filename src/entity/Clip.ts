@@ -118,7 +118,6 @@ export class Clip extends BaseEntity {
       uploadId: this.upload ? this.upload.id : null,
       kit: this.kit
         ? {
-            caption: (this.kit as Record<string, unknown>).caption,
             isCompilation: (this.kit as Record<string, unknown>).isCompilation,
             photoLinks: (this.kit as Record<string, unknown>).photoLinks,
           }

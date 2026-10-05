@@ -17,9 +17,8 @@
  *   4. Defense-in-depth duration check: source > 90s (or undetectable
  *      duration) → rendering → rejected with failureReason.
  *   5. Render via ffmpeg Lambda layer (args from the pure clipTemplate
- *      module): 1080x1920 center-crop, burned-in caption + city/state
- *      lower third, 2s brand-only end-card (no QR, no short URL),
- *      H.264/AAC, ≤90s.
+ *      module): 1080x1920 center-crop, clean video, 2s brand-only end-card
+ *      (no captions, no overlays, no QR), H.264/AAC, ≤90s.
  *   6. Upload the bundle to clips/{clipId}/ (clip.mp4, clip.srt,
  *      poster.jpg, kit.json) and set status=ready with outputPaths.
  *   7. Any failure after the rendering transition → rejected + reason
@@ -220,7 +219,6 @@ export async function handler(event: { clipId?: number }): Promise<void> {
     await fs.writeFile(inputPath, sourceBytes);
 
     const plan = buildRenderPlan({
-      captionText: kitString(kit, "caption"),
       city: kitString(kit, "city") ?? "",
       state: kitString(kit, "state") ?? "",
       reportedAt: kitString(kit, "reportedAt") ?? "",
@@ -231,7 +229,6 @@ export async function handler(event: { clipId?: number }): Promise<void> {
       fontFile: process.env.RENDER_FONT_FILE || null,
     });
 
-    await fs.writeFile(plan.srtPath, plan.sidecarSrt, "utf8");
     for (const file of plan.textFiles) {
       await fs.writeFile(file.path, file.content, "utf8");
     }
@@ -241,7 +238,6 @@ export async function handler(event: { clipId?: number }): Promise<void> {
 
     const prefix = `clips/${clipId}`;
     const videoKey = `${prefix}/clip.mp4`;
-    const captionsKey = `${prefix}/clip.srt`;
     const posterKey = `${prefix}/poster.jpg`;
     const kitKey = `${prefix}/kit.json`;
 
@@ -249,11 +245,6 @@ export async function handler(event: { clipId?: number }): Promise<void> {
       videoKey,
       await fs.readFile(path.join(workDir, "clip.mp4")),
       "video/mp4",
-    );
-    await putObject(
-      captionsKey,
-      await fs.readFile(plan.srtPath),
-      "application/x-subrip",
     );
     await putObject(
       posterKey,
@@ -268,7 +259,6 @@ export async function handler(event: { clipId?: number }): Promise<void> {
 
     clip.outputPaths = {
       video: videoKey,
-      captions: captionsKey,
       poster: posterKey,
       kit: kitKey,
     };

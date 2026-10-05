@@ -16,7 +16,6 @@ const makeClip = (): Clip => {
   clip.id = 42;
   clip.status = "approved";
   clip.kit = {
-    caption: "The line wraps around the block!",
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -24,7 +23,6 @@ const makeClip = (): Clip => {
   };
   clip.outputPaths = {
     video: "clips/42/clip.mp4",
-    captions: "clips/42/clip.srt",
     poster: "clips/42/poster.jpg",
     kit: "clips/42/kit.json",
   };
@@ -91,18 +89,19 @@ describe("buildClipKitSlackPayload", () => {
     expect(image.alt_text).toContain("Portland");
   });
 
-  it("includes the caption from the kit", () => {
+  it("carries no caption section (video productions only)", () => {
     const payload = buildClipKitSlackPayload(makeClip()) as Record<string, any>;
 
-    const section = payload.blocks.find(
-      (b: any) =>
-        b.type === "section" &&
-        b.text?.text?.includes("The line wraps around the block!"),
+    const sections = (payload.blocks as any[]).filter(
+      (b) => b.type === "section",
     );
-    expect(section.text.text).toBe("The line wraps around the block!");
+    expect(sections.every((s) => !s.text?.text?.includes("No caption"))).toBe(
+      true,
+    );
+    expect(JSON.stringify(payload)).not.toContain("No caption in kit");
   });
 
-  it("links the video, captions, and kit.json assets", () => {
+  it("links the video and kit.json assets", () => {
     const payload = buildClipKitSlackPayload(makeClip()) as Record<string, any>;
 
     const linksSection = payload.blocks.find((b: any) =>
@@ -112,9 +111,7 @@ describe("buildClipKitSlackPayload", () => {
     expect(linksSection.text.text).toContain(
       `<${CDN}/clips/42/clip.mp4|Video (MP4)>`,
     );
-    expect(linksSection.text.text).toContain(
-      `<${CDN}/clips/42/clip.srt|Captions (SRT)>`,
-    );
+    expect(linksSection.text.text).not.toContain("Captions (SRT)");
     expect(linksSection.text.text).toContain(
       `<${CDN}/clips/42/kit.json|Kit JSON>`,
     );
@@ -168,19 +165,15 @@ describe("buildClipKitSlackPayload", () => {
     );
   });
 
-  it("gracefully handles a clip with no outputPaths or caption", () => {
+  it("gracefully handles a clip with no outputPaths", () => {
     const clip = makeClip();
     clip.outputPaths = null;
-    clip.kit = { ...clip.kit, caption: null };
 
     const payload = buildClipKitSlackPayload(clip) as Record<string, any>;
 
     expect(blockTypes(payload)).not.toContain("image");
     expect(payload.text).toContain("🎬 New clip ready: Portland, OR");
-    const captionSection = payload.blocks.find(
-      (b: any) => b.type === "section",
-    );
-    expect(captionSection.text.text).toContain("No caption in kit");
+    expect(JSON.stringify(payload)).not.toContain("No caption in kit");
   });
 
   it("reminds volunteers to post natively and confirm via the publish endpoint", () => {
@@ -202,7 +195,7 @@ describe("buildClipKitPayload", () => {
     expect(payload.city).toBe("Portland");
     expect(payload.state).toBe("OR");
     expect(payload.reportedAt).toBe("2024-11-05T14:30:00Z");
-    expect(payload.caption).toBe("The line wraps around the block!");
+    expect("caption" in payload).toBe(false);
     expect(payload.photoLinks).toEqual([
       "https://base.polls.pizza/uploads/a1b2.mp4",
     ]);
@@ -210,11 +203,9 @@ describe("buildClipKitPayload", () => {
     expect(payload.uploadId).toBeNull();
     expect(payload.videoUrl).toBe(`${CDN}/clips/42/clip.mp4`);
     expect(payload.posterUrl).toBe(`${CDN}/clips/42/poster.jpg`);
-    expect(payload.captionsUrl).toBe(`${CDN}/clips/42/clip.srt`);
     expect(payload.kitJsonUrl).toBe(`${CDN}/clips/42/kit.json`);
     expect(payload.outputPaths).toEqual({
       video: "clips/42/clip.mp4",
-      captions: "clips/42/clip.srt",
       poster: "clips/42/poster.jpg",
       kit: "clips/42/kit.json",
     });
@@ -232,7 +223,6 @@ describe("buildClipKitPayload", () => {
     expect(payload.isCompilation).toBe(true);
     expect(payload.memberClipIds).toEqual([10, 11, 12]);
     expect(payload.photoLinks).toHaveLength(3);
-    expect(payload.captionsUrl).toBeNull();
     expect(payload.slack.text).toContain("3 clips");
   });
 });
@@ -267,7 +257,6 @@ describe("notifyClipKit", () => {
     expect(blockTypes(body.clip.slack)).toEqual([
       "header",
       "image",
-      "section",
       "section",
       "section",
       "context",

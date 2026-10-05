@@ -200,7 +200,6 @@ export async function runCompilation(): Promise<Clip | null> {
     compilation.status = "ready";
     compilation.kit = {
       isCompilation: true,
-      caption: "The latest supporter clips, all in one reel",
       memberClipIds: members.map((clip) => clip.id),
       photoLinks: members.map((clip) => uploadPermalink(clip.upload!)),
     };

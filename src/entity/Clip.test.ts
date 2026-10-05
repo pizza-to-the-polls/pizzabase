@@ -102,7 +102,6 @@ describe("Clip.asJSON", () => {
     clip.status = "ready";
     clip.outputPaths = null;
     clip.kit = {
-      caption: "Pizza for everyone!",
       photoLinks: ["https://base.polls.pizza/uploads/a.mp4"],
       isCompilation: false,
       city: "Philadelphia",
@@ -113,7 +112,6 @@ describe("Clip.asJSON", () => {
     const json = clip.asJSON();
 
     expect(json.kit).toEqual({
-      caption: "Pizza for everyone!",
       photoLinks: ["https://base.polls.pizza/uploads/a.mp4"],
       isCompilation: false,
     });

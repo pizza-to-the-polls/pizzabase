@@ -2,8 +2,8 @@
  * Slack kit distribution for the Clip Factory (DIST-001, manual-first).
  *
  * When a clip is approved, volunteers need the posting kit where they
- * already work: a Slack message with the poster preview, caption, and
- * links to every render asset. Volunteers post natively
+ * already work: a Slack message with the poster preview and links to
+ * every render asset. Volunteers post natively
  * from their phones, then confirm per platform via POST /clips/:id/publish
  * (closing the loop on the clip's publishLog).
  *
@@ -68,7 +68,6 @@ export function buildClipKitPayload(clip: Clip): Record<string, unknown> {
     city: typeof kit.city === "string" ? kit.city : null,
     state: typeof kit.state === "string" ? kit.state : null,
     reportedAt: iso(kit.reportedAt),
-    caption: typeof kit.caption === "string" ? kit.caption : null,
     memberClipIds: Array.isArray(kit.memberClipIds) ? kit.memberClipIds : null,
     photoLinks: photoLinks(kit),
     // Relations (upload is null for compilations).
@@ -80,7 +79,6 @@ export function buildClipKitPayload(clip: Clip): Record<string, unknown> {
     // Resolved public URLs for every render artifact.
     videoUrl: assetUrl(outputPaths.video),
     posterUrl: assetUrl(outputPaths.poster),
-    captionsUrl: assetUrl(outputPaths.captions),
     kitJsonUrl: assetUrl(outputPaths.kit),
     // Raw S3 keys as stored.
     outputPaths,
@@ -129,15 +127,9 @@ export function buildClipKitSlackPayload(clip: Clip): Record<string, unknown> {
     });
   }
 
-  const caption = typeof kit.caption === "string" ? kit.caption : "";
-  const captionText = caption || "_No caption in kit_";
-  blocks.push({ type: "section", text: { type: "mrkdwn", text: captionText } });
-
   const links: string[] = [];
-  const captionsUrl = assetUrl(outputPaths.captions);
   const kitUrl = assetUrl(outputPaths.kit);
   if (videoUrl) links.push(`<${videoUrl}|Video (MP4)>`);
-  if (captionsUrl) links.push(`<${captionsUrl}|Captions (SRT)>`);
   if (kitUrl) links.push(`<${kitUrl}|Kit JSON>`);
   if (links.length) {
     blocks.push({

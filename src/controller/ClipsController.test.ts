@@ -71,7 +71,6 @@ const makeClip = async (
   clip.upload = upload;
   clip.status = status;
   clip.kit = {
-    caption: "Test caption",
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -182,7 +181,7 @@ describe("#create", () => {
     const upload = await makeUpload();
     const request = http_mocks.createRequest({
       method: "POST",
-      body: { ...validBody(), uploadId: upload.id, captionText: "Long lines!" },
+      body: { ...validBody(), uploadId: upload.id },
       headers: authHeaders(),
     });
     const response = http_mocks.createResponse();
@@ -196,7 +195,7 @@ describe("#create", () => {
     expect(response.statusCode).toEqual(200);
     expect(body.status).toEqual("queued");
     expect(body.id).toBeTruthy();
-    expect(body.kit.caption).toEqual("Long lines!");
+    expect("caption" in body.kit).toBe(false);
     expect("hashtags" in body.kit).toBe(false);
     // No short link: the kit carries the source photo link instead.
     expect("shortUrlSlug" in body.kit).toBe(false);

@@ -119,7 +119,6 @@ const makeClip = async (
   clip.upload = upload;
   clip.status = status;
   clip.kit = {
-    caption: "The line is around the block!",
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -174,7 +173,7 @@ afterEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("happy path", () => {
-  it("renders a queued clip to ready with the 4-asset output bundle", async () => {
+  it("renders a queued clip to ready with the 3-asset output bundle", async () => {
     const upload = await makeUpload();
     const clip = await makeClip(upload);
     seedOutputs(clip.id);
@@ -187,7 +186,6 @@ describe("happy path", () => {
     expect(saved.failureReason).toBeNull();
     expect(saved.outputPaths).toEqual({
       video: `clips/${clip.id}/clip.mp4`,
-      captions: `clips/${clip.id}/clip.srt`,
       poster: `clips/${clip.id}/poster.jpg`,
       kit: `clips/${clip.id}/kit.json`,
     });
@@ -232,18 +230,13 @@ describe("happy path", () => {
     await handler({ clipId: clip.id });
 
     const puts = putCalls();
-    expect(puts).toHaveLength(4);
+    expect(puts).toHaveLength(3);
     expect(puts).toEqual(
       expect.arrayContaining([
         expect.objectContaining({
           Bucket: BUCKET,
           Key: `clips/${clip.id}/clip.mp4`,
           ContentType: "video/mp4",
-        }),
-        expect.objectContaining({
-          Bucket: BUCKET,
-          Key: `clips/${clip.id}/clip.srt`,
-          ContentType: "application/x-subrip",
         }),
         expect.objectContaining({
           Bucket: BUCKET,
@@ -263,16 +256,15 @@ describe("happy path", () => {
 
     const kitPut = puts.find((p) => p.Key.endsWith("kit.json"));
     const kit = JSON.parse((kitPut.Body as Buffer).toString());
-    expect(kit.caption).toBe("The line is around the block! 🍕🗳");
     expect(kit.city).toBe("Portland");
     expect(kit.state).toBe("OR");
     expect(kit.reportedAt).toBe("2024-11-05T14:30:00Z");
     expect("shortUrlSlug" in kit).toBe(false);
-    expect(kit.platforms).toEqual(["tiktok", "reels", "shorts"]);
+    expect("caption" in kit).toBe(false);
     expect("hashtags" in kit).toBe(false);
+    expect(kit.platforms).toEqual(["tiktok", "reels", "shorts"]);
     expect(kit.assets).toEqual({
       video: `clips/${clip.id}/clip.mp4`,
-      captions: `clips/${clip.id}/clip.srt`,
       poster: `clips/${clip.id}/poster.jpg`,
     });
   });
@@ -289,7 +281,10 @@ describe("happy path", () => {
     const renderCall = mockRunFfmpeg.mock.calls[1];
     const graph = renderCall[1][renderCall[1].indexOf("-filter_complex") + 1];
     expect(graph).toContain("fontfile=/opt/fonts/Test.ttf");
-    expect(graph).toContain("lowerthird-city.txt");
+    expect(graph).toContain("endcard-brand.txt");
+    // Clean renders: nothing is burned onto the photos.
+    expect(graph).not.toContain("lowerthird");
+    expect(graph).not.toContain("caption-line");
   });
 });
 
@@ -315,7 +310,7 @@ describe("end-card wiring", () => {
     const graph = renderArgs[renderArgs.indexOf("-filter_complex") + 1];
     expect(graph).toContain("endcard-brand.txt");
     expect(graph).not.toContain("[qr]");
-    expect(putCalls()).toHaveLength(4);
+    expect(putCalls()).toHaveLength(3);
   });
 });
 

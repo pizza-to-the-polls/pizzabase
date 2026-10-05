@@ -10,11 +10,8 @@
 
 import {
   buildRenderPlan,
-  buildSrt,
   buildKitJson,
   escapeFilterPath,
-  formatReportedTime,
-  wrapCaption,
   ClipRenderInput,
   MAX_SOURCE_DURATION_SECONDS,
   END_CARD_SECONDS,
@@ -26,7 +23,6 @@ function renderInput(
   overrides: Partial<ClipRenderInput> = {},
 ): ClipRenderInput {
   return {
-    captionText: "The line is around the block!",
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -128,85 +124,23 @@ describe("buildRenderPlan", () => {
     );
   });
 
-  it("burns the caption in as bottom-third drawtext with a stable 2-line wrap", () => {
-    const plan = buildRenderPlan(
-      renderInput({
-        captionText:
-          "The line wraps around the entire block and then some more words",
-      }),
+  it("renders clean video: no caption or lower-third overlays on the photos", () => {
+    const plan = buildRenderPlan(renderInput());
+
+    // Only end-card text files exist — nothing is burned onto the photos.
+    const overlayFiles = plan.textFiles.filter(
+      (f) => !f.path.includes("endcard-"),
     );
-
-    const captionFiles = plan.textFiles.filter((f) =>
-      f.path.endsWith("caption-line-1.txt"),
-    );
-    expect(captionFiles).toHaveLength(1);
-    const line2 = plan.textFiles.find((f) =>
-      f.path.endsWith("caption-line-2.txt"),
-    );
-    expect(line2).toBeDefined();
-    expect(line2!.content.length).toBeGreaterThan(0);
-
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("caption-line-1.txt");
-    expect(graph).toContain("caption-line-2.txt");
-    expect(graph).toContain("fontsize=52");
-    expect(graph).toContain("y=h-300");
-    expect(graph).toContain("y=h-224");
-    // Captions are centered on the 9:16 canvas.
-    expect(graph).toContain("x=(w-text_w)/2");
-  });
-
-  it("omits caption drawtext when there is no caption text", () => {
-    const plan = buildRenderPlan(renderInput({ captionText: null }));
-
-    expect(
-      plan.textFiles.find((f) => f.path.includes("caption-line")),
-    ).toBeUndefined();
+    expect(overlayFiles).toHaveLength(0);
     const graph =
       plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
     expect(graph).not.toContain("caption-line");
-    // No caption → empty sidecar SRT (still uploaded as the 4th asset).
-    expect(plan.sidecarSrt).toBe("");
-  });
-
-  it("draws the city/state lower third above the caption area", () => {
-    const plan = buildRenderPlan(renderInput());
-
-    const cityFile = plan.textFiles.find((f) =>
-      f.path.endsWith("lowerthird-city.txt"),
+    expect(graph).not.toContain("lowerthird");
+    // The base chain is pure geometry: scale, crop, setsar — no drawtext.
+    const base = graph.split(";")[0];
+    expect(base).toBe(
+      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[base]",
     );
-    expect(cityFile!.content).toBe("Portland, OR");
-
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("lowerthird-city.txt");
-    expect(graph).toContain("y=h-440");
-  });
-
-  it("adds the reported-time lower-third line when reportedAt is valid", () => {
-    const plan = buildRenderPlan(renderInput());
-
-    const reportedFile = plan.textFiles.find((f) =>
-      f.path.endsWith("lowerthird-reported.txt"),
-    );
-    expect(reportedFile!.content).toBe("reported 2:30 PM");
-
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("lowerthird-reported.txt");
-    expect(graph).toContain("y=h-372");
-  });
-
-  it("skips the reported-time line for missing or invalid reportedAt", () => {
-    for (const reportedAt of [null, "not-a-date"]) {
-      const plan = buildRenderPlan(
-        renderInput({ reportedAt: reportedAt as any }),
-      );
-      expect(
-        plan.textFiles.find((f) => f.path.endsWith("lowerthird-reported.txt")),
-      ).toBeUndefined();
-    }
   });
 
   it("builds the brand-only end-card (no QR, no URL line)", () => {
@@ -252,145 +186,41 @@ describe("buildRenderPlan", () => {
 
     const graph =
       plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain(
-      "textfile=/tmp/we ird\\:dir\\,x/lowerthird-city.txt",
-    );
+    expect(graph).toContain("textfile=/tmp/we ird\\:dir\\,x/endcard-brand.txt");
   });
 
   it("escapes filter paths via escapeFilterPath", () => {
-    expect(escapeFilterPath("/tmp/a/b.srt")).toBe("/tmp/a/b.srt");
-    expect(escapeFilterPath("C:\\x\\y.srt")).toBe("C\\:\\\\x\\\\y.srt");
+    expect(escapeFilterPath("/tmp/a/b.mp4")).toBe("/tmp/a/b.mp4");
+    expect(escapeFilterPath("C:\\x\\y.mp4")).toBe("C\\:\\\\x\\\\y.mp4");
     expect(escapeFilterPath("a'b,c")).toBe("a\\'b\\,c");
   });
 });
 
-describe("buildSrt", () => {
-  it("produces a single entry spanning the main body", () => {
-    expect(buildSrt("Line around the block", 43)).toBe(
-      "1\n00:00:00,000 --> 00:00:43,000\nLine around the block\n",
-    );
-  });
-
-  it("wraps long captions to at most two SRT lines", () => {
-    const srt = buildSrt(
-      "The line wraps around the entire block and then some more words follow here",
-      88,
-    );
-    // SRT shape: index, timestamp, then the wrapped caption body lines.
-    const lines = srt
-      .split("\n")
-      .slice(2)
-      .filter((l) => l.length > 0);
-    expect(lines.length).toBe(2);
-    expect(lines[0].length).toBeLessThanOrEqual(36);
-    expect(lines[1].length).toBeLessThanOrEqual(36);
-  });
-
-  it("returns an empty sidecar for missing or blank captions", () => {
-    expect(buildSrt(null, 43)).toBe("");
-    expect(buildSrt("   ", 43)).toBe("");
-  });
-});
-
-describe("wrapCaption", () => {
-  it("keeps short captions on one line", () => {
-    expect(wrapCaption("Short line")).toBe("Short line");
-  });
-
-  it("wraps at word boundaries and never exceeds two lines", () => {
-    const wrapped = wrapCaption(
-      "The line wraps around the entire block and then keeps going and going",
-    );
-    const lines = wrapped.split("\n");
-    expect(lines.length).toBe(2);
-    lines.forEach((line) => expect(line.length).toBeLessThanOrEqual(36));
-  });
-
-  it("elides overflow with an ellipsis on the final line", () => {
-    const wrapped = wrapCaption(
-      "a".repeat(40) +
-        " " +
-        "b".repeat(40) +
-        " " +
-        "c".repeat(40) +
-        " trailing words",
-    );
-    const lines = wrapped.split("\n");
-    expect(lines.length).toBe(2);
-    expect(lines[1].endsWith("…")).toBe(true);
-  });
-
-  it("returns an empty string for blank input", () => {
-    expect(wrapCaption("   ")).toBe("");
-  });
-});
-
-describe("formatReportedTime", () => {
-  it("formats a UTC 12-hour clock time from an ISO timestamp", () => {
-    expect(formatReportedTime("2024-11-05T14:30:00Z")).toBe("2:30 PM");
-    expect(formatReportedTime("2024-11-05T07:05:00Z")).toBe("7:05 AM");
-  });
-
-  it("returns null for missing or invalid input", () => {
-    expect(formatReportedTime(null)).toBeNull();
-    expect(formatReportedTime(undefined)).toBeNull();
-    expect(formatReportedTime("")).toBeNull();
-    expect(formatReportedTime("bogus")).toBeNull();
-  });
-});
-
 describe("buildKitJson", () => {
-  it("serializes the publish kit with the PTP caption suffix and assets", () => {
-    const kitJson = buildKitJson({
-      captionText: "Long lines at the polls",
-      city: "Portland",
-      state: "OR",
-      reportedAt: "2024-11-05T14:30:00Z",
-      assets: {
-        video: "clips/42/clip.mp4",
-        captions: "clips/42/clip.srt",
-        poster: "clips/42/poster.jpg",
-      },
-    });
-    const kit = JSON.parse(kitJson);
+  it("serializes the render kit with report context and assets", () => {
+    const kit = JSON.parse(
+      buildKitJson({
+        city: "Portland",
+        state: "OR",
+        reportedAt: "2024-11-05T14:30:00Z",
+        assets: {
+          video: "clips/42/clip.mp4",
+          poster: "clips/42/poster.jpg",
+        },
+      }),
+    );
 
-    expect(kit.caption).toBe("Long lines at the polls 🍕🗳");
-    expect("hashtags" in kit).toBe(false);
     expect(kit.city).toBe("Portland");
     expect(kit.state).toBe("OR");
     expect(kit.reportedAt).toBe("2024-11-05T14:30:00Z");
     expect(kit.platforms).toEqual(["tiktok", "reels", "shorts"]);
     expect(kit.assets).toEqual({
       video: "clips/42/clip.mp4",
-      captions: "clips/42/clip.srt",
       poster: "clips/42/poster.jpg",
     });
-  });
-
-  it("serializes a null caption without fabricating fields", () => {
-    const kit = JSON.parse(
-      buildKitJson({
-        captionText: null,
-        city: "St. Louis",
-        state: "MO",
-        reportedAt: "2024-11-05T14:30:00Z",
-        assets: { video: "c/v", captions: "c/s", poster: "c/p" },
-      }),
-    );
-
-    expect(kit.caption).toBeNull();
-  });
-
-  it("omits short-link fields entirely", () => {
-    const kit = JSON.parse(
-      buildKitJson({
-        captionText: "hi",
-        city: "Portland",
-        state: "OR",
-        reportedAt: "2024-11-05T14:30:00Z",
-        assets: { video: "c/v", captions: "c/s", poster: "c/p" },
-      }),
-    );
+    // Captions, hashtags, and short links are all gone from the kit.
+    expect("caption" in kit).toBe(false);
+    expect("hashtags" in kit).toBe(false);
     expect("shortUrlSlug" in kit).toBe(false);
   });
 });
