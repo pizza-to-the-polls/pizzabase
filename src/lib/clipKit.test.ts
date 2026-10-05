@@ -1,5 +1,9 @@
 import * as notifyBugsnagModule from "./notifyBugsnag";
-import { buildClipKitSlackPayload, notifyClipKit } from "./clipKit";
+import {
+  buildClipKitPayload,
+  buildClipKitSlackPayload,
+  notifyClipKit,
+} from "./clipKit";
 import { Clip } from "../entity/Clip";
 
 const WEBHOOK = "https://hooks.zapier.com/hooks/catch/12345/testhook";
@@ -17,7 +21,7 @@ const makeClip = (): Clip => {
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
-    shortUrlSlug: "ab3xz",
+    photoLinks: ["https://base.polls.pizza/uploads/a1b2.mp4"],
   };
   clip.outputPaths = {
     video: "clips/42/clip.mp4",
@@ -43,12 +47,31 @@ afterEach(() => {
   delete process.env.ZAP_NEW_CLIP;
 });
 
+const makeCompilation = (): Clip => {
+  const clip = makeClip();
+  clip.kit = {
+    ...clip.kit,
+    isCompilation: true,
+    memberClipIds: [10, 11, 12],
+    photoLinks: [
+      "https://base.polls.pizza/uploads/a1.mp4",
+      "https://base.polls.pizza/uploads/b2.mp4",
+      "https://base.polls.pizza/uploads/c3.mp4",
+    ],
+  };
+  clip.outputPaths = {
+    video: "clips/43/clip.mp4",
+    poster: "clips/43/poster.jpg",
+  };
+  return clip;
+};
+
 describe("buildClipKitSlackPayload", () => {
-  it("includes the fallback text with city, state, and short link", () => {
+  it("includes the fallback text with city, state, and video URL", () => {
     const payload = buildClipKitSlackPayload(makeClip()) as Record<string, any>;
 
     expect(payload.text).toEqual(
-      "🎬 New clip ready: Portland, OR — https://polls.pizza/l/ab3xz",
+      "🎬 New clip ready: Portland, OR — https://media.polls.pizza/clips/42/clip.mp4",
     );
   });
 
@@ -97,9 +120,38 @@ describe("buildClipKitSlackPayload", () => {
     expect(linksSection.text.text).toContain(
       `<${CDN}/clips/42/kit.json|Kit JSON>`,
     );
-    expect(linksSection.text.text).toContain(
-      "<https://polls.pizza/l/ab3xz|Donation link>",
+  });
+
+  it("lists a link to every source photo used", () => {
+    const payload = buildClipKitSlackPayload(makeCompilation()) as Record<
+      string,
+      any
+    >;
+
+    const photosSection = payload.blocks.find((b: any) =>
+      b.text?.text?.includes("Photos used:"),
     );
+    expect(photosSection).toBeTruthy();
+    expect(photosSection.text.text).toContain(
+      "<https://base.polls.pizza/uploads/a1.mp4|Photo 1>",
+    );
+    expect(photosSection.text.text).toContain(
+      "<https://base.polls.pizza/uploads/b2.mp4|Photo 2>",
+    );
+    expect(photosSection.text.text).toContain(
+      "<https://base.polls.pizza/uploads/c3.mp4|Photo 3>",
+    );
+  });
+
+  it("headlines compilations with the member clip count", () => {
+    const payload = buildClipKitSlackPayload(makeCompilation()) as Record<
+      string,
+      any
+    >;
+
+    const header = payload.blocks.find((b: any) => b.type === "header");
+    expect(header.text.text).toEqual("🎬 New compilation — 3 clips");
+    expect(payload.text).toContain("3 clips");
   });
 
   it("falls back to path-style S3 URLs when no CDN is configured", () => {
@@ -121,7 +173,7 @@ describe("buildClipKitSlackPayload", () => {
   it("gracefully handles a clip with no outputPaths or caption", () => {
     const clip = makeClip();
     clip.outputPaths = null;
-    clip.kit = { ...clip.kit, caption: null, shortUrlSlug: null };
+    clip.kit = { ...clip.kit, caption: null };
 
     const payload = buildClipKitSlackPayload(clip) as Record<string, any>;
 
@@ -139,6 +191,52 @@ describe("buildClipKitSlackPayload", () => {
     const context = payload.blocks.find((b: any) => b.type === "context");
     expect(context.elements[0].text).toContain("TikTok");
     expect(context.elements[0].text).toContain("POST /clips/42/publish");
+  });
+});
+
+describe("buildClipKitPayload", () => {
+  it("flattens every kit field and resolved asset URL for the Zap", () => {
+    const payload = buildClipKitPayload(makeClip()) as Record<string, any>;
+
+    expect(payload.clipId).toBe(42);
+    expect(payload.status).toBe("approved");
+    expect(payload.isCompilation).toBe(false);
+    expect(payload.city).toBe("Portland");
+    expect(payload.state).toBe("OR");
+    expect(payload.reportedAt).toBe("2024-11-05T14:30:00Z");
+    expect(payload.caption).toBe("The line wraps around the block!");
+    expect(payload.hashtags).toEqual(["#votingrights", "#Portland"]);
+    expect(payload.photoLinks).toEqual([
+      "https://base.polls.pizza/uploads/a1b2.mp4",
+    ]);
+    expect(payload.memberClipIds).toBeNull();
+    expect(payload.uploadId).toBeNull();
+    expect(payload.videoUrl).toBe(`${CDN}/clips/42/clip.mp4`);
+    expect(payload.posterUrl).toBe(`${CDN}/clips/42/poster.jpg`);
+    expect(payload.captionsUrl).toBe(`${CDN}/clips/42/clip.srt`);
+    expect(payload.kitJsonUrl).toBe(`${CDN}/clips/42/kit.json`);
+    expect(payload.outputPaths).toEqual({
+      video: "clips/42/clip.mp4",
+      captions: "clips/42/clip.srt",
+      poster: "clips/42/poster.jpg",
+      kit: "clips/42/kit.json",
+    });
+    // The ready-to-post Slack message rides along under `slack`.
+    expect(payload.slack.text).toContain("New clip ready");
+    expect(blockTypes(payload.slack)).toContain("header");
+  });
+
+  it("carries compilation members and their photo links", () => {
+    const payload = buildClipKitPayload(makeCompilation()) as Record<
+      string,
+      any
+    >;
+
+    expect(payload.isCompilation).toBe(true);
+    expect(payload.memberClipIds).toEqual([10, 11, 12]);
+    expect(payload.photoLinks).toHaveLength(3);
+    expect(payload.captionsUrl).toBeNull();
+    expect(payload.slack.text).toContain("3 clips");
   });
 });
 
@@ -161,10 +259,18 @@ describe("notifyClipKit", () => {
     expect(init.method).toEqual("POST");
     const body = JSON.parse(init.body);
     expect(body.hook).toEqual("ZAP_NEW_CLIP");
-    expect(body.text).toContain("🎬 New clip ready: Portland, OR");
-    expect(blockTypes(body)).toEqual([
+    // Rich clip data — the Zap attaches whatever it needs.
+    expect(body.clip.clipId).toBe(42);
+    expect(body.clip.videoUrl).toBe(`${CDN}/clips/42/clip.mp4`);
+    expect(body.clip.photoLinks).toEqual([
+      "https://base.polls.pizza/uploads/a1b2.mp4",
+    ]);
+    // Ready-to-post Slack message nested under clip.slack.
+    expect(body.clip.slack.text).toContain("🎬 New clip ready: Portland, OR");
+    expect(blockTypes(body.clip.slack)).toEqual([
       "header",
       "image",
+      "section",
       "section",
       "section",
       "context",

@@ -6,8 +6,7 @@ import { checkAuthorization, findOr404 } from "./helper";
 import { deriveHashtags } from "../lib/clip-hashtags";
 import { invokeRenderClip } from "../lib/clip-render";
 import { notifyClipKit } from "../lib/clipKit";
-import { notifyBugsnag } from "../lib/notifyBugsnag";
-import { Link } from "../entity/Link";
+import { uploadPermalink } from "../lib/upload-permalink";
 
 const CLIP_STATUSES = [
   "queued",
@@ -29,14 +28,6 @@ const fireRender = (clip: Clip): void => {
   if (clip.status !== "queued") return;
   void invokeRenderClip(clip.id);
 };
-
-/**
- * Donation landing page every clip's short link points at. Overridable via
- * env (e.g. campaign-specific landing pages); falls back to the production
- * donate page.
- */
-const donateLandingUrl = (): string =>
-  process.env.DONATE_LANDING_URL || "https://www.polls.pizza/donate";
 
 export class ClipsController {
   async create(request: Request, response: Response, _next: NextFunction) {
@@ -88,27 +79,11 @@ export class ClipsController {
       city,
       state,
       reportedAt,
-      shortUrlSlug: null,
+      // Link to the source photo rides in the kit so the Zapier message
+      // can show everything the clip was built from.
+      photoLinks: [uploadPermalink(upload)],
     };
     await clip.save();
-
-    // Short-link wiring (CLIP-003): every clip gets one trackable Link
-    // pointing at the donation landing page, and the slug is stamped into
-    // the render kit so the end-card carries a scannable QR + URL.
-    // Fail-open (same philosophy as click tracking): a Link failure must
-    // never block clip creation — the clip just renders with a null slug
-    // (text-only end-card) instead.
-    try {
-      const link = await Link.createWithSlug({
-        targetUrl: donateLandingUrl(),
-        campaignTag: `clip-${clip.id}`,
-        clipId: clip.id,
-      });
-      clip.kit = { ...clip.kit, shortUrlSlug: link.slug };
-      await clip.save();
-    } catch (err) {
-      notifyBugsnag(err instanceof Error ? err : new Error(String(err)));
-    }
 
     // Fire-and-forget: clip stays queued if invocation fails.
     fireRender(clip);
@@ -165,7 +140,7 @@ export class ClipsController {
     return {
       ...clip.asJSON(),
       kit: clip.kit,
-      uploadId: clip.upload.id,
+      uploadId: clip.upload ? clip.upload.id : null,
       failureReason: clip.failureReason,
       publishLog: clip.publishLog,
       approvedBy: clip.approvedBy,

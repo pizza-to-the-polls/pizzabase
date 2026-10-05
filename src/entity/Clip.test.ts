@@ -84,6 +84,7 @@ describe("Clip.asJSON", () => {
         poster: "s3://bucket/poster.jpg",
       },
       kit: null,
+      uploadId: null,
     });
 
     // Verify no sensitive fields leak
@@ -103,7 +104,8 @@ describe("Clip.asJSON", () => {
     clip.kit = {
       caption: "Pizza for everyone!",
       hashtags: ["#pizza", "#democracy"],
-      shortUrlSlug: "philly-123",
+      photoLinks: ["https://base.polls.pizza/uploads/a.mp4"],
+      isCompilation: false,
       city: "Philadelphia",
       state: "PA",
       reportedAt: "2025-01-15",
@@ -114,7 +116,8 @@ describe("Clip.asJSON", () => {
     expect(json.kit).toEqual({
       caption: "Pizza for everyone!",
       hashtags: ["#pizza", "#democracy"],
-      shortUrlSlug: "philly-123",
+      photoLinks: ["https://base.polls.pizza/uploads/a.mp4"],
+      isCompilation: false,
     });
     // Extra kit fields do NOT leak
     expect((json.kit as Record<string, unknown>).city).toBeUndefined();
@@ -153,7 +156,7 @@ describe("Clip entity round-trip", () => {
     clip.kit = {
       caption: "Hello",
       hashtags: ["#test"],
-      shortUrlSlug: "slug-1",
+      photoLinks: ["https://base.polls.pizza/uploads/hello.mp4"],
     };
     clip.publishLog = [
       { platform: "tiktok", postedAt: new Date().toISOString() },
@@ -176,7 +179,7 @@ describe("Clip entity round-trip", () => {
     expect(loaded!.kit).toEqual({
       caption: "Hello",
       hashtags: ["#test"],
-      shortUrlSlug: "slug-1",
+      photoLinks: ["https://base.polls.pizza/uploads/hello.mp4"],
     });
     expect(loaded!.publishLog).toEqual([
       { platform: "tiktok", postedAt: expect.any(String) },
@@ -184,12 +187,21 @@ describe("Clip entity round-trip", () => {
     expect(loaded!.upload.id).toBe(upload.id);
   });
 
-  it("enforces NOT NULL on upload_id", async () => {
+  it("allows a null upload for compilations", async () => {
     const clipRepo = AppDataSource.getRepository(Clip);
     const clip = new Clip();
     clip.status = "queued";
+    clip.kit = { isCompilation: true, memberClipIds: [1, 2] };
 
-    await expect(clipRepo.save(clip)).rejects.toThrow();
+    const saved = await clipRepo.save(clip);
+    expect(saved.id).toBeTruthy();
+    expect(saved.compiledAt).toBeNull();
+
+    const reloaded = await clipRepo.findOne({
+      where: { id: saved.id },
+      relations: ["upload"],
+    });
+    expect(reloaded!.upload).toBeNull();
   });
 });
 

@@ -27,6 +27,7 @@ provider:
     ZAP_NEW_ORDER: ${env:ZAP_NEW_ORDER}
     ZAP_NEW_TRUCK: ${env:ZAP_NEW_TRUCK}
     ZAP_NEW_UPLOAD: ${env:ZAP_NEW_UPLOAD}
+    ZAP_NEW_CLIP: ${env:ZAP_NEW_CLIP}
     ZAP_SKIP_REPORT: ${env:ZAP_SKIP_REPORT}
     ZAP_ORDER_REPORT: ${env:ZAP_ORDER_REPORT}
     ZAP_CANCEL_ORDER_REPORT: ${env:ZAP_CANCEL_ORDER_REPORT}
@@ -223,12 +224,29 @@ functions:
       RENDER_DAILY_BUDGET: ${env:RENDER_DAILY_BUDGET, '50'}
       FFMPEG_PATH: /opt/bin/ffmpeg
       RENDER_FONT_FILE: /opt/fonts/DejaVuSans-Bold.ttf
-      # Clip Factory — end-card QR short URL base (short domain pending
-      # registration; keep in sync with the /l/:slug redirect route).
-      SHORT_URL_BASE: ${env:SHORT_URL_BASE, 'https://polls.pizza/l'}
       AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
       AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
       DB_NAME: ${env:DB_NAME}
+
+  compileClips:
+    # Clip Factory — scheduled compilation. Every 3 hours, joins all
+    # rendered-but-uncompiled clips into one reel (no-op when there's no
+    # new content) and posts it via the ZAP_NEW_CLIP Zapier hook. Shares
+    # the renderClip ffmpeg layer; see docs/clip-render-infra.md.
+    handler: build/lambdas/compileClips.handler
+    timeout: 900
+    memorySize: 3009
+    layers:
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1
+    environment:
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      FFMPEG_PATH: /opt/bin/ffmpeg
+      ZAP_NEW_CLIP: ${env:ZAP_NEW_CLIP, ''}
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+    events:
+      - schedule: rate(3 hours)
 
 custom:
   customDomain:

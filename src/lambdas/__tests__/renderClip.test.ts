@@ -15,7 +15,6 @@ import { Clip, ClipStatus } from "../../entity/Clip";
 import { Location } from "../../entity/Location";
 import { Upload } from "../../entity/Upload";
 import { runFfmpeg } from "../../lib/ffmpeg-exec";
-import * as QRCode from "qrcode";
 
 const mockS3Send = jest.fn();
 
@@ -39,15 +38,7 @@ jest.mock("../../lib/ffmpeg-exec", () => ({
   runFfmpeg: jest.fn(),
 }));
 
-// Pure-JS QR generator is mocked at the module boundary — no PNG is actually
-// written; the handler contract under test is "QR attempted with the right
-// payload, path handed to the template".
-jest.mock("qrcode", () => ({
-  toFile: jest.fn().mockResolvedValue(undefined),
-}));
-
 const mockRunFfmpeg = runFfmpeg as jest.Mock;
-const mockQrToFile = QRCode.toFile as jest.Mock;
 
 const BUCKET = "reports.polls.pizza";
 
@@ -133,7 +124,6 @@ const makeClip = async (
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
-    shortUrlSlug: null,
   };
   await clip.save();
   return clip;
@@ -171,16 +161,13 @@ const reloadClip = async (id: number): Promise<Clip> =>
 
 beforeEach(() => {
   mockRunFfmpeg.mockResolvedValue(undefined);
-  mockQrToFile.mockResolvedValue(undefined);
   delete process.env.RENDER_DAILY_BUDGET;
   delete process.env.RENDER_FONT_FILE;
-  delete process.env.SHORT_URL_BASE;
 });
 
 afterEach(() => {
   delete process.env.RENDER_DAILY_BUDGET;
   delete process.env.RENDER_FONT_FILE;
-  delete process.env.SHORT_URL_BASE;
 });
 
 // ---------------------------------------------------------------------------
@@ -281,7 +268,7 @@ describe("happy path", () => {
     expect(kit.city).toBe("Portland");
     expect(kit.state).toBe("OR");
     expect(kit.reportedAt).toBe("2024-11-05T14:30:00Z");
-    expect(kit.shortUrlSlug).toBeNull();
+    expect("shortUrlSlug" in kit).toBe(false);
     expect(kit.platforms).toEqual(["tiktok", "reels", "shorts"]);
     expect(kit.hashtags).toEqual([
       "#votingrights",
@@ -313,92 +300,28 @@ describe("happy path", () => {
 });
 
 // ---------------------------------------------------------------------------
-// End-card QR / short-link wiring
+// End-card QR / short-link wiring — removed (product direction: no QR, no
+// short links). The end-card is brand-only; see clipTemplate.test.ts.
 // ---------------------------------------------------------------------------
 
-describe("end-card QR wiring", () => {
-  it("generates the QR from the short URL and passes the path to the template", async () => {
-    process.env.SHORT_URL_BASE = "https://link.polls.pizza/l";
+describe("end-card wiring", () => {
+  it("renders a brand-only end-card with exactly two ffmpeg inputs", async () => {
     const upload = await makeUpload();
     const clip = await makeClip(upload);
-    clip.kit = { ...clip.kit, shortUrlSlug: "abc12" };
-    await clip.save();
     seedOutputs(clip.id);
     s3ServesSource(mp4Buffer(30));
 
     await handler({ clipId: clip.id });
 
-    expect(mockQrToFile).toHaveBeenCalledTimes(1);
-    const [qrPath, qrUrl] = mockQrToFile.mock.calls[0];
-    expect(qrPath).toBe(`${renderWorkDir(clip.id)}/endcard-qr.png`);
-    expect(qrUrl).toBe("https://link.polls.pizza/l/abc12");
-    expect(mockQrToFile).toHaveBeenCalledWith(
-      `${renderWorkDir(clip.id)}/endcard-qr.png`,
-      "https://link.polls.pizza/l/abc12",
-      expect.objectContaining({ type: "png", width: 200 }),
-    );
-    // The generated path reaches the ffmpeg invocation as a third input.
-    const renderArgs = mockRunFfmpeg.mock.calls[1][1];
-    expect(renderArgs).toContain(`${renderWorkDir(clip.id)}/endcard-qr.png`);
-    const graph = renderArgs[renderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("[card][qr]overlay=(W-w)/2:980[cardwqr]");
-    // The kit.json asset bundle is unchanged by the QR (still 4 uploads).
-    expect(putCalls()).toHaveLength(4);
-  });
-
-  it("degrades to a text-only end-card when QR generation fails", async () => {
-    mockQrToFile.mockRejectedValue(new Error("canvas exploded"));
-    const upload = await makeUpload();
-    const clip = await makeClip(upload);
-    clip.kit = { ...clip.kit, shortUrlSlug: "abc12" };
-    await clip.save();
-    seedOutputs(clip.id);
-    s3ServesSource(mp4Buffer(30));
-
-    await handler({ clipId: clip.id });
-
-    // Fail-open: the render completes ready, with a text-only end-card.
     const saved = await reloadClip(clip.id);
     expect(saved.status).toBe("ready");
     const renderArgs = mockRunFfmpeg.mock.calls[1][1];
-    expect(renderArgs).not.toContain(
-      `${renderWorkDir(clip.id)}/endcard-qr.png`,
-    );
+    expect(renderArgs).not.toContain("endcard-qr.png");
+    expect(renderArgs.filter((a: string) => a === "-i")).toHaveLength(2);
     const graph = renderArgs[renderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("endcard-url.txt");
-    expect(graph).toContain("y=990");
+    expect(graph).toContain("endcard-brand.txt");
     expect(graph).not.toContain("[qr]");
     expect(putCalls()).toHaveLength(4);
-  });
-
-  it("does not attempt QR generation when the kit has no slug", async () => {
-    const upload = await makeUpload();
-    const clip = await makeClip(upload); // shortUrlSlug: null
-    seedOutputs(clip.id);
-    s3ServesSource(mp4Buffer(30));
-
-    await handler({ clipId: clip.id });
-
-    expect(mockQrToFile).not.toHaveBeenCalled();
-    const renderArgs = mockRunFfmpeg.mock.calls[1][1];
-    expect(renderArgs).not.toContain("endcard-qr.png");
-  });
-
-  it("falls back to the default short URL base when SHORT_URL_BASE is unset", async () => {
-    const upload = await makeUpload();
-    const clip = await makeClip(upload);
-    clip.kit = { ...clip.kit, shortUrlSlug: "zz9zz" };
-    await clip.save();
-    seedOutputs(clip.id);
-    s3ServesSource(mp4Buffer(30));
-
-    await handler({ clipId: clip.id });
-
-    expect(mockQrToFile).toHaveBeenCalledWith(
-      `${renderWorkDir(clip.id)}/endcard-qr.png`,
-      "https://polls.pizza/l/zz9zz",
-      expect.objectContaining({ type: "png", width: 200 }),
-    );
   });
 });
 

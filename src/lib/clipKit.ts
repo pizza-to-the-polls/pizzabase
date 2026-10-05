@@ -37,15 +37,58 @@ const assetUrl = (key: string | undefined): string | null => {
   return cdnUrlForKey(key) || directS3Url(key);
 };
 
-/** Donation short link for the clip (matches the /l/:slug route). */
-const shortLinkUrl = (clip: Clip): string | null => {
-  const slug = (clip.kit as Record<string, unknown> | null)?.shortUrlSlug;
-  if (typeof slug !== "string" || !slug) return null;
-  const base = process.env.SHORT_URL_BASE || "https://polls.pizza/l";
-  return `${base}/${slug}`;
-};
-
 type SlackBlock = Record<string, unknown>;
+
+/** Links to the source photos used in this clip/compilation (kit.photoLinks). */
+const photoLinks = (kit: Record<string, unknown>): string[] =>
+  Array.isArray(kit.photoLinks) &&
+  kit.photoLinks.every((v) => typeof v === "string")
+    ? (kit.photoLinks as string[])
+    : [];
+
+/**
+ * Build the full data payload for the ZAP_NEW_CLIP hook. Sends everything
+ * known about the clip — flattened kit fields, resolved asset URLs, source
+ * photo links, member clip ids, and the ready-to-post Slack message under
+ * `slack` — so the Zap can attach whatever it needs without a redeploy.
+ * More data beats less: the Zap sorts out what gets attached.
+ */
+export function buildClipKitPayload(clip: Clip): Record<string, unknown> {
+  const kit = (clip.kit || {}) as Record<string, unknown>;
+  const outputPaths = (clip.outputPaths || {}) as Record<string, string>;
+
+  const iso = (v: unknown): string | null =>
+    v instanceof Date ? v.toISOString() : typeof v === "string" ? v : null;
+
+  return {
+    clipId: clip.id,
+    status: clip.status,
+    isCompilation: kit.isCompilation === true,
+    // Kit fields, passed through raw (nulls, not fabrications).
+    city: typeof kit.city === "string" ? kit.city : null,
+    state: typeof kit.state === "string" ? kit.state : null,
+    reportedAt: iso(kit.reportedAt),
+    caption: typeof kit.caption === "string" ? kit.caption : null,
+    hashtags: Array.isArray(kit.hashtags) ? kit.hashtags : null,
+    memberClipIds: Array.isArray(kit.memberClipIds) ? kit.memberClipIds : null,
+    photoLinks: photoLinks(kit),
+    // Relations (upload is null for compilations).
+    uploadId: clip.upload ? clip.upload.id : null,
+    approvedBy: clip.approvedBy,
+    approvedAt: iso(clip.approvedAt),
+    createdAt: iso(clip.createdAt),
+    updatedAt: iso(clip.updatedAt),
+    // Resolved public URLs for every render artifact.
+    videoUrl: assetUrl(outputPaths.video),
+    posterUrl: assetUrl(outputPaths.poster),
+    captionsUrl: assetUrl(outputPaths.captions),
+    kitJsonUrl: assetUrl(outputPaths.kit),
+    // Raw S3 keys as stored.
+    outputPaths,
+    // Ready-to-post Slack Block Kit message — attach as-is or rebuild.
+    slack: buildClipKitSlackPayload(clip),
+  };
+}
 
 /**
  * Build the Slack Block Kit payload announcing an approved clip.
@@ -59,12 +102,20 @@ export function buildClipKitSlackPayload(clip: Clip): Record<string, unknown> {
   const city = typeof kit.city === "string" ? kit.city : "Unknown city";
   const state = typeof kit.state === "string" ? kit.state : "";
   const where = state ? `${city}, ${state}` : city;
-  const title = `🎬 New clip ready — ${where}`;
 
-  const shortUrl = shortLinkUrl(clip);
+  // Compilations get a count-based headline; single clips stay city-based.
+  const memberClipIds = Array.isArray(kit.memberClipIds)
+    ? (kit.memberClipIds as unknown[])
+    : [];
+  const isCompilation = kit.isCompilation === true;
+  const title = isCompilation
+    ? `🎬 New compilation — ${memberClipIds.length} clips`
+    : `🎬 New clip ready — ${where}`;
+
   const videoUrl = assetUrl(outputPaths.video);
-  const linkOrClip = shortUrl || videoUrl || `clip ${clip.id}`;
-  const fallbackText = `🎬 New clip ready: ${where} — ${linkOrClip}`;
+  const fallbackText = isCompilation
+    ? `🎬 New compilation: ${memberClipIds.length} clips — ${videoUrl || `clip ${clip.id}`}`
+    : `🎬 New clip ready: ${where} — ${videoUrl || `clip ${clip.id}`}`;
 
   const blocks: SlackBlock[] = [
     { type: "header", text: { type: "plain_text", text: title } },
@@ -92,11 +143,23 @@ export function buildClipKitSlackPayload(clip: Clip): Record<string, unknown> {
   if (videoUrl) links.push(`<${videoUrl}|Video (MP4)>`);
   if (captionsUrl) links.push(`<${captionsUrl}|Captions (SRT)>`);
   if (kitUrl) links.push(`<${kitUrl}|Kit JSON>`);
-  if (shortUrl) links.push(`<${shortUrl}|Donation link>`);
   if (links.length) {
     blocks.push({
       type: "section",
       text: { type: "mrkdwn", text: links.join("  ·  ") },
+    });
+  }
+
+  // Links to every source photo used — one line each, before the CTA.
+  const photos = photoLinks(kit);
+  if (photos.length) {
+    const lines = photos.map((url, index) => `• <${url}|Photo ${index + 1}>`);
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Photos used:*\n${lines.join("\n")}`,
+      },
     });
   }
 
@@ -129,13 +192,13 @@ export async function notifyClipKit(clip: Clip): Promise<void> {
       return;
     }
 
-    const payload = buildClipKitSlackPayload(clip);
+    const payload = buildClipKitPayload(clip);
     const response = await fetch(hook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       // Same { hook, ...payload } envelope as lib/zapier so the Zap can
-      // route by hook type; the Slack Block Kit body rides along as-is.
-      body: JSON.stringify({ hook: "ZAP_NEW_CLIP", ...payload }),
+      // route by hook type — with the full clip dataset flattened inside.
+      body: JSON.stringify({ hook: "ZAP_NEW_CLIP", clip: payload }),
     });
     if (!response.ok) {
       throw new Error(

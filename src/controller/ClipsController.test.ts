@@ -5,6 +5,10 @@ import { invokeRenderClip } from "../lib/clip-render";
 import { notifyClipKit } from "../lib/clipKit";
 import { Clip, ClipStatus } from "../entity/Clip";
 import { Link } from "../entity/Link";
+
+// Link/short-link wiring was removed (product direction: no short links,
+// no QR). The Link entity stays unplugged; imports remain only to assert
+// that clip creation no longer touches it.
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
 
@@ -72,7 +76,7 @@ const makeClip = async (
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
-    shortUrlSlug: null,
+    photoLinks: [],
   };
   await clip.save();
 
@@ -200,83 +204,25 @@ describe("#create", () => {
       "#OR",
       "#Portland",
     ]);
-    // CLIP-003: every clip gets a trackable short link at creation.
-    expect(body.kit.shortUrlSlug).toMatch(/^[a-zA-Z0-9]{5}$/);
+    // No short link: the kit carries the source photo link instead.
+    expect("shortUrlSlug" in body.kit).toBe(false);
+    expect(body.kit.photoLinks).toEqual([
+      `https://base.polls.pizza/uploads/${upload.filePath.split("/").pop()}`,
+    ]);
 
     const saved = await Clip.findOne({ where: { id: body.id } });
     expect(saved.status).toEqual("queued");
     expect(saved.kit.city).toEqual("Portland");
     expect(saved.kit.state).toEqual("OR");
     expect(saved.kit.reportedAt).toEqual("2024-11-05T14:30:00Z");
-    expect(saved.kit.shortUrlSlug).toEqual(body.kit.shortUrlSlug);
+    expect(saved.kit.photoLinks).toEqual(body.kit.photoLinks);
 
-    // The Link row is created with the clip's id as its campaign tag.
+    // No Link row is created anymore.
     const link = await Link.findOne({ where: { clipId: saved.id } });
-    expect(link).toBeTruthy();
-    expect(link!.campaignTag).toEqual(`clip-${saved.id}`);
-    expect(link!.targetUrl).toEqual("https://www.polls.pizza/donate");
-    expect(link!.slug).toEqual(saved.kit.shortUrlSlug);
+    expect(link).toBeNull();
 
     expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
     expect(mockInvokeRenderClip).toHaveBeenCalledWith(saved.id);
-  });
-
-  it("creates the Link with the DONATE_LANDING_URL override when configured", async () => {
-    process.env.DONATE_LANDING_URL = "https://example.org/donate-now";
-    try {
-      const upload = await makeUpload();
-      const request = http_mocks.createRequest({
-        method: "POST",
-        body: { ...validBody(), uploadId: upload.id },
-        headers: authHeaders(),
-      });
-      const response = http_mocks.createResponse();
-
-      const body = (await controller.create(
-        request,
-        response,
-        () => undefined,
-      )) as JsonResponse;
-
-      const link = await Link.findOne({ where: { clipId: body.id } });
-      expect(link!.targetUrl).toEqual("https://example.org/donate-now");
-    } finally {
-      delete process.env.DONATE_LANDING_URL;
-    }
-  });
-
-  it("fails open when Link creation throws: clip still created + render fired, slug null", async () => {
-    const createWithSlug = jest
-      .spyOn(Link, "createWithSlug")
-      .mockRejectedValue(new Error("links table on fire"));
-
-    const upload = await makeUpload();
-    const request = http_mocks.createRequest({
-      method: "POST",
-      body: { ...validBody(), uploadId: upload.id },
-      headers: authHeaders(),
-    });
-    const response = http_mocks.createResponse();
-
-    try {
-      const body = (await controller.create(
-        request,
-        response,
-        () => undefined,
-      )) as JsonResponse;
-
-      expect(response.statusCode).toEqual(200);
-      expect(body.status).toEqual("queued");
-      expect(body.kit.shortUrlSlug).toBeNull();
-
-      const saved = await Clip.findOne({ where: { id: body.id } });
-      expect(saved.status).toEqual("queued");
-      expect(saved.kit.shortUrlSlug).toBeNull();
-      expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
-      expect(mockInvokeRenderClip).toHaveBeenCalledWith(saved.id);
-    } finally {
-      createWithSlug.mockRestore();
-    }
   });
 });
 

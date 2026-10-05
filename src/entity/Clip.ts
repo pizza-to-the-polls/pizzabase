@@ -43,10 +43,13 @@ export class Clip extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt: Date;
 
-  @ManyToOne((_type) => Upload, (upload) => upload.clips, { nullable: false })
+  // Nullable: per-upload clips point at their source upload; scheduled
+  // compilations (compileClips lambda) have no single source and store their
+  // members in kit.memberClipIds instead.
+  @ManyToOne((_type) => Upload, (upload) => upload.clips, { nullable: true })
   @JoinColumn({ name: "upload_id" })
   @Index()
-  upload: Upload;
+  upload: Upload | null;
 
   @Column({
     name: "status",
@@ -80,6 +83,17 @@ export class Clip extends BaseEntity {
   approvedAt: Date | null;
 
   /**
+   * Set when this clip has been folded into a scheduled compilation.
+   * Null means the clip is new content the next compile run can pick up.
+   */
+  @Column({
+    name: "compiled_at",
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  compiledAt: Date | null;
+
+  /**
    * Returns true when the requested status transition is valid.
    * Callers should check this before updating status and handle
    * the rejection themselves (throw, log, etc.).
@@ -101,11 +115,13 @@ export class Clip extends BaseEntity {
       updatedAt: this.updatedAt,
       status: this.status,
       outputPaths: this.outputPaths,
+      uploadId: this.upload ? this.upload.id : null,
       kit: this.kit
         ? {
             caption: (this.kit as Record<string, unknown>).caption,
             hashtags: (this.kit as Record<string, unknown>).hashtags,
-            shortUrlSlug: (this.kit as Record<string, unknown>).shortUrlSlug,
+            isCompilation: (this.kit as Record<string, unknown>).isCompilation,
+            photoLinks: (this.kit as Record<string, unknown>).photoLinks,
           }
         : null,
     };

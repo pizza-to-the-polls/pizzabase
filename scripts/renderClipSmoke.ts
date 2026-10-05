@@ -49,7 +49,6 @@ async function main(): Promise<void> {
     city: "Portland",
     state: "OR",
     reportedAt: new Date().toISOString(),
-    shortUrlSlug: null,
     hashtags: null,
     sourceDuration: duration,
     inputPath,
