@@ -120,7 +120,6 @@ const makeClip = async (
   clip.status = status;
   clip.kit = {
     caption: "The line is around the block!",
-    hashtags: ["#votingrights", "#ElectionDay", "#OR", "#Portland"],
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -270,12 +269,7 @@ describe("happy path", () => {
     expect(kit.reportedAt).toBe("2024-11-05T14:30:00Z");
     expect("shortUrlSlug" in kit).toBe(false);
     expect(kit.platforms).toEqual(["tiktok", "reels", "shorts"]);
-    expect(kit.hashtags).toEqual([
-      "#votingrights",
-      "#ElectionDay",
-      "#OR",
-      "#Portland",
-    ]);
+    expect("hashtags" in kit).toBe(false);
     expect(kit.assets).toEqual({
       video: `clips/${clip.id}/clip.mp4`,
       captions: `clips/${clip.id}/clip.srt`,

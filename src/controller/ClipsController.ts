@@ -3,7 +3,6 @@ import { NextFunction, Request, Response } from "express";
 import { Clip, ClipStatus } from "../entity/Clip";
 import { Upload } from "../entity/Upload";
 import { checkAuthorization, findOr404 } from "./helper";
-import { deriveHashtags } from "../lib/clip-hashtags";
 import { invokeRenderClip } from "../lib/clip-render";
 import { notifyClipKit } from "../lib/clipKit";
 import { uploadPermalink } from "../lib/upload-permalink";
@@ -75,7 +74,6 @@ export class ClipsController {
     clip.status = "queued";
     clip.kit = {
       caption: captionText || null,
-      hashtags: deriveHashtags(city, state),
       city,
       state,
       reportedAt,

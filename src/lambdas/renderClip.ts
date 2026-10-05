@@ -88,16 +88,6 @@ function kitString(kit: Record<string, unknown>, key: string): string | null {
   return typeof value === "string" && value.trim() ? value : null;
 }
 
-function kitStringArray(
-  kit: Record<string, unknown>,
-  key: string,
-): string[] | null {
-  const value = kit[key];
-  return Array.isArray(value) && value.every((v) => typeof v === "string")
-    ? (value as string[])
-    : null;
-}
-
 async function rejectClip(clip: Clip, reason: string): Promise<void> {
   console.error(`[render-clip] Clip ${clip.id} rejected: ${reason}`);
   if (!Clip.canTransition(clip.status, "rejected")) {
@@ -234,7 +224,6 @@ export async function handler(event: { clipId?: number }): Promise<void> {
       city: kitString(kit, "city") ?? "",
       state: kitString(kit, "state") ?? "",
       reportedAt: kitString(kit, "reportedAt") ?? "",
-      hashtags: kitStringArray(kit, "hashtags"),
       sourceDuration,
       inputPath,
       outputDir: workDir,

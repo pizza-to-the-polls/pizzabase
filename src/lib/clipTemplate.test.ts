@@ -30,7 +30,6 @@ function renderInput(
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
-    hashtags: ["#votingrights", "#ElectionDay", "#OR", "#Portland"],
     sourceDuration: 45,
     inputPath: "/tmp/render/input.mp4",
     outputDir: "/tmp/render",
@@ -344,7 +343,6 @@ describe("buildKitJson", () => {
   it("serializes the publish kit with the PTP caption suffix and assets", () => {
     const kitJson = buildKitJson({
       captionText: "Long lines at the polls",
-      hashtags: ["#votingrights", "#ElectionDay", "#OR", "#Portland"],
       city: "Portland",
       state: "OR",
       reportedAt: "2024-11-05T14:30:00Z",
@@ -357,12 +355,7 @@ describe("buildKitJson", () => {
     const kit = JSON.parse(kitJson);
 
     expect(kit.caption).toBe("Long lines at the polls 🍕🗳");
-    expect(kit.hashtags).toEqual([
-      "#votingrights",
-      "#ElectionDay",
-      "#OR",
-      "#Portland",
-    ]);
+    expect("hashtags" in kit).toBe(false);
     expect(kit.city).toBe("Portland");
     expect(kit.state).toBe("OR");
     expect(kit.reportedAt).toBe("2024-11-05T14:30:00Z");
@@ -374,11 +367,10 @@ describe("buildKitJson", () => {
     });
   });
 
-  it("falls back to derived hashtags and null caption when unset", () => {
+  it("serializes a null caption without fabricating fields", () => {
     const kit = JSON.parse(
       buildKitJson({
         captionText: null,
-        hashtags: null,
         city: "St. Louis",
         state: "MO",
         reportedAt: "2024-11-05T14:30:00Z",
@@ -387,19 +379,12 @@ describe("buildKitJson", () => {
     );
 
     expect(kit.caption).toBeNull();
-    expect(kit.hashtags).toEqual([
-      "#votingrights",
-      "#ElectionDay",
-      "#MO",
-      "#StLouis",
-    ]);
   });
 
   it("omits short-link fields entirely", () => {
     const kit = JSON.parse(
       buildKitJson({
         captionText: "hi",
-        hashtags: ["#votingrights"],
         city: "Portland",
         state: "OR",
         reportedAt: "2024-11-05T14:30:00Z",

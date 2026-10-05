@@ -2,8 +2,8 @@
  * Slack kit distribution for the Clip Factory (DIST-001, manual-first).
  *
  * When a clip is approved, volunteers need the posting kit where they
- * already work: a Slack message with the poster preview, caption +
- * hashtags, and links to every render asset. Volunteers post natively
+ * already work: a Slack message with the poster preview, caption, and
+ * links to every render asset. Volunteers post natively
  * from their phones, then confirm per platform via POST /clips/:id/publish
  * (closing the loop on the clip's publishLog).
  *
@@ -69,7 +69,6 @@ export function buildClipKitPayload(clip: Clip): Record<string, unknown> {
     state: typeof kit.state === "string" ? kit.state : null,
     reportedAt: iso(kit.reportedAt),
     caption: typeof kit.caption === "string" ? kit.caption : null,
-    hashtags: Array.isArray(kit.hashtags) ? kit.hashtags : null,
     memberClipIds: Array.isArray(kit.memberClipIds) ? kit.memberClipIds : null,
     photoLinks: photoLinks(kit),
     // Relations (upload is null for compilations).
@@ -131,10 +130,7 @@ export function buildClipKitSlackPayload(clip: Clip): Record<string, unknown> {
   }
 
   const caption = typeof kit.caption === "string" ? kit.caption : "";
-  const hashtags = Array.isArray(kit.hashtags) ? kit.hashtags.join(" ") : "";
-  const captionText = [caption || "_No caption in kit_", hashtags]
-    .filter(Boolean)
-    .join("\n");
+  const captionText = caption || "_No caption in kit_";
   blocks.push({ type: "section", text: { type: "mrkdwn", text: captionText } });
 
   const links: string[] = [];

@@ -11,7 +11,7 @@
  *                over the tail (no QR, no short URL)
  *   - clip.srt   sidecar captions for platforms that accept them
  *   - poster.jpg first frame of the 9:16 render
- *   - kit.json   publish kit (caption + hashtags + asset keys)
+ *   - kit.json   publish kit (caption + asset keys)
  *
  * The module is intentionally pure: no fs, no ffmpeg, no clocks. The render
  * lambda (src/lambdas/renderClip.ts) writes the generated text files to disk
@@ -22,8 +22,6 @@
  * text can contain quotes/colons/commas that are painful to escape through
  * the ffmpeg filtergraph parser — files sidestep escaping entirely.
  */
-
-import { deriveHashtags } from "./clip-hashtags";
 
 export const TARGET_WIDTH = 1080;
 export const TARGET_HEIGHT = 1920;
@@ -44,8 +42,6 @@ export interface ClipRenderInput {
   state: string;
   /** ISO timestamp from the report kit ("reported HH:MM" overlay). */
   reportedAt: string;
-  /** Starter hashtags from clip.kit; falls back to derived set. */
-  hashtags: string[] | null;
   /** Source duration in seconds (already verified ≤ MAX by the caller). */
   sourceDuration: number;
   /** Absolute path to the downloaded source MP4. */
@@ -176,7 +172,6 @@ export function buildSrt(
 
 export interface KitJsonInput {
   captionText: string | null;
-  hashtags: string[] | null;
   city: string;
   state: string;
   reportedAt: string;
@@ -185,18 +180,13 @@ export interface KitJsonInput {
 
 /**
  * Serialize the publish kit written as clips/{id}/kit.json. The caption
- * gets the PTP signature suffix; missing hashtags fall back to the
- * deterministic derived set.
+ * gets the PTP signature suffix.
  */
 export function buildKitJson(input: KitJsonInput): string {
   const trimmed = input.captionText ? input.captionText.trim() : "";
   return JSON.stringify(
     {
       caption: trimmed ? `${trimmed} 🍕🗳` : null,
-      hashtags:
-        input.hashtags && input.hashtags.length > 0
-          ? input.hashtags
-          : deriveHashtags(input.city, input.state),
       city: input.city,
       state: input.state,
       reportedAt: input.reportedAt,
@@ -353,7 +343,6 @@ export function buildRenderPlan(input: ClipRenderInput): ClipRenderPlan {
 
   const kitJson = buildKitJson({
     captionText: input.captionText,
-    hashtags: input.hashtags,
     city: input.city,
     state: input.state,
     reportedAt: input.reportedAt,

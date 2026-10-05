@@ -72,7 +72,6 @@ const makeClip = async (
   clip.status = status;
   clip.kit = {
     caption: "Test caption",
-    hashtags: ["#votingrights"],
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -198,12 +197,7 @@ describe("#create", () => {
     expect(body.status).toEqual("queued");
     expect(body.id).toBeTruthy();
     expect(body.kit.caption).toEqual("Long lines!");
-    expect(body.kit.hashtags).toEqual([
-      "#votingrights",
-      "#ElectionDay",
-      "#OR",
-      "#Portland",
-    ]);
+    expect("hashtags" in body.kit).toBe(false);
     // No short link: the kit carries the source photo link instead.
     expect("shortUrlSlug" in body.kit).toBe(false);
     expect(body.kit.photoLinks).toEqual([

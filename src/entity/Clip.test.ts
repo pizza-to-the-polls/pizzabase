@@ -103,7 +103,6 @@ describe("Clip.asJSON", () => {
     clip.outputPaths = null;
     clip.kit = {
       caption: "Pizza for everyone!",
-      hashtags: ["#pizza", "#democracy"],
       photoLinks: ["https://base.polls.pizza/uploads/a.mp4"],
       isCompilation: false,
       city: "Philadelphia",
@@ -115,7 +114,6 @@ describe("Clip.asJSON", () => {
 
     expect(json.kit).toEqual({
       caption: "Pizza for everyone!",
-      hashtags: ["#pizza", "#democracy"],
       photoLinks: ["https://base.polls.pizza/uploads/a.mp4"],
       isCompilation: false,
     });
@@ -155,7 +153,6 @@ describe("Clip entity round-trip", () => {
     clip.outputPaths = { video: "/out/video.mp4" };
     clip.kit = {
       caption: "Hello",
-      hashtags: ["#test"],
       photoLinks: ["https://base.polls.pizza/uploads/hello.mp4"],
     };
     clip.publishLog = [
@@ -178,7 +175,6 @@ describe("Clip entity round-trip", () => {
     expect(loaded!.outputPaths).toEqual({ video: "/out/video.mp4" });
     expect(loaded!.kit).toEqual({
       caption: "Hello",
-      hashtags: ["#test"],
       photoLinks: ["https://base.polls.pizza/uploads/hello.mp4"],
     });
     expect(loaded!.publishLog).toEqual([

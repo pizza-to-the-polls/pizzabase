@@ -17,7 +17,6 @@ const makeClip = (): Clip => {
   clip.status = "approved";
   clip.kit = {
     caption: "The line wraps around the block!",
-    hashtags: ["#votingrights", "#Portland"],
     city: "Portland",
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
@@ -92,16 +91,15 @@ describe("buildClipKitSlackPayload", () => {
     expect(image.alt_text).toContain("Portland");
   });
 
-  it("includes the caption and hashtags from the kit", () => {
+  it("includes the caption from the kit", () => {
     const payload = buildClipKitSlackPayload(makeClip()) as Record<string, any>;
 
     const section = payload.blocks.find(
       (b: any) =>
-        b.type === "section" && b.text?.text?.includes("#votingrights"),
+        b.type === "section" &&
+        b.text?.text?.includes("The line wraps around the block!"),
     );
-    expect(section.text.text).toContain("The line wraps around the block!");
-    expect(section.text.text).toContain("#votingrights");
-    expect(section.text.text).toContain("#Portland");
+    expect(section.text.text).toBe("The line wraps around the block!");
   });
 
   it("links the video, captions, and kit.json assets", () => {
@@ -205,7 +203,6 @@ describe("buildClipKitPayload", () => {
     expect(payload.state).toBe("OR");
     expect(payload.reportedAt).toBe("2024-11-05T14:30:00Z");
     expect(payload.caption).toBe("The line wraps around the block!");
-    expect(payload.hashtags).toEqual(["#votingrights", "#Portland"]);
     expect(payload.photoLinks).toEqual([
       "https://base.polls.pizza/uploads/a1b2.mp4",
     ]);
