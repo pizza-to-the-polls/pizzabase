@@ -7,9 +7,10 @@
  * from their phones, then confirm per platform via POST /clips/:id/publish
  * (closing the loop on the clip's publishLog).
  *
- * Env: CLIP_KIT_SLACK_WEBHOOK (Slack incoming webhook URL). Unset/empty
- * means distribution is disabled — notifyClipKit is a no-op with a log
- * line, so local/dev and stages without a webhook keep working.
+ * Env: ZAP_NEW_CLIP (Zapier catch hook URL). A Zap on the other end routes
+ * the kit payload to the #clip-kit channel. Unset/empty means
+ * distribution is disabled — notifyClipKit is a no-op with a log line, so
+ * local/dev and stages without the hook keep working.
  *
  * Distribution must never break clip approval: notifyClipKit wraps
  * everything, logs failures, and reports to Bugsnag instead of throwing.
@@ -113,34 +114,37 @@ export function buildClipKitSlackPayload(clip: Clip): Record<string, unknown> {
 }
 
 /**
- * Fire-and-forget Slack notification for an approved clip. Never throws:
- * unset webhook → no-op; transport/build failures are logged and reported
- * to Bugsnag so distribution can never break clip approval.
+ * Fire-and-forget kit notification for an approved clip, posted through the
+ * ZAP_NEW_CLIP Zapier hook to the #clip-kit channel. Never throws: unset
+ * hook → no-op; transport/build failures are logged and reported to Bugsnag
+ * so distribution can never break clip approval.
  */
 export async function notifyClipKit(clip: Clip): Promise<void> {
   try {
-    const webhook = process.env.CLIP_KIT_SLACK_WEBHOOK;
-    if (!webhook) {
+    const hook = process.env.ZAP_NEW_CLIP;
+    if (!hook) {
       console.log(
-        `[clip-kit] CLIP_KIT_SLACK_WEBHOOK unset — skipping Slack notification for clip ${clip.id}`,
+        `[clip-kit] ZAP_NEW_CLIP unset — skipping kit notification for clip ${clip.id}`,
       );
       return;
     }
 
     const payload = buildClipKitSlackPayload(clip);
-    const response = await fetch(webhook, {
+    const response = await fetch(hook, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(payload),
+      // Same { hook, ...payload } envelope as lib/zapier so the Zap can
+      // route by hook type; the Slack Block Kit body rides along as-is.
+      body: JSON.stringify({ hook: "ZAP_NEW_CLIP", ...payload }),
     });
     if (!response.ok) {
       throw new Error(
-        `Slack webhook responded ${response.status} for clip ${clip.id}`,
+        `Zapier hook responded ${response.status} for clip ${clip.id}`,
       );
     }
   } catch (err) {
     console.error(
-      `[clip-kit] Slack notification failed for clip ${clip.id}:`,
+      `[clip-kit] kit notification failed for clip ${clip.id}:`,
       err,
     );
     notifyBugsnag(err instanceof Error ? err : new Error(String(err)));

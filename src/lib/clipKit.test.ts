@@ -2,7 +2,7 @@ import * as notifyBugsnagModule from "./notifyBugsnag";
 import { buildClipKitSlackPayload, notifyClipKit } from "./clipKit";
 import { Clip } from "../entity/Clip";
 
-const WEBHOOK = "https://hooks.slack.com/services/T000/B000/testhook";
+const WEBHOOK = "https://hooks.zapier.com/hooks/catch/12345/testhook";
 const CDN = "https://media.polls.pizza";
 
 // Pure in-memory fixture — notifyClipKit reads the Clip object only and
@@ -35,12 +35,12 @@ const blockTypes = (payload: Record<string, any>): string[] =>
 beforeEach(() => {
   process.env.UPLOAD_S3_BUCKET = "reports.polls.pizza";
   process.env.MEDIA_CDN_DOMAIN = "media.polls.pizza";
-  delete process.env.CLIP_KIT_SLACK_WEBHOOK;
+  delete process.env.ZAP_NEW_CLIP;
 });
 
 afterEach(() => {
   delete process.env.MEDIA_CDN_DOMAIN;
-  delete process.env.CLIP_KIT_SLACK_WEBHOOK;
+  delete process.env.ZAP_NEW_CLIP;
 });
 
 describe("buildClipKitSlackPayload", () => {
@@ -150,8 +150,8 @@ describe("notifyClipKit", () => {
     fetchMock.mockResolvedValue({ ok: true });
   });
 
-  it("POSTs the Block Kit payload to the configured webhook", async () => {
-    process.env.CLIP_KIT_SLACK_WEBHOOK = WEBHOOK;
+  it("POSTs the Block Kit payload through the ZAP_NEW_CLIP Zapier hook", async () => {
+    process.env.ZAP_NEW_CLIP = WEBHOOK;
 
     await notifyClipKit(makeClip());
 
@@ -160,6 +160,7 @@ describe("notifyClipKit", () => {
     expect(url).toEqual(WEBHOOK);
     expect(init.method).toEqual("POST");
     const body = JSON.parse(init.body);
+    expect(body.hook).toEqual("ZAP_NEW_CLIP");
     expect(body.text).toContain("🎬 New clip ready: Portland, OR");
     expect(blockTypes(body)).toEqual([
       "header",
@@ -170,14 +171,14 @@ describe("notifyClipKit", () => {
     ]);
   });
 
-  it("is a no-op (no fetch) when CLIP_KIT_SLACK_WEBHOOK is unset", async () => {
+  it("is a no-op (no fetch) when ZAP_NEW_CLIP is unset", async () => {
     await notifyClipKit(makeClip());
 
     expect(fetchMock).not.toHaveBeenCalled();
   });
 
   it("swallows a rejected POST and reports to Bugsnag", async () => {
-    process.env.CLIP_KIT_SLACK_WEBHOOK = WEBHOOK;
+    process.env.ZAP_NEW_CLIP = WEBHOOK;
     const bugsnagSpy = jest
       .spyOn(notifyBugsnagModule, "notifyBugsnag")
       .mockImplementation(() => {});
@@ -194,7 +195,7 @@ describe("notifyClipKit", () => {
   });
 
   it("swallows a non-ok webhook response and reports to Bugsnag", async () => {
-    process.env.CLIP_KIT_SLACK_WEBHOOK = WEBHOOK;
+    process.env.ZAP_NEW_CLIP = WEBHOOK;
     const bugsnagSpy = jest
       .spyOn(notifyBugsnagModule, "notifyBugsnag")
       .mockImplementation(() => {});
