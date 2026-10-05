@@ -67,14 +67,6 @@ provider:
 
     THREADS_USER_ID: ${env:THREADS_USER_ID, ''}
 
-    # Clip Factory — short links / end-card QR (domain pending registration).
-    SHORT_URL_BASE: ${env:SHORT_URL_BASE, 'https://polls.pizza/l'}
-    DONATE_LANDING_URL: ${env:DONATE_LANDING_URL, 'https://www.polls.pizza/donate'}
-
-    # Clip Factory — Slack kit distribution (DIST-001). Empty = no-op:
-    # approval succeeds without a Slack notification.
-    CLIP_KIT_SLACK_WEBHOOK: ${env:CLIP_KIT_SLACK_WEBHOOK, ''}
-
   iamRoleStatements:
     - Effect: "Allow"
       Action:
