@@ -288,6 +288,56 @@ describe("TwilioInboundController #inbound", () => {
     expect(send).not.toHaveBeenCalled();
   });
 
+  describe("media URL allowlist (SSRF guard)", () => {
+    it("never fetches a non-https media URL (metadata endpoint)", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      const { response } = await callInbound(
+        mediaBody("image/jpeg", "http://169.254.169.254/latest/meta-data"),
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      expect(response._getData()).toContain(
+        "We couldn&apos;t process some of the files you sent.",
+      );
+    });
+
+    it("never fetches an https URL on a non-Twilio host", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      const { response } = await callInbound(
+        mediaBody("image/jpeg", "https://evil.example.com/f1/0"),
+      );
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      expect(response._getData()).toContain(
+        "We couldn&apos;t process some of the files you sent.",
+      );
+    });
+
+    it("still fetches media from api.twilio.com", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      await callInbound(
+        mediaBody(
+          "image/jpeg",
+          "https://api.twilio.com/2010-04-01/Accounts/AC1/Messages/SM1/Media/ME1",
+        ),
+      );
+
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+    });
+  });
+
   it("skips media larger than 5MB (declared via Content-Length) and says so", async () => {
     findReportSpy.mockResolvedValue(fakeReport);
     const bytes = Buffer.alloc(64);

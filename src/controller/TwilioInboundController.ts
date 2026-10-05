@@ -29,6 +29,28 @@ const STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL"]);
 
 // Aligned with IMAGE_EXTENSIONS / VIDEO_EXTENSIONS in onMediaFormat.ts so
 // anything we store is something the pipeline can process.
+/**
+ * Twilio media host allowlist — SSRF guard for the fetch below
+ * (defense-in-depth for the js/request-forgery surface). Signature
+ * verification is the primary trust boundary; this bounds the blast
+ * radius if that ever fails or is bypassed: a URL that isn't a Twilio
+ * media host is never fetched, whatever the (verified) body claims.
+ */
+const isTwilioMediaUrl = (url: string): boolean => {
+  try {
+    const parsed = new URL(url);
+    if (parsed.protocol !== "https:") return false;
+    const host = parsed.hostname.toLowerCase();
+    return (
+      host === "api.twilio.com" ||
+      host.endsWith(".twilio.com") ||
+      host.endsWith(".twiliocdn.com")
+    );
+  } catch {
+    return false;
+  }
+};
+
 const MIME_TO_EXT: Record<string, string> = {
   "image/jpeg": "jpg",
   "image/png": "png",
@@ -169,6 +191,12 @@ export class TwilioInboundController {
         try {
           const fileExt = MIME_TO_EXT[item.contentType];
           if (!fileExt) {
+            unsupportedCount++;
+            continue;
+          }
+
+          // SSRF guard: only ever fetch media from Twilio's own hosts.
+          if (!isTwilioMediaUrl(item.url)) {
             unsupportedCount++;
             continue;
           }
