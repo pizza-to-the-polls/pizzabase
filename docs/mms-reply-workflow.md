@@ -126,9 +126,15 @@ and use the printed Service Endpoint (an `execute-api` URL), keeping the
 
 ## 5. Deployment checklist (staging first)
 
-1. **Set env vars** for the stage: `TWILIO_AUTH_TOKEN` (Twilio Console →
-   Account Info → Auth Token) and `MMS_SLACK_WEBHOOK_URL`. `MMS_MATCH_WINDOW_DAYS`
-   can stay at the 30-day default.
+1. **Create the GitHub secrets** for the stage (the deploy workflows pass them
+   through to the Lambda env — staging reads `STAGING_TWILIO_AUTH_TOKEN` and
+   `STAGING_MMS_SLACK_WEBHOOK_URL`, prod reads `TWILIO_AUTH_TOKEN` and
+   `MMS_SLACK_WEBHOOK_URL`):
+   - `TWILIO_AUTH_TOKEN` value from Twilio Console → Account Info → Auth Token
+     (account-level; staging and prod secrets hold the same value unless the
+     environments use separate Twilio accounts)
+   - `MMS_SLACK_WEBHOOK_URL` value from the Slack setup in §4
+     `MMS_MATCH_WINDOW_DAYS` can stay unset (30-day default).
 2. **Deploy to staging** (GitHub Actions deploy workflow with
    `--stage <staging>`).
 3. **Point the staging Twilio number** at the staging webhook URL per §3.

@@ -165,6 +165,11 @@ jobs:
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
+          # MMS reply workflow (epic #255). Empty until the secrets exist
+          # = webhook 403s everything / Slack notify no-ops, by design.
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          MMS_SLACK_WEBHOOK_URL: ${{ secrets.MMS_SLACK_WEBHOOK_URL }}
+
           BSKY_PDS_URL: ${{ secrets.BSKY_PDS_URL }}
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}
           BSKY_APP_PASSWORD: ${{ secrets.BSKY_APP_PASSWORD }}

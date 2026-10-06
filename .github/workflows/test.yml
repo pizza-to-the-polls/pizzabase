@@ -200,6 +200,11 @@ jobs:
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
+          # MMS reply workflow (epic #255). Empty until the secrets exist
+          # = webhook 403s everything / Slack notify no-ops, by design.
+          TWILIO_AUTH_TOKEN: ${{ secrets.STAGING_TWILIO_AUTH_TOKEN }}
+          MMS_SLACK_WEBHOOK_URL: ${{ secrets.STAGING_MMS_SLACK_WEBHOOK_URL }}
+
           # Social posting is prod-only — staging deploys without social
           # credentials; social-config treats empty creds as a clean no-op.
 
