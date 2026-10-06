@@ -11,16 +11,19 @@
  *   2. Daily budget guardrail (RENDER_DAILY_BUDGET, default 50): when the
  *      day's render count is exhausted the clip stays queued with a log
  *      line so a later invocation/requeue picks it up.
- *   3. queued → rendering. All subsequent validation (kit, processed MP4,
+ *   3. queued → rendering. All subsequent validation (kit, processed media,
  *      source download) throws into the shared catch so every failure is a
  *      valid rendering → rejected transition.
- *   4. Defense-in-depth duration check: source > 90s (or undetectable
- *      duration) → rendering → rejected with failureReason.
+ *   4. Source media: a processed MP4 renders as video (defense-in-depth
+ *      duration check: > 90s or undetectable → rejected); a processed
+ *      still (webp/jpeg) renders as a fixed 3s center-zoom clip (photo
+ *      mode — no duration, silent, no end-card).
  *   5. Render via ffmpeg Lambda layer (args from the pure clipTemplate
- *      module): 1080x1920 center-crop, clean video, 2s brand-only end-card
- *      (no captions, no overlays, no QR), H.264/AAC, ≤90s.
- *   6. Upload the bundle to clips/{clipId}/ (clip.mp4, clip.srt,
- *      poster.jpg, kit.json) and set status=ready with outputPaths.
+ *      module): 1080x1920 center-crop. Videos render clean with a 2s
+ *      brand-only end-card (no captions, no overlays, no QR), H.264/AAC,
+ *      ≤90s; photos render as 3s H.264 zoom clips.
+ *   6. Upload the bundle to clips/{clipId}/ (clip.mp4, poster.jpg,
+ *      kit.json) and set status=ready with outputPaths.
  *   7. Any failure after the rendering transition → rejected + reason
  *      (valid rendering→rejected transition).
  */
@@ -41,6 +44,7 @@ import { runFfmpeg } from "../lib/ffmpeg-exec";
 import {
   buildRenderPlan,
   MAX_SOURCE_DURATION_SECONDS,
+  PHOTO_CLIP_SECONDS,
 } from "../lib/clipTemplate";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -170,7 +174,10 @@ export async function handler(event: { clipId?: number }): Promise<void> {
   await clip.save();
 
   const kit = clip.kit as Record<string, unknown> | null;
-  const mp4Url = clip.upload?.processedFilePath?.mp4;
+  const processedPaths = clip.upload?.processedFilePath || {};
+  const mp4Url = processedPaths.mp4;
+  // Photos come out of the media processor as webp (+ jpeg fallback).
+  const photoUrl = processedPaths.webp || processedPaths.jpeg;
 
   const workDir = renderWorkDir(clipId);
   try {
@@ -180,13 +187,13 @@ export async function handler(event: { clipId?: number }): Promise<void> {
     if (!kit) {
       throw new Error("Clip has no render kit");
     }
-    if (!mp4Url) {
-      throw new Error("Upload has no processed MP4 to render from");
+    if (!mp4Url && !photoUrl) {
+      throw new Error("Upload has no processed media to render from");
     }
-
-    const sourceKey = s3KeyFromStoredUrl(mp4Url, PROCESSED_BUCKET);
+    const sourceUrl = mp4Url || photoUrl!;
+    const sourceKey = s3KeyFromStoredUrl(sourceUrl, PROCESSED_BUCKET);
     if (!sourceKey) {
-      throw new Error(`Could not determine S3 key from ${mp4Url}`);
+      throw new Error(`Could not determine S3 key from ${sourceUrl}`);
     }
 
     const obj = await s3.send(
@@ -197,25 +204,37 @@ export async function handler(event: { clipId?: number }): Promise<void> {
     }
     const sourceBytes = Buffer.from(await obj.Body.transformToByteArray());
 
-    const sourceDuration = detectVideoDuration(sourceBytes);
-    if (sourceDuration == null) {
-      throw new Error(
-        "Source video duration could not be determined — refusing to render",
+    // Photo mode: stills skip the duration check and render at the fixed
+    // 3s zoom-clip duration (sourceDuration: null).
+    let sourceDuration: number | null = null;
+    if (mp4Url) {
+      const duration = detectVideoDuration(sourceBytes);
+      if (duration == null) {
+        throw new Error(
+          "Source video duration could not be determined — refusing to render",
+        );
+      }
+      if (duration > MAX_SOURCE_DURATION_SECONDS) {
+        throw new Error(
+          `Source duration ${duration.toFixed(1)}s exceeds the ` +
+            `${MAX_SOURCE_DURATION_SECONDS}s clip limit`,
+        );
+      }
+      sourceDuration = duration;
+      console.log(
+        `[render-clip] Clip ${clipId}: source ${sourceKey} is ` +
+          `${duration.toFixed(1)}s`,
+      );
+    } else {
+      console.log(
+        `[render-clip] Clip ${clipId}: rendering photo ${sourceKey} ` +
+          `as a ${PHOTO_CLIP_SECONDS}s zoom clip`,
       );
     }
-    if (sourceDuration > MAX_SOURCE_DURATION_SECONDS) {
-      throw new Error(
-        `Source duration ${sourceDuration.toFixed(1)}s exceeds the ` +
-          `${MAX_SOURCE_DURATION_SECONDS}s clip limit`,
-      );
-    }
-    console.log(
-      `[render-clip] Clip ${clipId}: source ${sourceKey} is ` +
-        `${sourceDuration.toFixed(1)}s`,
-    );
 
     await fs.mkdir(workDir, { recursive: true });
-    const inputPath = path.join(workDir, "input.mp4");
+    const ext = path.extname(sourceKey) || ".mp4";
+    const inputPath = path.join(workDir, `input${ext}`);
     await fs.writeFile(inputPath, sourceBytes);
 
     const plan = buildRenderPlan({

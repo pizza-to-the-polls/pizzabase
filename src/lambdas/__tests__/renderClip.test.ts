@@ -293,6 +293,80 @@ describe("happy path", () => {
 // short links). The end-card is brand-only; see clipTemplate.test.ts.
 // ---------------------------------------------------------------------------
 
+describe("photo mode", () => {
+  it("renders a photo upload as a 3s zoom clip from its processed webp", async () => {
+    const upload = await makeUpload();
+    upload.processedFilePath = {
+      webp: `https://media.polls.pizza/uploads/render-${upload.id}-processed.webp`,
+    };
+    await upload.save();
+    const clip = await makeClip(upload);
+    seedOutputs(clip.id);
+    s3ServesSource(Buffer.from("fake-webp-bytes"));
+
+    await handler({ clipId: clip.id });
+
+    const saved = await reloadClip(clip.id);
+    expect(saved.status).toBe("ready");
+    expect(saved.failureReason).toBeNull();
+    expect(saved.outputPaths).toEqual({
+      video: `clips/${clip.id}/clip.mp4`,
+      poster: `clips/${clip.id}/poster.jpg`,
+      kit: `clips/${clip.id}/kit.json`,
+    });
+
+    // Source resolved from the webp URL key.
+    const get = mockS3Send.mock.calls.find(
+      ([cmd]: any[]) => cmd.commandName === "GetObject",
+    );
+    expect(get![0].input.Key).toBe(
+      `uploads/render-${upload.id}-processed.webp`,
+    );
+
+    // Two invocations: poster + zoompan render.
+    expect(mockRunFfmpeg).toHaveBeenCalledTimes(2);
+    const renderArgs = mockRunFfmpeg.mock.calls[1][1];
+    expect(renderArgs.join(" ")).toContain("zoompan=");
+    expect(renderArgs).not.toContain("-filter_complex");
+    // 3-asset bundle.
+    expect(putCalls()).toHaveLength(3);
+  });
+
+  it("falls back to jpeg when there is no webp", async () => {
+    const upload = await makeUpload();
+    upload.processedFilePath = {
+      jpeg: `https://s3.us-west-2.amazonaws.com/${BUCKET}/uploads/photo-${upload.id}.jpeg`,
+    };
+    await upload.save();
+    const clip = await makeClip(upload);
+    seedOutputs(clip.id);
+    s3ServesSource(Buffer.from("fake-jpeg-bytes"));
+
+    await handler({ clipId: clip.id });
+
+    const saved = await reloadClip(clip.id);
+    expect(saved.status).toBe("ready");
+    const get = mockS3Send.mock.calls.find(
+      ([cmd]: any[]) => cmd.commandName === "GetObject",
+    );
+    expect(get![0].input.Key).toBe(`uploads/photo-${upload.id}.jpeg`);
+  });
+
+  it("rejects an upload with no processed media at all", async () => {
+    const upload = await makeUpload();
+    upload.processedFilePath = {};
+    await upload.save();
+    const clip = await makeClip(upload);
+    s3ServesSource(mp4Buffer(30));
+
+    await handler({ clipId: clip.id });
+
+    const saved = await reloadClip(clip.id);
+    expect(saved.status).toBe("rejected");
+    expect(saved.failureReason).toContain("no processed media");
+  });
+});
+
 describe("end-card wiring", () => {
   it("renders a brand-only end-card with exactly two ffmpeg inputs", async () => {
     const upload = await makeUpload();
@@ -405,7 +479,7 @@ describe("failure paths", () => {
     expect(putCalls()).toHaveLength(0);
   });
 
-  it("rejects when the upload has no processed MP4", async () => {
+  it("rejects when the upload has no processed media", async () => {
     const upload = await makeUpload({ processedFilePath: null });
     const clip = await makeClip(upload);
 
@@ -413,7 +487,7 @@ describe("failure paths", () => {
 
     const saved = await reloadClip(clip.id);
     expect(saved.status).toBe("rejected");
-    expect(saved.failureReason).toMatch(/no processed MP4/i);
+    expect(saved.failureReason).toMatch(/no processed media/i);
     expect(mockRunFfmpeg).not.toHaveBeenCalled();
   });
 

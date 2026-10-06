@@ -224,3 +224,65 @@ describe("buildKitJson", () => {
     expect("shortUrlSlug" in kit).toBe(false);
   });
 });
+
+describe("buildRenderPlan (photo mode)", () => {
+  it("renders a still as a 3s zoompan clip: supersampled, centered, 90 frames", () => {
+    const plan = buildRenderPlan(renderInput({ sourceDuration: null }));
+
+    expect(plan.renderedDurationSeconds).toBe(3);
+    expect(plan.endCardStartSeconds).toBe(0);
+
+    const args = plan.clipRenderArgs;
+    expect(args).toContain("-vf");
+    const filter = args[args.indexOf("-vf") + 1];
+    // Supersample 2x before zoompan for smooth motion.
+    expect(filter).toContain(
+      "scale=2160:3840:force_original_aspect_ratio=increase",
+    );
+    expect(filter).toContain("crop=2160:3840");
+    // Center zoom in over the 3s, capped at 1.12, 1080x1920 output at 30fps.
+    expect(filter).toContain("zoompan=z='min(1+0.001333*on,1.12)'");
+    expect(filter).toContain("x='iw/2-(iw/zoom/2)'");
+    expect(filter).toContain("y='ih/2-(ih/zoom/2)'");
+    expect(filter).toContain("d=90");
+    expect(filter).toContain("s=1080x1920");
+    expect(filter).toContain("fps=30");
+    // Single still in, fixed frame count out.
+    expect(args.filter((a) => a === "-i")).toHaveLength(1);
+    expect(args).not.toContain("-loop");
+    expect(args).toContain("90"); // -frames:v
+    const framesIdx = args.indexOf("-frames:v");
+    expect(args[framesIdx + 1]).toBe("90");
+    // Silent: no audio codec args.
+    expect(args).not.toContain("aac");
+    expect(args).not.toContain("0:a?");
+  });
+
+  it("photo clips get no end-card, no text files, no audio", () => {
+    const plan = buildRenderPlan(renderInput({ sourceDuration: null }));
+
+    expect(plan.textFiles).toEqual([]);
+    expect(plan.clipRenderArgs.join(" ")).not.toContain("endcard");
+    expect(plan.clipRenderArgs.join(" ")).not.toContain("overlay");
+    expect(plan.clipRenderArgs.join(" ")).not.toContain("-map");
+  });
+
+  it("extracts the poster from the photo itself at 9:16", () => {
+    const plan = buildRenderPlan(renderInput({ sourceDuration: null }));
+
+    const posterArgs = plan.posterExtractArgs;
+    expect(posterArgs).toContain("-frames:v");
+    expect(posterArgs.join(" ")).toContain("crop=1080:1920");
+    expect(posterArgs[posterArgs.length - 1]).toBe("/tmp/render/poster.jpg");
+  });
+
+  it("kit.json for a photo carries video + poster assets only", () => {
+    const plan = buildRenderPlan(renderInput({ sourceDuration: null }));
+    const kit = JSON.parse(plan.kitJson);
+
+    expect(kit.assets).toEqual({
+      video: "clips/42/clip.mp4",
+      poster: "clips/42/poster.jpg",
+    });
+  });
+});
