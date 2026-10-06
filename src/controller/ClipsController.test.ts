@@ -11,6 +11,8 @@ import { Link } from "../entity/Link";
 // that clip creation no longer touches it.
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
+import { Order, OrderTypes } from "../entity/Order";
+import { Report } from "../entity/Report";
 
 // Prevent actual Lambda invocations during tests.
 jest.mock("../lib/clip-render", () => ({
@@ -61,6 +63,32 @@ const makeUpload = async (overrides: Partial<Upload> = {}): Promise<Upload> => {
   await upload.save();
 
   return upload;
+};
+
+let reportCounter = 0;
+
+/** The strict-gate requirement: an upload only clips when its report has an
+ * order (Order has many reports). */
+const makeReportWithOrder = async (upload: Upload): Promise<Report> => {
+  reportCounter += 1;
+  const order = new Order();
+  order.cost = 120;
+  order.snacks = 0;
+  order.orderType = OrderTypes.pizzas;
+  order.quantity = 10;
+  order.restaurant = "Test Pizzeria";
+  order.location = upload.location;
+  await order.save();
+
+  const report = new Report();
+  report.contactInfo = "555-867-5309";
+  report.reportURL = `https://example.com/reports/clip-test-${reportCounter}`;
+  report.canDistribute = 1;
+  report.location = upload.location;
+  report.order = order;
+  report.upload = upload;
+  await report.save();
+  return report;
 };
 
 const makeClip = async (
@@ -177,8 +205,50 @@ describe("#create", () => {
     expect(mockInvokeRenderClip).not.toHaveBeenCalled();
   });
 
+  it("returns 400 when the upload has no report at all (strict gate)", async () => {
+    const upload = await makeUpload(); // no report — orphan media
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { ...validBody(), uploadId: upload.id },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(400);
+    expect(body.errors[0]).toMatch(/report with an order/i);
+    expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+  });
+
+  it("returns 400 when the upload's report has no order (strict gate)", async () => {
+    const upload = await makeUpload();
+    reportCounter += 1;
+    const report = new Report();
+    report.contactInfo = "555-867-5309";
+    report.reportURL = `https://example.com/reports/clip-test-${reportCounter}`;
+    report.canDistribute = 1;
+    report.location = upload.location;
+    report.upload = upload; // linked, but no order
+    await report.save();
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: { ...validBody(), uploadId: upload.id },
+      headers: authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(400);
+    expect(body.errors[0]).toMatch(/report with an order/i);
+    expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+  });
+
   it("creates a queued clip from a clean+ready upload and fires the render", async () => {
     const upload = await makeUpload();
+    await makeReportWithOrder(upload);
     const request = http_mocks.createRequest({
       method: "POST",
       body: { ...validBody(), uploadId: upload.id },
@@ -210,8 +280,10 @@ describe("#create", () => {
         address: upload.location.address,
         city: upload.location.city,
         state: upload.location.state,
-        pizzas: null,
-        restaurant: null,
+        // The strict-gate fixture order (10 from Test Pizzeria) is within
+        // the ±2-day window, so the photo entry carries it.
+        pizzas: 10,
+        restaurant: "Test Pizzeria",
       },
     ]);
 

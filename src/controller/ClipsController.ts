@@ -2,6 +2,7 @@ import { FindOptionsWhere } from "typeorm";
 import { NextFunction, Request, Response } from "express";
 import { Clip, ClipStatus } from "../entity/Clip";
 import { Upload } from "../entity/Upload";
+import { Report } from "../entity/Report";
 import { checkAuthorization, findOr404 } from "./helper";
 import { invokeRenderClip } from "../lib/clip-render";
 import { notifyClipKit } from "../lib/clipKit";
@@ -66,6 +67,23 @@ export class ClipsController {
       response.status(400);
       return {
         errors: ["Upload media must be ready before it can become a clip"],
+      };
+    }
+
+    // Strict gate: clips come only from media tied to a pizza delivery —
+    // the upload's report must be associated with an order (Order has many
+    // reports; the unified submission flow links report.upload when a
+    // submission lands and report.order when pizza is placed against it).
+    // Orphan media — no report, or a report with no order — never clips.
+    const report = await Report.findOne({
+      where: { upload: { id: upload.id } },
+    });
+    if (!report || !report.order) {
+      response.status(400);
+      return {
+        errors: [
+          "Upload must be tied to a report with an order before it can become a clip",
+        ],
       };
     }
 
