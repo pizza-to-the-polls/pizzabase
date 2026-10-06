@@ -202,6 +202,18 @@ describe("#create", () => {
     expect(body.kit.photoLinks).toEqual([
       `https://base.polls.pizza/uploads/${upload.filePath.split("/").pop()}`,
     ]);
+    // Rich photo entry: address of the polling place; pizzas/restaurant are
+    // null until an order lands at that location within ±2 days.
+    expect(body.kit.photos).toEqual([
+      {
+        url: `https://base.polls.pizza/uploads/${upload.filePath.split("/").pop()}`,
+        address: upload.location.address,
+        city: upload.location.city,
+        state: upload.location.state,
+        pizzas: null,
+        restaurant: null,
+      },
+    ]);
 
     const saved = await Clip.findOne({ where: { id: body.id } });
     expect(saved.status).toEqual("queued");

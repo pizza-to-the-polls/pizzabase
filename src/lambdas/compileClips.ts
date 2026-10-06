@@ -39,6 +39,7 @@ import { TARGET_WIDTH, TARGET_HEIGHT } from "../lib/clipTemplate";
 import { runFfmpeg } from "../lib/ffmpeg-exec";
 import { notifyClipKit } from "../lib/clipKit";
 import { uploadPermalink } from "../lib/upload-permalink";
+import { photoEntryForUpload, ClipPhotoEntry } from "../lib/photo-entry";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -198,10 +199,17 @@ export async function runCompilation(): Promise<Clip | null> {
     compilation = new Clip();
     compilation.upload = null;
     compilation.status = "ready";
+    // Rich per-photo entries (address, pizzas ordered, restaurant) for
+    // every member's source upload.
+    const photoEntries: ClipPhotoEntry[] = await Promise.all(
+      members.map((clip) => photoEntryForUpload(clip.upload!)),
+    );
+
     compilation.kit = {
       isCompilation: true,
       memberClipIds: members.map((clip) => clip.id),
       photoLinks: members.map((clip) => uploadPermalink(clip.upload!)),
+      photos: photoEntries,
     };
     await compilation.save();
 

@@ -120,6 +120,7 @@ export class Clip extends BaseEntity {
         ? {
             isCompilation: (this.kit as Record<string, unknown>).isCompilation,
             photoLinks: (this.kit as Record<string, unknown>).photoLinks,
+            photos: (this.kit as Record<string, unknown>).photos,
           }
         : null,
     };

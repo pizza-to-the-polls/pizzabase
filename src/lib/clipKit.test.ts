@@ -20,6 +20,16 @@ const makeClip = (): Clip => {
     state: "OR",
     reportedAt: "2024-11-05T14:30:00Z",
     photoLinks: ["https://base.polls.pizza/uploads/a1b2.mp4"],
+    photos: [
+      {
+        url: "https://base.polls.pizza/uploads/a1b2.mp4",
+        address: "225 E 75th St",
+        city: "New York",
+        state: "NY",
+        pizzas: 5,
+        restaurant: "Famous Famiglia Pizza",
+      },
+    ],
   };
   clip.outputPaths = {
     video: "clips/42/clip.mp4",
@@ -50,6 +60,32 @@ const makeCompilation = (): Clip => {
     ...clip.kit,
     isCompilation: true,
     memberClipIds: [10, 11, 12],
+    photos: [
+      {
+        url: "https://base.polls.pizza/uploads/a1.mp4",
+        address: "225 E 75th St",
+        city: "New York",
+        state: "NY",
+        pizzas: null,
+        restaurant: null,
+      },
+      {
+        url: "https://base.polls.pizza/uploads/b2.mp4",
+        address: "5525 N Lark Ellen Ave",
+        city: "Azusa",
+        state: "CA",
+        pizzas: 17,
+        restaurant: "Hala's Pizzeria, Dominos",
+      },
+      {
+        url: "https://base.polls.pizza/uploads/c3.mp4",
+        address: "3909 Centre St",
+        city: "San Diego",
+        state: "CA",
+        pizzas: 1,
+        restaurant: "Lefty's",
+      },
+    ],
     photoLinks: [
       "https://base.polls.pizza/uploads/a1.mp4",
       "https://base.polls.pizza/uploads/b2.mp4",
@@ -136,6 +172,14 @@ describe("buildClipKitSlackPayload", () => {
     expect(photosSection.text.text).toContain(
       "<https://base.polls.pizza/uploads/c3.mp4|Photo 3>",
     );
+    // The rich entries carry the story: address + pizzas + restaurant.
+    expect(photosSection.text.text).toContain("225 E 75th St, New York, NY");
+    expect(photosSection.text.text).toContain(
+      "17 pizzas from Hala's Pizzeria, Dominos",
+    );
+    expect(photosSection.text.text).toContain(
+      "5525 N Lark Ellen Ave, Azusa, CA",
+    );
   });
 
   it("headlines compilations with the member clip count", () => {
@@ -198,6 +242,16 @@ describe("buildClipKitPayload", () => {
     expect("caption" in payload).toBe(false);
     expect(payload.photoLinks).toEqual([
       "https://base.polls.pizza/uploads/a1b2.mp4",
+    ]);
+    expect(payload.photos).toEqual([
+      {
+        url: "https://base.polls.pizza/uploads/a1b2.mp4",
+        address: "225 E 75th St",
+        city: "New York",
+        state: "NY",
+        pizzas: 5,
+        restaurant: "Famous Famiglia Pizza",
+      },
     ]);
     expect(payload.memberClipIds).toBeNull();
     expect(payload.uploadId).toBeNull();

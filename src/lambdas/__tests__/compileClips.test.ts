@@ -156,6 +156,12 @@ describe("runCompilation", () => {
         `https://base.polls.pizza/uploads/compile-test-${uploadCounter - 1}.mp4`,
         `https://base.polls.pizza/uploads/compile-test-${uploadCounter}.mp4`,
       ],
+      // Rich per-member photo entries: address present, pizza data null
+      // (no orders at the fixture locations).
+      photos: [
+        expect.objectContaining({ city: "Portland", state: "OR" }),
+        expect.objectContaining({ city: "Portland", state: "OR" }),
+      ],
     });
     expect(compilation!.outputPaths).toEqual({
       video: `clips/${compilation!.id}/clip.mp4`,

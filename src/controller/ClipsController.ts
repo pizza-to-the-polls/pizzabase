@@ -6,6 +6,7 @@ import { checkAuthorization, findOr404 } from "./helper";
 import { invokeRenderClip } from "../lib/clip-render";
 import { notifyClipKit } from "../lib/clipKit";
 import { uploadPermalink } from "../lib/upload-permalink";
+import { photoEntryForUpload } from "../lib/photo-entry";
 
 const CLIP_STATUSES = [
   "queued",
@@ -75,9 +76,11 @@ export class ClipsController {
       city,
       state,
       reportedAt,
-      // Link to the source photo rides in the kit so the Zapier message
-      // can show everything the clip was built from.
+      // Photo data rides in the kit so the Zapier message can show
+      // everything the clip was built from: link, address, pizzas ordered,
+      // and the restaurant behind them.
       photoLinks: [uploadPermalink(upload)],
+      photos: [await photoEntryForUpload(upload)],
     };
     await clip.save();
 

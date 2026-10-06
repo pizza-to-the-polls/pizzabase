@@ -46,6 +46,10 @@ const photoLinks = (kit: Record<string, unknown>): string[] =>
     ? (kit.photoLinks as string[])
     : [];
 
+/** Rich photo entries (url, address, pizzas, restaurant) from kit.photos. */
+const photoEntries = (kit: Record<string, unknown>): unknown[] =>
+  Array.isArray(kit.photos) ? kit.photos : [];
+
 /**
  * Build the full data payload for the ZAP_NEW_CLIP hook. Sends everything
  * known about the clip — flattened kit fields, resolved asset URLs, source
@@ -70,6 +74,8 @@ export function buildClipKitPayload(clip: Clip): Record<string, unknown> {
     reportedAt: iso(kit.reportedAt),
     memberClipIds: Array.isArray(kit.memberClipIds) ? kit.memberClipIds : null,
     photoLinks: photoLinks(kit),
+    // Rich per-photo entries: { url, address, city, state, pizzas, restaurant }.
+    photos: photoEntries(kit),
     // Relations (upload is null for compilations).
     uploadId: clip.upload ? clip.upload.id : null,
     approvedBy: clip.approvedBy,
@@ -138,9 +144,44 @@ export function buildClipKitSlackPayload(clip: Clip): Record<string, unknown> {
     });
   }
 
-  // Links to every source photo used — one line each, before the CTA.
+  // Every source photo used — one line each with its story (address,
+  // pizzas ordered, restaurant) when the kit carries rich entries.
+  const entries = photoEntries(kit) as Array<Record<string, unknown>>;
   const photos = photoLinks(kit);
-  if (photos.length) {
+  if (entries.length) {
+    const lines = entries.map((entry, index) => {
+      const url = typeof entry.url === "string" ? entry.url : `clip ${clip.id}`;
+      const where = [entry.city, entry.state]
+        .filter((v) => typeof v === "string")
+        .join(", ");
+      const story: string[] = [];
+      if (typeof entry.address === "string") {
+        story.push(where ? `${entry.address}, ${where}` : entry.address);
+      }
+      const pizzas = typeof entry.pizzas === "number" ? entry.pizzas : null;
+      const restaurant =
+        typeof entry.restaurant === "string" ? entry.restaurant : null;
+      if (pizzas != null && restaurant) {
+        story.push(
+          `${pizzas} pizza${pizzas === 1 ? "" : "s"} from ${restaurant}`,
+        );
+      } else if (pizzas != null) {
+        story.push(`${pizzas} pizzas ordered`);
+      } else if (restaurant) {
+        story.push(restaurant);
+      }
+      return `• <${url}|Photo ${index + 1}>${
+        story.length ? ` — ${story.join(" · ")}` : ""
+      }`;
+    });
+    blocks.push({
+      type: "section",
+      text: {
+        type: "mrkdwn",
+        text: `*Photos used:*\n${lines.join("\n")}`,
+      },
+    });
+  } else if (photos.length) {
     const lines = photos.map((url, index) => `• <${url}|Photo ${index + 1}>`);
     blocks.push({
       type: "section",
