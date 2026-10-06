@@ -14,6 +14,10 @@ provider:
   environment:
     NODE_ENV: production
 
+    # Clip Factory: render trigger target (fired by the app lambda via
+    # fire-and-forget async invoke; renderer function arrives via CF-6).
+    RENDER_CLIP_FUNCTION_NAME: pizzabase-${sls:stage}-renderClip
+
     DB_NAME: ${env:DB_NAME}
     AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
     AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
@@ -23,6 +27,7 @@ provider:
     ZAP_NEW_ORDER: ${env:ZAP_NEW_ORDER}
     ZAP_NEW_TRUCK: ${env:ZAP_NEW_TRUCK}
     ZAP_NEW_UPLOAD: ${env:ZAP_NEW_UPLOAD}
+    ZAP_NEW_CLIP: ${env:ZAP_NEW_CLIP, ''}
     ZAP_SKIP_REPORT: ${env:ZAP_SKIP_REPORT}
     ZAP_ORDER_REPORT: ${env:ZAP_ORDER_REPORT}
     ZAP_CANCEL_ORDER_REPORT: ${env:ZAP_CANCEL_ORDER_REPORT}
@@ -195,6 +200,45 @@ functions:
               status:
                 - "COMPLETE"
                 - "ERROR"
+
+  renderClip:
+    # Clip Factory renderer (CF-6). No event sources: fired by the app lambda
+    # via fire-and-forget async invoke (src/lib/clip-render.ts), payload
+    # { clipId }. 900s/3009MB for the ffmpeg encode; see docs/clip-render-infra.md
+    # for the ffmpeg layer build (fonts + static ffmpeg with freetype).
+    handler: build/lambdas/renderClip.handler
+    timeout: 900
+    memorySize: 3009
+    layers:
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1
+    environment:
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      RENDER_DAILY_BUDGET: ${env:RENDER_DAILY_BUDGET, '50'}
+      FFMPEG_PATH: /opt/bin/ffmpeg
+      RENDER_FONT_FILE: /opt/fonts/DejaVuSans-Bold.ttf
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+
+  compileClips:
+    # Clip Factory — scheduled compilation. Every 3 hours, joins all
+    # rendered-but-uncompiled clips into one reel (no-op when there's no
+    # new content) and posts it via the ZAP_NEW_CLIP Zapier hook. Shares
+    # the renderClip ffmpeg layer; see docs/clip-render-infra.md.
+    handler: build/lambdas/compileClips.handler
+    timeout: 900
+    memorySize: 3009
+    layers:
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1
+    environment:
+      UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
+      FFMPEG_PATH: /opt/bin/ffmpeg
+      ZAP_NEW_CLIP: ${env:ZAP_NEW_CLIP, ''}
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+    events:
+      - schedule: rate(3 hours)
 
 custom:
   customDomain:

@@ -85,3 +85,94 @@ function walkForRotation(
 export function detectInputRotation(buf: Buffer): InputRotation | null {
   return walkForRotation(buf, 0, buf.length)?.rotation ?? null;
 }
+
+/**
+ * Returns the video track's display dimensions (as stored in tkhd — these
+ * already account for the rotation matrix), or null when they can't be
+ * determined (no moov/trak, audio-only file, etc.).
+ */
+export function detectVideoDimensions(
+  buf: Buffer,
+): { width: number; height: number } | null {
+  const found = walkForRotation(buf, 0, buf.length);
+  if (!found || found.width === 0 || found.height === 0) return null;
+  return { width: Math.round(found.width), height: Math.round(found.height) };
+}
+
+/**
+ * Locate a child box by type within [start, end). Returns the offset of the
+ * box body (past the 8- or 16-byte header) and the end of the box, or null.
+ */
+function findBox(
+  buf: Buffer,
+  start: number,
+  end: number,
+  type: string,
+): { body: number; end: number } | null {
+  let off = start;
+  while (off + 8 <= end) {
+    let size = buf.readUInt32BE(off);
+    const box = buf.toString("latin1", off + 4, off + 8);
+    let hdr = 8;
+    if (size === 1) {
+      size = buf.readUInt32BE(off + 12); // low 32 bits of 64-bit size
+      hdr = 16;
+    } else if (size === 0) {
+      size = end - off; // extends to end of enclosing box/file
+    }
+    if (size < 8) return null;
+    if (box === type) return { body: off + hdr, end: off + size };
+    off += size;
+  }
+  return null;
+}
+
+/**
+ * Detect the total duration of an MP4/MOV file from its mvhd box
+ * (moov → mvhd: timescale and duration). Returns seconds, or null when the
+ * duration can't be parsed (no moov/mvhd, zero timescale, truncated file) —
+ * callers should fall back to a duration-independent behavior.
+ */
+export function detectVideoDuration(buf: Buffer): number | null {
+  // moov may sit anywhere in the file (phone recordings put it first; other
+  // writers may put it after mdat), so scan top-level boxes for it.
+  let off = 0;
+  while (off + 8 <= buf.length) {
+    let size = buf.readUInt32BE(off);
+    const type = buf.toString("latin1", off + 4, off + 8);
+    let hdr = 8;
+    if (size === 1) {
+      size = buf.readUInt32BE(off + 12);
+      hdr = 16;
+    } else if (size === 0) {
+      size = buf.length - off;
+    }
+    if (size < 8) return null;
+
+    if (type === "moov") {
+      const mvhd = findBox(buf, off + hdr, off + size, "mvhd");
+      if (mvhd) {
+        const base = mvhd.body;
+        const version = buf[base];
+        // v0: ver/flags(4) creation(4) mod(4) timescale(4) duration(4)
+        // v1: ver/flags(4) creation(8) mod(8) timescale(4) duration(8)
+        const timescale =
+          version === 1
+            ? buf.readUInt32BE(base + 20)
+            : buf.readUInt32BE(base + 12);
+        // 64-bit durations: low 32 bits are plenty for video timelines
+        const duration =
+          version === 1
+            ? buf.readUInt32BE(base + 28)
+            : buf.readUInt32BE(base + 16);
+        if (timescale > 0 && duration > 0) {
+          const seconds = duration / timescale;
+          if (Number.isFinite(seconds)) return seconds;
+        }
+        return null;
+      }
+    }
+    off += size;
+  }
+  return null;
+}

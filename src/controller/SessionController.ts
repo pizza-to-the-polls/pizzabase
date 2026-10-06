@@ -62,7 +62,7 @@ export class SessionController {
       const url = await sessionForPortal(id);
 
       return { success: true, redirect: url };
-    } catch (e) {
+    } catch (_e) {
       response.status(410);
 
       return { errors: { token: "Invalid URL - please try again" } };

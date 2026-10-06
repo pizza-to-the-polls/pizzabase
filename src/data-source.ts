@@ -8,19 +8,25 @@ import { APIKey } from "./entity/APIKey";
 import { Action } from "./entity/Action";
 import { Donation } from "./entity/Donation";
 import { IntegrationSession } from "./entity/IntegrationSession";
+import { Link } from "./entity/Link";
+import { LinkClick } from "./entity/LinkClick";
 import { Location } from "./entity/Location";
 import { Order } from "./entity/Order";
 import { Report } from "./entity/Report";
 import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
 import { BannedPhoneNumber } from "./entity/BannedPhoneNumber";
+import { Clip } from "./entity/Clip";
 
 const entities = [
   Action,
   APIKey,
   BannedPhoneNumber,
+  Clip,
   Donation,
   IntegrationSession,
+  Link,
+  LinkClick,
   Location,
   Order,
   Report,
