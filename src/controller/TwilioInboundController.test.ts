@@ -336,6 +336,57 @@ describe("TwilioInboundController #inbound", () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
     });
+
+    it("fetches a staging allowlist host only when TWILIO_MEDIA_EXTRA_HOSTS is set", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      // Default (prod) policy: non-Twilio hosts are always blocked.
+      await callInbound(
+        mediaBody(
+          "video/mp4",
+          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+        ),
+      );
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      process.env.TWILIO_MEDIA_EXTRA_HOSTS = "commondatastorage.googleapis.com";
+      try {
+        const { response } = await callInbound(
+          mediaBody(
+            "video/mp4",
+            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+          ),
+        );
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+        expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+        expect(response._getData()).not.toContain(
+          "We couldn&apos;t process some of the files",
+        );
+      } finally {
+        delete process.env.TWILIO_MEDIA_EXTRA_HOSTS;
+      }
+    });
+
+    it("extra-host entries match the exact hostname only (no subdomain wildcarding)", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      process.env.TWILIO_MEDIA_EXTRA_HOSTS = "example.test";
+      try {
+        // A subdomain or lookalike of an allowlisted host must not pass.
+        await callInbound(
+          mediaBody("image/jpeg", "https://evil.example.test/f1/0"),
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+
+        // Neither must https-elsewhere on that host.
+        await callInbound(mediaBody("image/jpeg", "http://example.test/f1/0"));
+        expect(global.fetch).not.toHaveBeenCalled();
+      } finally {
+        delete process.env.TWILIO_MEDIA_EXTRA_HOSTS;
+      }
+    });
   });
 
   it("skips media larger than 5MB (declared via Content-Length) and says so", async () => {

@@ -135,6 +135,7 @@ jobs:
           ZAP_NEW_UPLOAD: ${{ secrets.ZAP_NEW_UPLOAD }}
           ZAP_NEW_CLIP: ${{ secrets.ZAP_NEW_CLIP }}
           ZAP_NEW_TRUCK: ${{ secrets.ZAP_NEW_TRUCK }}
+          ZAP_NEW_MMS_UPLOAD: ${{ secrets.ZAP_NEW_MMS_UPLOAD }}
           ZAP_SKIP_REPORT: ${{ secrets.ZAP_SKIP_REPORT }}
           ZAP_TRUCK_REPORT: ${{ secrets.ZAP_TRUCK_REPORT }}
           ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}
@@ -165,10 +166,11 @@ jobs:
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
-          # MMS reply workflow (epic #255). Empty until the secrets exist
-          # = webhook 403s everything / Slack notify no-ops, by design.
+          # MMS reply workflow (epic #255). Empty until the secret exists
+          # = webhook 403s everything (by design). The MMS media notify rides
+          # the ZAP_NEW_MMS_UPLOAD Zapier hook (wired above like every other
+          # ZAP_* event).
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
-          MMS_SLACK_WEBHOOK_URL: ${{ secrets.MMS_SLACK_WEBHOOK_URL }}
 
           BSKY_PDS_URL: ${{ secrets.BSKY_PDS_URL }}
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}

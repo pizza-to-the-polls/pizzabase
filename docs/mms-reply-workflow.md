@@ -39,7 +39,8 @@ Twilio  ──POST /twilio/inbound──►  API (base.polls.pizza)
       │                                 │
       │                                 ▼
       │                    Upload.media_status → 'ready'
-      │                    notifySlackMmsUpload → internal Slack channel
+      │                    zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)
+      │                       → Zapier → internal channel
       │                                 │
       ▼                                 ▼
 TwiML reply ("Thanks for sharing! 🍕")   Retool: GET /reports/:id/media
@@ -54,26 +55,34 @@ TwiML reply ("Thanks for sharing! 🍕")   Retool: GET /reports/:id/media
 - **Only processed/scrubbed URLs are shared.** Everything leaves the system as
   EXIF-scrubbed CDN URLs on `media.polls.pizza` (re-encoded WebP/JPEG or
   transcoded MP4). Raw bucket paths never appear in Slack or Retool.
-- **Zapier is untouched.** Web uploads keep using `zapNewUpload`; MMS-origin
-  uploads never call Zapier (they surface via the Slack notification and
-  Retool instead).
+- **Notifications ride Zapier.** Web uploads keep using `zapNewUpload`;
+  MMS-origin uploads fire `ZAP_NEW_MMS_UPLOAD` when the pipeline finishes,
+  and the Zap on the other end posts to the internal channel. There is no
+  separate Slack webhook — staging reuses the existing `STAGING_ZAP_ALL`
+  catch-all, and Retool consumes `GET /reports/:idOrAddress/media`.
 
 ---
 
 ## 2. Environment variables
 
-See `.env.example` at the repo root. All three are passed through in
+See `.env.example` at the repo root. All four are passed through in
 `serverless.yml`'s `provider.environment` block.
 
 - `TWILIO_AUTH_TOKEN` (**required**) — auth token for
   `verifyTwilioSignature` on `POST /twilio/inbound`. Unset → every inbound
   request is rejected with 403.
-- `MMS_SLACK_WEBHOOK_URL` (optional) — incoming webhook consumed by
-  `notifySlackMmsUpload`. Unset → Slack notify is a no-op (feature
-  disabled).
+- `ZAP_NEW_MMS_UPLOAD` (optional) — Zapier catch hook URL fired by
+  `zapNewMmsUpload` when MMS media finishes processing. Unset → no-op
+  (feature disabled). Staging wires this to the existing `STAGING_ZAP_ALL`
+  catch-all; prod gets its own secret.
 - `MMS_MATCH_WINDOW_DAYS` (optional) — days after pizza delivery during
   which an MMS reply is matched to a fulfilled report
   (`Report.findRecentFulfilledByPhone`). Defaults to 30.
+- `TWILIO_MEDIA_EXTRA_HOSTS` (optional) — extra comma-separated hosts the
+  webhook may fetch `MediaUrl`s from, on top of the Twilio-only allowlist.
+  **Staging-only test convenience** (the staging deploy sets it to
+  `commondatastorage.googleapis.com` for public sample videos); prod leaves
+  it unset so the default Twilio-only SSRF policy applies.
 
 ---
 
@@ -109,32 +118,38 @@ and use the printed Service Endpoint (an `execute-api` URL), keeping the
 
 ---
 
-## 4. Slack setup
+## 4. Notification routing (Zapier)
 
-1. Go to https://api.slack.com/apps → **Create New App** (or reuse an existing
-   internal app) → **Incoming Webhooks** → toggle **Activate**.
-2. **Add New Webhook to Workspace** and pick the internal channel for media
-   review (e.g. `#pizza-media`).
-3. Copy the webhook URL and set it as `MMS_SLACK_WEBHOOK_URL` **in staging
-   first**, then in prod once verified.
-4. The integration is optional by design: with the variable unset, the notify
-   step is a silent no-op and nothing else changes. Only clean MMS uploads
-   post — flagged/rejected media is reviewed by a human in Retool and never
-   posted.
+There is no dedicated Slack webhook. MMS media notifications ride the same
+`ZAP_*` hook infrastructure as every other event:
+
+1. When an MMS-origin upload finishes the pipeline, the app POSTs to the
+   `ZAP_NEW_MMS_UPLOAD` hook with `{ hook, upload, location, report,
+mediaLinks }` — `mediaLinks` holds the processed/scrubbed
+   `media.polls.pizza` URLs (never raw paths).
+2. **Staging needs no new setup**: the deploy workflow maps
+   `ZAP_NEW_MMS_UPLOAD` to the existing `STAGING_ZAP_ALL` catch-all. Add a
+   path in that Zap (filter on `hook == "ZAP_NEW_MMS_UPLOAD"`) posting
+   `mediaLinks` to the internal channel.
+3. **Prod**: create (or extend) a Zapier catch-hook Zap, add the same
+   filter + post, and put its URL in the `ZAP_NEW_MMS_UPLOAD` secret.
+4. The integration is optional by design: with the env var unset, the notify
+   step is a silent no-op. Only pending/clean MMS uploads notify —
+   flagged/rejected media is reviewed by a human in Retool and never posted.
 
 ---
 
 ## 5. Deployment checklist (staging first)
 
 1. **Create the GitHub secrets** for the stage (the deploy workflows pass them
-   through to the Lambda env — staging reads `STAGING_TWILIO_AUTH_TOKEN` and
-   `STAGING_MMS_SLACK_WEBHOOK_URL`, prod reads `TWILIO_AUTH_TOKEN` and
-   `MMS_SLACK_WEBHOOK_URL`):
+   through to the Lambda env — staging reads `STAGING_TWILIO_AUTH_TOKEN`; the
+   `ZAP_NEW_MMS_UPLOAD` notify is wired to the existing `STAGING_ZAP_ALL`
+   automatically; prod additionally reads `ZAP_NEW_MMS_UPLOAD`):
    - `TWILIO_AUTH_TOKEN` value from Twilio Console → Account Info → Auth Token
      (account-level; staging and prod secrets hold the same value unless the
      environments use separate Twilio accounts)
-   - `MMS_SLACK_WEBHOOK_URL` value from the Slack setup in §4
-     `MMS_MATCH_WINDOW_DAYS` can stay unset (30-day default).
+   - prod's `ZAP_NEW_MMS_UPLOAD` value = the catch-hook URL from §4
+   - `MMS_MATCH_WINDOW_DAYS` can stay unset (30-day default).
 2. **Deploy to staging** (GitHub Actions deploy workflow with
    `--stage <staging>`).
 3. **Point the staging Twilio number** at the staging webhook URL per §3.
@@ -146,7 +161,7 @@ and use the printed Service Endpoint (an `execute-api` URL), keeping the
          `source_phone` set to the sender.
    - [ ] `media_status` reaches `ready` (check the
          `on-s3-upload-process-exif` / `on-media-format` CloudWatch logs).
-   - [ ] A Slack message arrives in the channel containing `media.polls.pizza`
+   - [ ] The Zap posts a message to the internal channel containing `media.polls.pizza`
          links (processed CDN URLs, not raw bucket paths).
    - [ ] **STOP opt-out works:** text `STOP` to the number, confirm the
          opt-out reply arrives and a `BannedPhoneNumber` row was created with

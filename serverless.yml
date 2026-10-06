@@ -64,9 +64,12 @@ provider:
     # defaults to 30 in code.
     MMS_MATCH_WINDOW_DAYS: ${env:MMS_MATCH_WINDOW_DAYS, '30'}
 
-    # Slack webhook for MMS media notifications (optional; notify is a no-op
+    # Zapier hook for MMS media notifications (optional; notify is a no-op
     # when unset). Consumed by on-media-format and on-mediaconvert-complete.
-    MMS_SLACK_WEBHOOK_URL: ${env:MMS_SLACK_WEBHOOK_URL, ''}
+    ZAP_NEW_MMS_UPLOAD: ${env:ZAP_NEW_MMS_UPLOAD, ''}
+    # Extra MediaUrl hosts (comma-separated). Staging-only test media
+    # convenience; prod leaves it unset so the policy stays Twilio-only.
+    TWILIO_MEDIA_EXTRA_HOSTS: ${env:TWILIO_MEDIA_EXTRA_HOSTS, ''}
 
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
     STRIPE_SECRET_WH: ${env:STRIPE_SECRET_WH}

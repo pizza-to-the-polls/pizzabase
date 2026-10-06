@@ -36,6 +36,17 @@ const STOP_KEYWORDS = new Set(["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL"]);
  * radius if that ever fails or is bypassed: a URL that isn't a Twilio
  * media host is never fetched, whatever the (verified) body claims.
  */
+// Extra hosts allowed for MediaUrl fetches — staging-only test media
+// (e.g. public sample videos). Prod leaves this unset: the default policy
+// is Twilio-only, and this env var is deliberately never set in prod deploys.
+const twilioMediaExtraHosts = (): Set<string> => {
+  const hosts = (process.env.TWILIO_MEDIA_EXTRA_HOSTS || "")
+    .split(",")
+    .map((h) => h.trim().toLowerCase())
+    .filter(Boolean);
+  return new Set(hosts);
+};
+
 const isTwilioMediaUrl = (url: string): boolean => {
   try {
     const parsed = new URL(url);
@@ -44,7 +55,8 @@ const isTwilioMediaUrl = (url: string): boolean => {
     return (
       host === "api.twilio.com" ||
       host.endsWith(".twilio.com") ||
-      host.endsWith(".twiliocdn.com")
+      host.endsWith(".twiliocdn.com") ||
+      twilioMediaExtraHosts().has(host)
     );
   } catch {
     return false;

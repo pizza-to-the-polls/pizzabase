@@ -56,8 +56,9 @@ function parseEnvExample(content: string): Map<string, EnvVarDoc> {
 describe("MMS env var documentation (MMS-006)", () => {
   const MMS_ENV_VARS = [
     "TWILIO_AUTH_TOKEN",
-    "MMS_SLACK_WEBHOOK_URL",
+    "ZAP_NEW_MMS_UPLOAD",
     "MMS_MATCH_WINDOW_DAYS",
+    "TWILIO_MEDIA_EXTRA_HOSTS",
   ] as const;
 
   describe(".env.example", () => {
@@ -76,14 +77,18 @@ describe("MMS env var documentation (MMS-006)", () => {
       expect(docs.get("MMS_MATCH_WINDOW_DAYS")!.value).toBe("30");
     });
 
-    it("leaves the secret vars empty (no committed credentials)", () => {
+    it("leaves the unset-by-default vars empty (no committed credentials)", () => {
       expect(docs.get("TWILIO_AUTH_TOKEN")!.value).toBe("");
-      expect(docs.get("MMS_SLACK_WEBHOOK_URL")!.value).toBe("");
+      expect(docs.get("TWILIO_MEDIA_EXTRA_HOSTS")!.value).toBe("");
     });
 
-    it("marks Slack webhook optional (disabled when unset)", () => {
-      expect(docs.get("MMS_SLACK_WEBHOOK_URL")!.comment).toMatch(
-        /unset = feature disabled/i,
+    it("marks the Zapier notify hook optional (disabled when unset)", () => {
+      expect(docs.get("ZAP_NEW_MMS_UPLOAD")!.comment).toMatch(/no-op/i);
+    });
+
+    it("marks TWILIO_MEDIA_EXTRA_HOSTS staging-only (Twilio-only in prod)", () => {
+      expect(docs.get("TWILIO_MEDIA_EXTRA_HOSTS")!.comment).toMatch(
+        /prod|staging-only/i,
       );
     });
   });
@@ -100,8 +105,9 @@ describe("MMS env var documentation (MMS-006)", () => {
     it.each([
       "POST /twilio/inbound",
       "X-Twilio-Signature",
-      "MMS_SLACK_WEBHOOK_URL",
+      "ZAP_NEW_MMS_UPLOAD",
       "MMS_MATCH_WINDOW_DAYS",
+      "TWILIO_MEDIA_EXTRA_HOSTS",
       "TWILIO_AUTH_TOKEN",
       "media_status",
       "BannedPhoneNumber",

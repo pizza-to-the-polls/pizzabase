@@ -1,8 +1,8 @@
-import { notifySlackMmsUpload } from "./mmsNotify";
-import { Upload } from "../../entity/Upload";
-import { Report } from "../../entity/Report";
-import { Location } from "../../entity/Location";
-import { NormalAddress } from "../validator";
+import { zapNewMmsUpload } from "./zapier";
+import { Upload } from "../entity/Upload";
+import { Report } from "../entity/Report";
+import { Location } from "../entity/Location";
+import { NormalAddress } from "./validator";
 
 const ADDRESS: NormalAddress = {
   latitude: 41.79907,
@@ -14,7 +14,7 @@ const ADDRESS: NormalAddress = {
   zip: "60615",
 };
 
-const WEBHOOK_URL = "https://hooks.slack.com/services/T000/B000/xyz";
+const ZAP_HOOK_URL = "https://hooks.zapier.com/hooks/catch/123456/abcdef/";
 const REPORT_URL = "https://polls.pizza/report/mms-notify-test";
 const WEBP_URL =
   "https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/1/photo.webp";
@@ -53,26 +53,26 @@ async function createMmsUpload(
   return upload;
 }
 
-const fetchBody = (): string => {
+const fetchBody = (): any => {
   const call = (global.fetch as jest.Mock).mock.calls[0];
-  return JSON.parse(call[1].body).text as string;
+  return JSON.parse(call[1].body);
 };
 
-describe("notifySlackMmsUpload", () => {
+describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
   beforeEach(() => {
-    process.env.MMS_SLACK_WEBHOOK_URL = WEBHOOK_URL;
+    process.env.ZAP_NEW_MMS_UPLOAD = ZAP_HOOK_URL;
   });
 
   afterEach(() => {
-    delete process.env.MMS_SLACK_WEBHOOK_URL;
+    delete process.env.ZAP_NEW_MMS_UPLOAD;
     delete process.env.MEDIA_CDN_DOMAIN;
   });
 
-  it("does nothing when MMS_SLACK_WEBHOOK_URL is unset", async () => {
-    delete process.env.MMS_SLACK_WEBHOOK_URL;
+  it("does nothing when ZAP_NEW_MMS_UPLOAD is unset", async () => {
+    delete process.env.ZAP_NEW_MMS_UPLOAD;
 
     const upload = await createMmsUpload();
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
     expect(global.fetch).not.toHaveBeenCalled();
   });
@@ -91,46 +91,47 @@ describe("notifySlackMmsUpload", () => {
     upload.source = "web";
     await upload.save();
 
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
   it.each(["flagged", "rejected"] as const)(
-    "does not post for %s uploads (human reviews in Retool)",
+    "does not notify for %s uploads (human reviews in Retool)",
     async (moderationStatus) => {
       const upload = await createMmsUpload({ moderationStatus });
-      await notifySlackMmsUpload(upload);
+      await zapNewMmsUpload(upload);
 
       expect(global.fetch).not.toHaveBeenCalled();
     },
   );
 
   it.each(["pending", "clean"] as const)(
-    "posts for %s uploads",
+    "notifies for %s uploads",
     async (moderationStatus) => {
       const upload = await createMmsUpload({ moderationStatus });
-      await notifySlackMmsUpload(upload);
+      await zapNewMmsUpload(upload);
 
       expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(global.fetch).toHaveBeenCalledWith(WEBHOOK_URL, {
+      expect(global.fetch).toHaveBeenCalledWith(ZAP_HOOK_URL, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: expect.any(String),
       });
+      expect(fetchBody().hook).toBe("ZAP_NEW_MMS_UPLOAD");
     },
   );
 
-  it("posts only processed CDN URLs — never the raw file path", async () => {
+  it("shares only processed CDN URLs — never the raw file path", async () => {
     process.env.MEDIA_CDN_DOMAIN = "media.polls.pizza";
 
     const upload = await createMmsUpload({
       processedFilePath: { webp: WEBP_URL, mp4: MP4_URL },
     });
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    const body = fetchBody();
+    const body = JSON.stringify(fetchBody());
 
     // Processed URLs rewritten against the CDN are shared
     expect(body).toContain("https://media.polls.pizza/uploads/1/photo.webp");
@@ -145,28 +146,25 @@ describe("notifySlackMmsUpload", () => {
 
   it("includes the sightengineScore when present", async () => {
     const upload = await createMmsUpload({ sightengineScore: 0.87 });
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
-    expect(fetchBody()).toContain("SightEngine: 0.87");
-  });
-
-  it("says 'not scored' when sightengineScore is null", async () => {
-    const upload = await createMmsUpload({ sightengineScore: null });
-    await notifySlackMmsUpload(upload);
-
-    expect(fetchBody()).toContain("SightEngine: not scored");
+    expect(fetchBody().upload.sightengineScore).toBe(0.87);
   });
 
   it("includes the report URL from the report relation", async () => {
     const upload = await createMmsUpload();
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
     const body = fetchBody();
-    expect(body).toContain(`Report: ${REPORT_URL}`);
-    expect(body).toContain("Chicago, IL");
+    expect(body.report).toEqual({
+      id: expect.any(Number),
+      reportURL: REPORT_URL,
+    });
+    expect(body.location.city).toBe("Chicago");
+    expect(body.location.state).toBe("IL");
   });
 
-  it("omits the Report line when the upload has no report", async () => {
+  it("sends a null report when the upload has no report", async () => {
     const location = await Location.createFromAddress(ADDRESS);
     const upload = new Upload();
     Object.assign(upload, {
@@ -182,28 +180,27 @@ describe("notifySlackMmsUpload", () => {
     });
     await upload.save();
 
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(fetchBody()).not.toContain("Report:");
+    expect(fetchBody().report).toBeNull();
   });
 
   it("does not leak the transcode jobId from processedFilePath", async () => {
     const upload = await createMmsUpload({
       processedFilePath: { jobId: "1234-abcd" },
     });
-    await notifySlackMmsUpload(upload);
+    await zapNewMmsUpload(upload);
 
-    // Media line omitted entirely when there are no processed outputs
-    expect(fetchBody()).not.toContain("Media:");
+    expect(JSON.stringify(fetchBody())).not.toContain("1234-abcd");
   });
 
   it("swallows fetch failures without throwing", async () => {
     (global.fetch as jest.Mock).mockRejectedValueOnce(
-      new Error("Slack is down"),
+      new Error("Zapier is down"),
     );
 
     const upload = await createMmsUpload();
-    await expect(notifySlackMmsUpload(upload)).resolves.toBeUndefined();
+    await expect(zapNewMmsUpload(upload)).resolves.toBeUndefined();
   });
 });

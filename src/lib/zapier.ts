@@ -2,6 +2,7 @@ import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
 import { Upload } from "../entity/Upload";
 import { Truck } from "../entity/Truck";
+import { cdnUrlFromStoredUrl } from "./media-cdn";
 
 enum ZapHooks {
   ZAP_NEW_REPORT = "ZAP_NEW_REPORT",
@@ -9,6 +10,7 @@ enum ZapHooks {
   ZAP_NEW_ORDER = "ZAP_NEW_ORDER",
   ZAP_NEW_TRUCK = "ZAP_NEW_TRUCK",
   ZAP_NEW_UPLOAD = "ZAP_NEW_UPLOAD",
+  ZAP_NEW_MMS_UPLOAD = "ZAP_NEW_MMS_UPLOAD",
   ZAP_ORDER_REPORT = "ZAP_ORDER_REPORT",
   ZAP_CANCEL_ORDER_REPORT = "ZAP_CANCEL_ORDER_REPORT",
   ZAP_SKIP_REPORT = "ZAP_SKIP_REPORT",
@@ -107,6 +109,82 @@ export const zapNewTruck = async (truck: Truck) => {
 };
 export const zapNewUpload = async (upload: Upload) =>
   zapUpload(upload, ZapHooks.ZAP_NEW_UPLOAD);
+
+// Only these processedFilePath keys are CDN-served processed outputs.
+// `jobId` (mid-transcode bookkeeping) and anything unknown are excluded.
+const PROCESSED_MEDIA_KEYS = new Set(["webp", "jpeg", "jpg", "mp4", "gif"]);
+
+/**
+ * ZAP_NEW_MMS_UPLOAD — notify an internal channel when MMS reply media
+ * finishes the async pipeline (MMS-004, epic #255). The Zap on the other
+ * end of the hook routes the payload to the internal channel.
+ *
+ * Safety properties:
+ *   - No-op unless ZAP_NEW_MMS_UPLOAD is configured (env-optional zapAny).
+ *   - Only MMS-origin uploads notify; web uploads keep using zapNewUpload.
+ *   - Flagged/rejected uploads never notify — a human reviews those in Retool.
+ *   - Only processed (EXIF-scrubbed) CDN URLs are shared, never raw paths.
+ *   - Failures are swallowed: a Zapier outage must never break the media
+ *     pipeline lambdas (logged only, no Bugsnag — non-critical).
+ */
+export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
+  if (upload.source !== "mms") return;
+
+  // Flagged/rejected media is reviewed by a human in Retool — never notify.
+  if (
+    upload.moderationStatus === "flagged" ||
+    upload.moderationStatus === "rejected"
+  ) {
+    return;
+  }
+
+  try {
+    // The report relation is not eager — lambda call sites load uploads
+    // without it, so reload when the report isn't already attached. It may
+    // legitimately be null (nullable relation, onDelete SET NULL).
+    let report = upload.report ?? null;
+    if (upload.id != null && !report) {
+      const loaded = await Upload.findOne({
+        where: { id: upload.id },
+        relations: ["report"],
+      });
+      report = loaded?.report ?? null;
+    }
+
+    const processed = (upload.processedFilePath || {}) as Record<
+      string,
+      string
+    >;
+    const mediaLinks = Object.entries(processed)
+      .filter(([key]) => PROCESSED_MEDIA_KEYS.has(key))
+      .map(([, stored]) => cdnUrlFromStoredUrl(stored))
+      .filter((url): url is string => Boolean(url));
+
+    await zapAny(
+      {
+        upload: {
+          id: upload.id,
+          source: upload.source,
+          sourcePhone: upload.sourcePhone,
+          mediaStatus: upload.mediaStatus,
+          moderationStatus: upload.moderationStatus,
+          sightengineScore: upload.sightengineScore,
+        },
+        location: await upload.location.asJSONPrivate(),
+        report: report ? { id: report.id, reportURL: report.reportURL } : null,
+        mediaLinks,
+      },
+      ZapHooks.ZAP_NEW_MMS_UPLOAD,
+    );
+  } catch (err) {
+    // Swallowed deliberately: Zapier being down must never break the media
+    // pipeline, and this integration is too non-critical for Bugsnag noise.
+    console.error(
+      "[zap-new-mms-upload] Zapier notify failed (swallowed):",
+      err,
+    );
+  }
+};
 const zapOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_ORDER_REPORT);
 export const zapCancelOrderReport = async (report: Report) =>
