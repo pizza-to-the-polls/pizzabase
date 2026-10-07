@@ -72,10 +72,12 @@ async function createMmsUpload(
   return upload;
 }
 
-const fetchBody = (): any => {
+const fetchBody = (): URLSearchParams => {
   const call = (global.fetch as jest.Mock).mock.calls[0];
-  return JSON.parse(call[1].body);
+  return new URLSearchParams(call[1].body);
 };
+
+const bodyString = (): string => fetchBody().toString();
 
 describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
   beforeEach(() => {
@@ -134,10 +136,10 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(global.fetch).toHaveBeenCalledWith(ZAP_HOOK_URL, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: expect.any(String),
+        headers: { "Content-Type": "application/x-www-form-urlencoded" },
+        body: expect.any(URLSearchParams),
       });
-      expect(fetchBody().hook).toBe("ZAP_NEW_MMS_UPLOAD");
+      expect(fetchBody().get("hook")).toBe("ZAP_NEW_MMS_UPLOAD");
     },
   );
 
@@ -150,11 +152,13 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     await zapNewMmsUpload(upload);
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    const body = JSON.stringify(fetchBody());
+    const body = bodyString();
 
     // Processed URLs rewritten against the CDN are shared
-    expect(body).toContain("https://media.polls.pizza/uploads/1/photo.webp");
-    expect(body).toContain(
+    expect(fetchBody().get("media_links")).toContain(
+      "https://media.polls.pizza/uploads/1/photo.webp",
+    );
+    expect(fetchBody().get("media_links")).toContain(
       "https://media.polls.pizza/uploads/1/video_transcoded.mp4",
     );
 
@@ -167,7 +171,7 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     const upload = await createMmsUpload({ sightengineScore: 0.87 });
     await zapNewMmsUpload(upload);
 
-    expect(fetchBody().upload.sightengineScore).toBe(0.87);
+    expect(fetchBody().get("sightengine_score")).toBe("0.87");
   });
 
   it("includes the report URL and order details (pizzas sent, restaurant, address)", async () => {
@@ -175,20 +179,16 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     await zapNewMmsUpload(upload);
 
     const body = fetchBody();
-    expect(body.report).toEqual({
-      id: expect.any(Number),
-      reportURL: REPORT_URL,
-    });
-    expect(body.order).toEqual({
-      pizzas: 10,
-      restaurant: "Gino's East",
-      orderType: "pizzas",
-      createdAt: expect.any(String),
-      cancelledAt: null,
-    });
-    expect(body.location.city).toBe("Chicago");
-    expect(body.location.state).toBe("IL");
-    expect(body.location.fullAddress).toContain("Chicago");
+    expect(Number(body.get("report_id"))).toEqual(expect.any(Number));
+    expect(body.get("report_url")).toBe(REPORT_URL);
+    expect(body.get("pizzas")).toBe("10");
+    expect(body.get("restaurant")).toBe("Gino's East");
+    expect(body.get("order_type")).toBe("pizzas");
+    expect(body.get("order_created_at")).toEqual(expect.any(String));
+    expect(body.get("order_cancelled_at")).toBe("");
+    expect(body.get("location_city")).toBe("Chicago");
+    expect(body.get("location_state")).toBe("IL");
+    expect(body.get("location_full_address")).toContain("Chicago");
   });
 
   it("sends a null order when the matched report has no order (truck-only)", async () => {
@@ -196,11 +196,10 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     await zapNewMmsUpload(upload);
 
     const body = fetchBody();
-    expect(body.report).toEqual({
-      id: expect.any(Number),
-      reportURL: REPORT_URL,
-    });
-    expect(body.order).toBeNull();
+    expect(body.get("report_url")).toBe(REPORT_URL);
+    expect(body.get("pizzas")).toBe("");
+    expect(body.get("restaurant")).toBe("");
+    expect(body.get("order_type")).toBe("");
   });
 
   it("sends a null report when the upload has no report", async () => {
@@ -222,8 +221,9 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     await zapNewMmsUpload(upload);
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
-    expect(fetchBody().report).toBeNull();
-    expect(fetchBody().order).toBeNull();
+    expect(fetchBody().get("report_id")).toBe("");
+    expect(fetchBody().get("report_url")).toBe("");
+    expect(fetchBody().get("pizzas")).toBe("");
   });
 
   it("does not leak the transcode jobId from processedFilePath", async () => {
@@ -232,7 +232,7 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     });
     await zapNewMmsUpload(upload);
 
-    expect(JSON.stringify(fetchBody())).not.toContain("1234-abcd");
+    expect(bodyString()).not.toContain("1234-abcd");
   });
 
   it("swallows fetch failures without throwing", async () => {
