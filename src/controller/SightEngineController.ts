@@ -47,8 +47,20 @@ export class SightEngineController {
         };
       }
 
+      // Derive the S3 key from the stored URL. Pipeline uploads store CDN
+      // URLs (https://media.polls.pizza/uploads/<id>.webp) where the bucket
+      // is the host, not part of the pathname, so a bucket-based replace
+      // would leave a leading slash and make GetObject 404. Match on the
+      // "/uploads/" marker (same approach as cdnUrlFromStoredUrl in
+      // src/lib/media-cdn.ts), which also covers legacy path-style S3 URLs
+      // (https://s3.us-west-2.amazonaws.com/<bucket>/uploads/...).
       const parsed = new URL(processedUrl);
-      key = parsed.pathname.replace(`/${bucket}/`, "");
+      const marker = "/uploads/";
+      const idx = parsed.pathname.indexOf(marker);
+      key =
+        idx >= 0
+          ? parsed.pathname.slice(idx + 1)
+          : parsed.pathname.replace(/^\/+/, "");
     }
 
     try {

@@ -94,6 +94,71 @@ describe("#getSightEngineScore", () => {
     expect(updated!.sightengineScore).toEqual(0.5);
   });
 
+  it("should handle CDN-style processed URLs", async () => {
+    const { checkImage } = require("../lib/sightengine/client");
+    checkImage.mockResolvedValueOnce({ score: 0.5 });
+
+    // Pipeline upload stored via cdnUrlForKey: the bucket is the host, not
+    // part of the pathname (BUG-012 regression: this used to yield a key
+    // with a leading slash, making GetObject 404 and SightEngine 502).
+    upload.processedFilePath = {
+      webp: `https://media.polls.pizza/uploads/${upload.id}/test.webp`,
+    };
+    upload.mediaStatus = "ready";
+    await upload.save();
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getSightEngineScore(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${fileName}/sightengine`,
+        params: { fileName },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toEqual({ score: 0.5, cached: false });
+
+    // Key must NOT have a leading slash
+    expect(checkImage).toHaveBeenCalledWith(
+      "reports.polls.pizza",
+      `uploads/${upload.id}/test.webp`,
+    );
+  });
+
+  it("should handle virtual-hosted-style processed URLs", async () => {
+    const { checkImage } = require("../lib/sightengine/client");
+    checkImage.mockResolvedValueOnce({ score: 0.6 });
+
+    upload.processedFilePath = {
+      webp: `https://reports.polls.pizza.s3.amazonaws.com/uploads/${upload.id}/test.webp`,
+    };
+    upload.mediaStatus = "ready";
+    await upload.save();
+
+    const response = http_mocks.createResponse();
+    const body = await controller.getSightEngineScore(
+      http_mocks.createRequest({
+        method: "GET",
+        url: `/uploads/${fileName}/sightengine`,
+        params: { fileName },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toEqual({ score: 0.6, cached: false });
+    expect(checkImage).toHaveBeenCalledWith(
+      "reports.polls.pizza",
+      `uploads/${upload.id}/test.webp`,
+    );
+  });
+
   it("should return cached on second call after a fresh API call", async () => {
     const { checkImage } = require("../lib/sightengine/client");
     checkImage.mockResolvedValueOnce({ score: 0.3 });
@@ -228,5 +293,12 @@ describe("#getSightEngineScore", () => {
 
     expect(response.statusCode).toEqual(502);
     expect(body.errors).toEqual(["SightEngine check failed"]);
+
+    // Regression guard: the key handed to checkImage must have been
+    // correctly derived (no leading slash) even when the API call fails.
+    expect(checkImage).toHaveBeenCalledWith(
+      "reports.polls.pizza",
+      `uploads/${upload.id}/test.webp`,
+    );
   });
 });
