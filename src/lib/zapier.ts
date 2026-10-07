@@ -151,6 +151,11 @@ export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
       report = loaded?.report ?? null;
     }
 
+    // Report.order is eager, so whenever a report resolved above, its order
+    // (if any) came along. Include the order details (pizzas sent,
+    // restaurant) so the internal channel gets full context.
+    const order = report?.order ?? null;
+
     const processed = (upload.processedFilePath || {}) as Record<
       string,
       string
@@ -172,6 +177,15 @@ export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
         },
         location: await upload.location.asJSONPrivate(),
         report: report ? { id: report.id, reportURL: report.reportURL } : null,
+        order: order
+          ? {
+              pizzas: order.quantity,
+              restaurant: order.restaurant,
+              orderType: order.orderType,
+              createdAt: order.createdAt,
+              cancelledAt: order.cancelledAt,
+            }
+          : null,
         mediaLinks,
       },
       ZapHooks.ZAP_NEW_MMS_UPLOAD,

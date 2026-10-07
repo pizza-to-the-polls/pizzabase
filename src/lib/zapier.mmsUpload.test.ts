@@ -2,6 +2,7 @@ import { zapNewMmsUpload } from "./zapier";
 import { Upload } from "../entity/Upload";
 import { Report } from "../entity/Report";
 import { Location } from "../entity/Location";
+import { Order, OrderTypes } from "../entity/Order";
 import { NormalAddress } from "./validator";
 
 const ADDRESS: NormalAddress = {
@@ -24,15 +25,33 @@ const MP4_URL =
 /**
  * Build a realistic MMS upload through the real entity factories so the
  * report relation, location and defaults match production behavior.
+ * `withOrder` attaches a fulfilled order (pizzas sent, restaurant) to the
+ * matched report, mirroring how the matcher only matches reports with an
+ * order (or truck) attached.
  */
 async function createMmsUpload(
   overrides: Partial<Upload> = {},
+  { withOrder = true }: { withOrder?: boolean } = {},
 ): Promise<Upload> {
   const [report] = await Report.createNewReport(
     "+14255551234",
     REPORT_URL,
     ADDRESS,
   );
+
+  if (withOrder) {
+    const order = new Order();
+    order.location = report.location;
+    order.cost = 300;
+    order.quantity = 10;
+    order.snacks = 10;
+    order.orderType = OrderTypes.pizzas;
+    order.restaurant = "Gino's East";
+    await order.save();
+    report.order = order;
+    await report.save();
+  }
+
   const [upload] = await Upload.createFromMms(report, {
     fileExt: "jpg",
     fileHash: `mms-notify-${Math.random().toString(36).slice(2)}`,
@@ -151,7 +170,7 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     expect(fetchBody().upload.sightengineScore).toBe(0.87);
   });
 
-  it("includes the report URL from the report relation", async () => {
+  it("includes the report URL and order details (pizzas sent, restaurant, address)", async () => {
     const upload = await createMmsUpload();
     await zapNewMmsUpload(upload);
 
@@ -160,8 +179,28 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
       id: expect.any(Number),
       reportURL: REPORT_URL,
     });
+    expect(body.order).toEqual({
+      pizzas: 10,
+      restaurant: "Gino's East",
+      orderType: "pizzas",
+      createdAt: expect.any(String),
+      cancelledAt: null,
+    });
     expect(body.location.city).toBe("Chicago");
     expect(body.location.state).toBe("IL");
+    expect(body.location.fullAddress).toContain("Chicago");
+  });
+
+  it("sends a null order when the matched report has no order (truck-only)", async () => {
+    const upload = await createMmsUpload({}, { withOrder: false });
+    await zapNewMmsUpload(upload);
+
+    const body = fetchBody();
+    expect(body.report).toEqual({
+      id: expect.any(Number),
+      reportURL: REPORT_URL,
+    });
+    expect(body.order).toBeNull();
   });
 
   it("sends a null report when the upload has no report", async () => {
@@ -184,6 +223,7 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
 
     expect(global.fetch).toHaveBeenCalledTimes(1);
     expect(fetchBody().report).toBeNull();
+    expect(fetchBody().order).toBeNull();
   });
 
   it("does not leak the transcode jobId from processedFilePath", async () => {
