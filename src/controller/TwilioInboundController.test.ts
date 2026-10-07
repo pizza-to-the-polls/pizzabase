@@ -42,6 +42,7 @@ const fakeReport = {
 } as unknown as Report;
 
 const fakeUpload = {
+  id: 2249,
   filePath: "uploads/chicago-il-abc123.jpg",
   rawBucket: "raw.polls.pizza",
 } as unknown as Upload;
@@ -110,6 +111,12 @@ async function callInbound(
     () => undefined,
   );
   return { returned, response };
+}
+
+/** Parse the JSON body of a trusted-relay response (the Zapier path replies
+ * in JSON, not TwiML — only real Twilio gets TwiML). */
+function relayJson(response: ReturnType<typeof http_mocks.createResponse>) {
+  return JSON.parse(response._getData());
 }
 
 beforeEach(() => {
@@ -457,7 +464,15 @@ describe("TwilioInboundController #inbound", () => {
       );
       expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
-      expect(response._getData()).toContain(SHARED_FRAGMENT);
+      // Relay replies in JSON (Zapier maps it upstream), never TwiML.
+      expect(response.getHeader("Content-Type")).toContain("application/json");
+      const body = relayJson(response);
+      expect(body.ok).toBe(true);
+      expect(body.reply).toContain("Thanks for sharing!");
+      expect(body.matched).toBe(true);
+      expect(body.savedCount).toBe(1);
+      expect(body.unsupportedCount).toBe(0);
+      expect(body.uploadIds).toEqual([fakeUpload.id]);
     });
 
     it("also accepts the token as Authorization: Bearer", async () => {
@@ -469,7 +484,10 @@ describe("TwilioInboundController #inbound", () => {
       );
 
       expect(response.statusCode).toEqual(200);
-      expect(response._getData()).toContain(THANKS_FRAGMENT);
+      const body = relayJson(response);
+      expect(body.ok).toBe(true);
+      expect(body.reply).toContain(THANKS_FRAGMENT);
+      expect(body.matched).toBe(true);
     });
 
     it("still requires https for relay media URLs", async () => {
@@ -488,9 +506,10 @@ describe("TwilioInboundController #inbound", () => {
 
       expect(global.fetch).not.toHaveBeenCalled();
       expect(createFromMmsSpy).not.toHaveBeenCalled();
-      expect(response._getData()).toContain(
-        "We couldn&apos;t process some of the files",
-      );
+      const body = relayJson(response);
+      expect(body.unsupportedCount).toBe(1);
+      expect(body.savedCount).toBe(0);
+      expect(body.reply).toContain("We couldn't process some of the files");
     });
 
     it("does not allow the relay path when INBOUND_WEBHOOK_TOKEN is unset", async () => {
