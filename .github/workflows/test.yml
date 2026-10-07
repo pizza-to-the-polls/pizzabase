@@ -208,7 +208,7 @@ jobs:
           TWILIO_AUTH_TOKEN: ${{ secrets.STAGING_TWILIO_AUTH_TOKEN }}
           # Staging-only: allow fetching public sample videos for end-to-end
           # MMS tests (prod deploy never sets this — stays Twilio-only).
-          TWILIO_MEDIA_EXTRA_HOSTS: commondatastorage.googleapis.com
+          TWILIO_MEDIA_EXTRA_HOSTS: test-videos.co.uk
 
           # Social posting is prod-only — staging deploys without social
           # credentials; social-config treats empty creds as a clean no-op.

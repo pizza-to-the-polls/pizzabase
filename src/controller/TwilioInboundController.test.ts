@@ -345,17 +345,17 @@ describe("TwilioInboundController #inbound", () => {
       await callInbound(
         mediaBody(
           "video/mp4",
-          "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+          "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
         ),
       );
       expect(global.fetch).not.toHaveBeenCalled();
 
-      process.env.TWILIO_MEDIA_EXTRA_HOSTS = "commondatastorage.googleapis.com";
+      process.env.TWILIO_MEDIA_EXTRA_HOSTS = "test-videos.co.uk";
       try {
         const { response } = await callInbound(
           mediaBody(
             "video/mp4",
-            "https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ForBiggerBlazes.mp4",
+            "https://test-videos.co.uk/vids/bigbuckbunny/mp4/h264/360/Big_Buck_Bunny_360_10s_1MB.mp4",
           ),
         );
         expect(global.fetch).toHaveBeenCalledTimes(1);

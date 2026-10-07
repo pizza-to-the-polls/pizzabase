@@ -81,7 +81,7 @@ See `.env.example` at the repo root. All four are passed through in
 - `TWILIO_MEDIA_EXTRA_HOSTS` (optional) — extra comma-separated hosts the
   webhook may fetch `MediaUrl`s from, on top of the Twilio-only allowlist.
   **Staging-only test convenience** (the staging deploy sets it to
-  `commondatastorage.googleapis.com` for public sample videos); prod leaves
+  `test-videos.co.uk` for public sample videos); prod leaves
   it unset so the default Twilio-only SSRF policy applies.
 
 ---
