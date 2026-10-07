@@ -80,9 +80,13 @@ See `.env.example` at the repo root. All four are passed through in
   (`Report.findRecentFulfilledByPhone`). Defaults to 30.
 - `TWILIO_MEDIA_EXTRA_HOSTS` (optional) — extra comma-separated hosts the
   webhook may fetch `MediaUrl`s from, on top of the Twilio-only allowlist.
-  **Staging-only test convenience** (the staging deploy sets it to
-  `test-videos.co.uk` for public sample videos); prod leaves
-  it unset so the default Twilio-only SSRF policy applies.
+  Test convenience only; both stages leave it unset so the Twilio-only
+  SSRF policy applies (the relay path in §4b has its own https-only rule).
+- `INBOUND_WEBHOOK_TOKEN` (optional) — shared token for the trusted-relay
+  path (§4b): the Zapier catch-hook Zap forwarding non-Twilio multimedia
+  messages authenticates with `X-PTP-Inbound-Token` (or
+  `Authorization: Bearer`). Unset = relay disabled (403); the Twilio
+  signature path is unaffected.
 
 ---
 
@@ -143,6 +147,40 @@ There is no dedicated Slack webhook. MMS media notifications ride the same
 4. The integration is optional by design: with the env var unset, the notify
    step is a silent no-op. Only pending/clean MMS uploads notify —
    flagged/rejected media is reviewed by a human in Retool and never posted.
+
+## 4b. Trusted relay: non-Twilio multimedia via Zapier
+
+`POST /twilio/inbound` accepts two trust paths:
+
+1. **Real Twilio** — valid `X-Twilio-Signature` (HMAC over url + params).
+   Media fetches are restricted to Twilio's own hosts (SSRF guard).
+2. **Trusted relay** — a shared token authenticates the sender: the Zapier
+   catch-hook Zap that already receives multimedia messages from other
+   channels and forwards them here in the **same flat Twilio shape**
+   (`From`, `Body`, `MediaUrl0`, `MediaContentType0`, ...). The token rides
+   in `X-PTP-Inbound-Token` or `Authorization: Bearer <token>` — both are
+   static headers Zapier's POST action can send. Relay bodies may be JSON
+   or form-encoded (`bodyParser.json` is applied); the shape is identical.
+   Media fetches on the relay path may reference any **https** host (the
+   sender holds the token; we still enforce the 5MB cap and forward no
+   credentials).
+
+Inbound-media setup (the relay Zap):
+
+1. In the Zap that receives the upstream multimedia messages, add a
+   **Webhooks by Zapier → POST** step:
+   - **URL**: `https://base-next.polls.pizza/twilio/inbound` (staging) /
+     `https://base.polls.pizza/twilio/inbound` (prod)
+   - **Payload Type**: JSON or Form (both accepted)
+   - **Headers**: `X-PTP-Inbound-Token: <INBOUND_WEBHOOK_TOKEN value>`
+   - **Data**: map the upstream fields to the Twilio shape —
+     `From` (phone, E.164 ideal), `Body` (text), `MediaUrl0`,
+     `MediaContentType0` (upstream media URL + type).
+
+2. Everything downstream is shared with the Twilio path: STOP/ban handling,
+   report matching (`MMS_MATCH_WINDOW_DAYS`), dedup by file hash, the
+   S3 → EXIF → format/transcode pipeline, Retool visibility, and the
+   `ZAP_NEW_MMS_UPLOAD` notify.
 
 ---
 

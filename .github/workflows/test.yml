@@ -202,6 +202,7 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
           TWILIO_AUTH_TOKEN: ${{ secrets.STAGING_TWILIO_AUTH_TOKEN }}
+          INBOUND_WEBHOOK_TOKEN: ${{ secrets.STAGING_INBOUND_WEBHOOK_TOKEN }}
 
           # Social posting is prod-only — staging deploys without social
           # credentials; social-config treats empty creds as a clean no-op.
