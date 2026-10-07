@@ -4,7 +4,7 @@ module.exports = {
   // The DB connection is a module singleton → stays alive across all tests.
   // This mirrors Lambda's "never close" behavior.
   maxWorkers: 1,
-  roots: ["<rootDir>/src", "<rootDir>/src/tests"],
+  roots: ["<rootDir>/src", "<rootDir>/src/tests", "<rootDir>/docs"],
   testMatch: [
     "**/__tests__/**/*.+(ts|tsx|js)",
     "**/?(*.)+(spec|test).+(ts|tsx|js)",

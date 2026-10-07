@@ -201,14 +201,7 @@ jobs:
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
-          # MMS reply workflow (epic #255). Empty until the secret exists
-          # = webhook 403s everything (by design). The MMS media notify rides
-          # the ZAP_NEW_MMS_UPLOAD Zapier hook (wired above like every other
-          # ZAP_* event).
           TWILIO_AUTH_TOKEN: ${{ secrets.STAGING_TWILIO_AUTH_TOKEN }}
-          # Staging-only: allow fetching public sample videos for end-to-end
-          # MMS tests (prod deploy never sets this — stays Twilio-only).
-          TWILIO_MEDIA_EXTRA_HOSTS: test-videos.co.uk
 
           # Social posting is prod-only — staging deploys without social
           # credentials; social-config treats empty creds as a clean no-op.

@@ -166,10 +166,6 @@ jobs:
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
-          # MMS reply workflow (epic #255). Empty until the secret exists
-          # = webhook 403s everything (by design). The MMS media notify rides
-          # the ZAP_NEW_MMS_UPLOAD Zapier hook (wired above like every other
-          # ZAP_* event).
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
 
           BSKY_PDS_URL: ${{ secrets.BSKY_PDS_URL }}

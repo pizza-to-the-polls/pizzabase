@@ -15,7 +15,7 @@
 import { readFileSync } from "fs";
 import path from "path";
 
-const ROOT = path.resolve(__dirname, "..", "..");
+const ROOT = path.resolve(__dirname, "..");
 
 const envExample = readFileSync(path.join(ROOT, ".env.example"), "utf8");
 const runbook = readFileSync(
