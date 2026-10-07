@@ -148,6 +148,30 @@ function sendTwiml(response: Response, status: number, message?: string) {
   response.send(twiml(message));
 }
 
+/**
+ * Reply shape for the trusted-relay path (Zapier). Zapier has no use for
+ * TwiML — it POSTs server-to-server and maps the response in the Zap.
+ * JSON carries the same human reply text plus machine-readable counts so
+ * the upstream Zap can route (e.g. on `matched` / `uploadIds`).
+ */
+interface RelayReply {
+  ok: boolean;
+  reply: string;
+  phone: string;
+  matched: boolean;
+  savedCount: number;
+  oversizeCount: number;
+  unsupportedCount: number;
+  failedCount: number;
+  uploadIds: number[];
+}
+
+function sendRelayJson(response: Response, status: number, reply: RelayReply) {
+  response.status(status);
+  response.set("Content-Type", "application/json");
+  response.json(reply);
+}
+
 interface MediaItem {
   url: string;
   contentType: string;
@@ -194,7 +218,15 @@ export class TwilioInboundController {
           `Twilio inbound webhook: signature verification failed for ${url}`,
         ),
       );
-      sendTwiml(response, 403);
+      // Neither TwiML nor JSON here — this caller is nobody we trust; a
+      // bare empty <Response/> (or empty JSON object) says nothing.
+      if (request.headers["x-ptp-inbound-token"] !== undefined) {
+        response.status(403);
+        response.set("Content-Type", "application/json");
+        response.json({ ok: false });
+      } else {
+        sendTwiml(response, 403);
+      }
       return null;
     }
 
@@ -205,10 +237,36 @@ export class TwilioInboundController {
     const mediaItems = collectMediaItems(request.body);
     const normalizedPhone = normalizePhone(from);
 
+    // Per-path response format: real Twilio (signatureOk) needs TwiML so the
+    // carrier texts the recipient back; the trusted relay (Zapier) gets JSON
+    // it can map upstream. `respond` is the single exit — every path below
+    // goes through it exactly once, with the final human-readable `reply`
+    // text plus machine-readable details for the relay.
+    const details = {
+      phone: normalizedPhone,
+      matched: false,
+      savedCount: 0,
+      oversizeCount: 0,
+      unsupportedCount: 0,
+      failedCount: 0,
+      uploadIds: [] as number[],
+    };
+    const respond = (status: number, reply: string) => {
+      if (signatureOk) {
+        sendTwiml(response, status, reply);
+      } else {
+        sendRelayJson(response, status, {
+          ok: status < 400,
+          reply,
+          ...details,
+        });
+      }
+    };
+
     try {
       // --- Bans / opt-out -------------------------------------------------
       if (await BannedPhoneNumber.isBanned(normalizedPhone)) {
-        sendTwiml(response, 200, OPTED_OUT_REPLY);
+        respond(200, OPTED_OUT_REPLY);
         return null;
       }
 
@@ -223,7 +281,7 @@ export class TwilioInboundController {
           // Duplicate STOP / DB hiccup must not break the opt-out reply.
           notifyBugsnag(e as Error);
         }
-        sendTwiml(response, 200, UNSUBSCRIBED_REPLY);
+        respond(200, UNSUBSCRIBED_REPLY);
         return null;
       }
 
@@ -232,13 +290,13 @@ export class TwilioInboundController {
 
       if (!report) {
         // Never store orphan media — nothing here is attached to a report.
-        sendTwiml(
-          response,
+        respond(
           200,
           mediaItems.length > 0 ? NO_MATCH_MEDIA_REPLY : THANKS_REPLY,
         );
         return null;
       }
+      details.matched = true;
 
       // --- Media ingestion --------------------------------------------------
       const s3Client = new S3Client({
@@ -249,18 +307,27 @@ export class TwilioInboundController {
       let oversizeCount = 0;
       let unsupportedCount = 0;
       let failedCount = 0;
+      // Mirror the counters onto details as they move so the relay JSON
+      // reflects exactly what happened.
+      const track = () => {
+        details.savedCount = savedCount;
+        details.oversizeCount = oversizeCount;
+        details.unsupportedCount = unsupportedCount;
+        details.failedCount = failedCount;
+      };
 
       for (const item of mediaItems) {
         try {
           const fileExt = MIME_TO_EXT[item.contentType];
           if (!fileExt) {
             unsupportedCount++;
+            track();
             continue;
           }
 
-          // SSRF guard: only ever fetch media from Twilio's own hosts.
           if (!isAllowedMediaUrl(item.url)) {
             unsupportedCount++;
+            track();
             continue;
           }
 
@@ -280,11 +347,13 @@ export class TwilioInboundController {
             declaredLength > MAX_MEDIA_BYTES
           ) {
             oversizeCount++;
+            track();
             continue;
           }
           const bytes = Buffer.from(await mediaResponse.arrayBuffer());
           if (bytes.length > MAX_MEDIA_BYTES) {
             oversizeCount++;
+            track();
             continue;
           }
 
@@ -313,14 +382,18 @@ export class TwilioInboundController {
             );
           }
           savedCount++;
+          details.savedCount = savedCount;
+          if (upload.id != null) details.uploadIds.push(upload.id);
         } catch (e) {
           // One failed media item must not abort the others.
           failedCount++;
+          details.failedCount = failedCount;
           notifyBugsnag(e as Error);
         }
       }
 
       // --- Reply -------------------------------------------------------------
+      track();
       let message: string;
       if (savedCount > 0) {
         message = SHARED_REPLY;
@@ -337,14 +410,13 @@ export class TwilioInboundController {
         message += " We couldn't process some of the files you sent.";
       }
 
-      sendTwiml(response, 200, message);
+      respond(200, message);
       return null;
     } catch (e) {
       // Robustness: never leak stack traces into TwiML, always reply XML.
       notifyBugsnag(e as Error);
       if (!response.headersSent) {
-        sendTwiml(
-          response,
+        respond(
           200,
           "Sorry — something went wrong on our end. Please try again later.",
         );

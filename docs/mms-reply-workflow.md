@@ -182,6 +182,28 @@ Inbound-media setup (the relay Zap):
    S3 → EXIF → format/transcode pipeline, Retool visibility, and the
    `ZAP_NEW_MMS_UPLOAD` notify.
 
+3. **Replies are JSON on the relay path** (Zapier can't do anything with
+   TwiML; only real Twilio gets `text/xml` so the carrier can text the
+   recipient back). Map fields in the Zap off this shape:
+
+   ```json
+   {
+     "ok": true,
+     "reply": "Thanks for sharing! 🍕",
+     "phone": "+15551231234",
+     "matched": true,
+     "savedCount": 1,
+     "oversizeCount": 0,
+     "unsupportedCount": 0,
+     "failedCount": 0,
+     "uploadIds": [2249]
+   }
+   ```
+
+   `matched: false` means the sender had no fulfilled report in the window —
+   nothing was stored (`reply` says so in human terms). A 403 reply is
+   `{"ok": false}` — the token was wrong (or `INBOUND_WEBHOOK_TOKEN` unset).
+
 ---
 
 ## 5. Deployment checklist (staging first)
