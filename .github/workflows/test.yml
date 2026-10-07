@@ -177,6 +177,7 @@ jobs:
           ZAP_NEW_UPLOAD: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_CLIP: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_NEW_TRUCK: ${{ secrets.STAGING_ZAP_ALL }}
+          ZAP_NEW_MMS_UPLOAD: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_SKIP_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_TRUCK_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
           ZAP_ORDER_REPORT: ${{ secrets.STAGING_ZAP_ALL }}
@@ -199,6 +200,8 @@ jobs:
           MEDIA_CDN_DOMAIN: media.polls.pizza
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+          TWILIO_AUTH_TOKEN: ${{ secrets.STAGING_TWILIO_AUTH_TOKEN }}
 
           # Social posting is prod-only — staging deploys without social
           # credentials; social-config treats empty creds as a clean no-op.

@@ -29,7 +29,7 @@ import {
   detectVideoDimensions,
   detectVideoDuration,
 } from "../lib/mp4-rotation";
-import { zapNewUpload } from "../lib/zapier";
+import { zapNewMmsUpload, zapNewUpload } from "../lib/zapier";
 import { cdnUrlForKey } from "../lib/media-cdn";
 import * as path from "path";
 
@@ -128,6 +128,18 @@ export async function handler(event: S3Event): Promise<void> {
         upload.exifScrubbed = true;
         upload.mediaStatus = "ready";
         await upload.save();
+
+        // Zapier heads-up (ZAP_NEW_MMS_UPLOAD) for processed MMS media. Fire-and-forget inside
+        // its own try/catch: a Slack failure must never mark media failed.
+        try {
+          await zapNewMmsUpload(upload);
+        } catch (notifyErr) {
+          console.error(
+            "[on-media-format] Zapier notify failed (swallowed):",
+            notifyErr,
+          );
+        }
+
         console.log(
           `[on-media-format] Image ${key} processed:`,
           JSON.stringify(result),

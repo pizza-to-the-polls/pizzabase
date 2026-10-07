@@ -135,6 +135,7 @@ jobs:
           ZAP_NEW_UPLOAD: ${{ secrets.ZAP_NEW_UPLOAD }}
           ZAP_NEW_CLIP: ${{ secrets.ZAP_NEW_CLIP }}
           ZAP_NEW_TRUCK: ${{ secrets.ZAP_NEW_TRUCK }}
+          ZAP_NEW_MMS_UPLOAD: ${{ secrets.ZAP_NEW_MMS_UPLOAD }}
           ZAP_SKIP_REPORT: ${{ secrets.ZAP_SKIP_REPORT }}
           ZAP_TRUCK_REPORT: ${{ secrets.ZAP_TRUCK_REPORT }}
           ZAP_ORDER_REPORT: ${{ secrets.ZAP_ORDER_REPORT }}
@@ -164,6 +165,8 @@ jobs:
           MEDIA_CDN_DOMAIN: media.polls.pizza
           MEDIACONVERT_ROLE_ARN: ${{ secrets.MEDIACONVERT_ROLE_ARN }}
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
+
+          TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
 
           BSKY_PDS_URL: ${{ secrets.BSKY_PDS_URL }}
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}

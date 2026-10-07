@@ -22,7 +22,7 @@ import {
   PutObjectCommand,
 } from "@aws-sdk/client-s3";
 import { cdnUrlForKey } from "../lib/media-cdn";
-import { zapNewUpload } from "../lib/zapier";
+import { zapNewMmsUpload, zapNewUpload } from "../lib/zapier";
 
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
@@ -157,6 +157,20 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
   }
 
   await upload.save();
+
+  // Zapier heads-up (ZAP_NEW_MMS_UPLOAD) for processed MMS media (COMPLETE only). Fire-and-forget
+  // in its own try/catch: a Zapier failure must never fail this lambda or
+  // trigger EventBridge retries.
+  if (status === "COMPLETE") {
+    try {
+      await zapNewMmsUpload(upload);
+    } catch (notifyErr) {
+      console.error(
+        "[on-mediaconvert-complete] Zapier notify failed (swallowed):",
+        notifyErr,
+      );
+    }
+  }
 }
 
 /**
