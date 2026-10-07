@@ -70,6 +70,10 @@ provider:
     # Extra MediaUrl hosts (comma-separated). Staging-only test media
     # convenience; prod leaves it unset so the policy stays Twilio-only.
     TWILIO_MEDIA_EXTRA_HOSTS: ${env:TWILIO_MEDIA_EXTRA_HOSTS, ''}
+    # Shared token for the trusted-relay path on POST /twilio/inbound (the
+    # Zapier catch-hook Zap forwarding non-Twilio multimedia messages).
+    # Unset = relay disabled; signature path still works.
+    INBOUND_WEBHOOK_TOKEN: ${env:INBOUND_WEBHOOK_TOKEN, ''}
 
     STRIPE_SECRET_KEY: ${env:STRIPE_SECRET_KEY}
     STRIPE_SECRET_WH: ${env:STRIPE_SECRET_WH}

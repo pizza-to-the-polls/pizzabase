@@ -167,6 +167,7 @@ jobs:
           AWS_ACCOUNT_ID: ${{ secrets.AWS_ACCOUNT_ID }}
 
           TWILIO_AUTH_TOKEN: ${{ secrets.TWILIO_AUTH_TOKEN }}
+          INBOUND_WEBHOOK_TOKEN: ${{ secrets.INBOUND_WEBHOOK_TOKEN }}
 
           BSKY_PDS_URL: ${{ secrets.BSKY_PDS_URL }}
           BSKY_HANDLE: ${{ secrets.BSKY_HANDLE }}

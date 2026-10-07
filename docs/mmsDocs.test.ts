@@ -59,6 +59,7 @@ describe("MMS env var documentation (MMS-006)", () => {
     "ZAP_NEW_MMS_UPLOAD",
     "MMS_MATCH_WINDOW_DAYS",
     "TWILIO_MEDIA_EXTRA_HOSTS",
+    "INBOUND_WEBHOOK_TOKEN",
   ] as const;
 
   describe(".env.example", () => {

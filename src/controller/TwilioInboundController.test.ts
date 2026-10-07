@@ -54,7 +54,10 @@ const verifyMock = verifyTwilioSignature as jest.Mock;
 const bugsnagMock = notifyBugsnag as jest.Mock;
 const putObjectMock = PutObjectCommand as unknown as jest.Mock;
 
-function buildRequest(body: Record<string, any>) {
+function buildRequest(
+  body: Record<string, any>,
+  headers: Record<string, string> = {},
+) {
   return http_mocks.createRequest({
     method: "POST",
     protocol: "https",
@@ -62,6 +65,7 @@ function buildRequest(body: Record<string, any>) {
       host: "api.polls.pizza",
       "x-twilio-signature": "validsig==",
       "content-type": "application/x-www-form-urlencoded",
+      ...headers,
     },
     originalUrl: "/twilio/inbound",
     body,
@@ -95,10 +99,13 @@ function mediaBody(
   };
 }
 
-async function callInbound(body: Record<string, any>) {
+async function callInbound(
+  body: Record<string, any>,
+  headers: Record<string, string> = {},
+) {
   const response = http_mocks.createResponse();
   const returned = await controller.inbound(
-    buildRequest(body),
+    buildRequest(body, headers),
     response,
     () => undefined,
   );
@@ -386,6 +393,115 @@ describe("TwilioInboundController #inbound", () => {
       } finally {
         delete process.env.TWILIO_MEDIA_EXTRA_HOSTS;
       }
+    });
+  });
+
+  describe("trusted relay path (INBOUND_WEBHOOK_TOKEN — Zapier forwards non-Twilio media)", () => {
+    const TOKEN = "relay-test-token-abcdef";
+    const RELAY_HEADERS = { "x-ptp-inbound-token": TOKEN };
+
+    beforeEach(() => {
+      process.env.INBOUND_WEBHOOK_TOKEN = TOKEN;
+      // Relay requests carry no (valid) Twilio signature.
+      verifyMock.mockImplementation(() => false);
+    });
+
+    afterEach(() => {
+      delete process.env.INBOUND_WEBHOOK_TOKEN;
+    });
+
+    it("403s without either signature or token", async () => {
+      const { response } = await callInbound({ From: PHONE, Body: "hi" });
+      expect(response.statusCode).toEqual(403);
+    });
+
+    it("403s with a wrong token", async () => {
+      const { response } = await callInbound(
+        { From: PHONE, Body: "hi" },
+        { "x-ptp-inbound-token": "wrong-token" },
+      );
+      expect(response.statusCode).toEqual(403);
+      expect(bugsnagMock).toHaveBeenCalled();
+    });
+
+    it("accepts a JSON body in the same flat Twilio shape via token header", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      const response = http_mocks.createResponse();
+      const request = buildRequest(
+        {
+          From: PHONE,
+          Body: "pizza pic from the relay",
+          MediaUrl0: "https://relay.example.test/m/photo.jpg",
+          MediaContentType0: "image/jpeg",
+        },
+        {
+          ...RELAY_HEADERS,
+          "content-type": "application/json",
+          "x-twilio-signature": "",
+        },
+      );
+      const returned = await controller.inbound(
+        request,
+        response,
+        () => undefined,
+      );
+
+      expect(returned).toBeNull();
+      expect(response.statusCode).toEqual(200);
+      // Relay media may be any https host — fetched and stored.
+      expect(global.fetch).toHaveBeenCalledTimes(1);
+      expect(global.fetch).toHaveBeenCalledWith(
+        "https://relay.example.test/m/photo.jpg",
+      );
+      expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(response._getData()).toContain(SHARED_FRAGMENT);
+    });
+
+    it("also accepts the token as Authorization: Bearer", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+
+      const { response } = await callInbound(
+        { From: PHONE, Body: "bearer token form post" },
+        { authorization: `Bearer ${TOKEN}`, "x-twilio-signature": "" },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getData()).toContain(THANKS_FRAGMENT);
+    });
+
+    it("still requires https for relay media URLs", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockFetchBody(Buffer.alloc(64));
+
+      const { response } = await callInbound(
+        {
+          From: PHONE,
+          Body: "http media from relay",
+          MediaUrl0: "http://relay.example.test/m/photo.jpg",
+          MediaContentType0: "image/jpeg",
+        },
+        RELAY_HEADERS,
+      );
+
+      expect(global.fetch).not.toHaveBeenCalled();
+      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      expect(response._getData()).toContain(
+        "We couldn&apos;t process some of the files",
+      );
+    });
+
+    it("does not allow the relay path when INBOUND_WEBHOOK_TOKEN is unset", async () => {
+      delete process.env.INBOUND_WEBHOOK_TOKEN;
+
+      const { response } = await callInbound(
+        { From: PHONE, Body: "no token configured" },
+        RELAY_HEADERS,
+      );
+
+      expect(response.statusCode).toEqual(403);
     });
   });
 

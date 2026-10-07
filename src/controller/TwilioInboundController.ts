@@ -12,7 +12,10 @@ import { normalizePhone } from "../lib/validator/normalizeContact";
  * MMS-003: inbound Twilio SMS/MMS webhook.
  *
  * Flow:
- *   1. Verify the X-Twilio-Signature header (403 + minimal TwiML on failure).
+ *   1. Verify the X-Twilio-Signature header (403 + minimal TwiML on
+ *      failure), or the shared-token trusted-relay path (X-PTP-Inbound-Token
+ *      / Authorization: Bearer) used by the Zapier catch-hook Zap that
+ *      forwards non-Twilio multimedia messages in the same Twilio shape.
  *   2. Handle bans / STOP opt-out keywords.
  *   3. Match the sender to a recent fulfilled report (MMS-001).
  *   4. Download attached media (short-lived signed Twilio S3 redirects) and
@@ -45,6 +48,43 @@ const twilioMediaExtraHosts = (): Set<string> => {
     .map((h) => h.trim().toLowerCase())
     .filter(Boolean);
   return new Set(hosts);
+};
+
+/**
+ * Media URL guard for the trusted-relay path (see inbound): the sender is
+ * authenticated by shared token, so any https host is acceptable. Runs in
+ * Lambda (no instance metadata to leak), the 5MB cap applies, and no
+ * credentials are forwarded to the fetch target.
+ */
+const isHttpsMediaUrl = (url: string): boolean => {
+  try {
+    return new URL(url).protocol === "https:";
+  } catch {
+    return false;
+  }
+};
+
+/**
+ * Authenticate the trusted-relay sender (e.g. the Zapier catch-hook Zap that
+ * forwards non-Twilio multimedia messages to this endpoint in the same
+ * shape Twilio POSTs). The shared token rides in X-PTP-Inbound-Token or as
+ * `Authorization: Bearer <token>` — both are static headers Zapier can send.
+ */
+const relayTokenFrom = (request: Request): string => {
+  const custom = request.headers["x-ptp-inbound-token"];
+  if (typeof custom === "string" && custom.length > 0) return custom;
+  const authorization = request.headers.authorization;
+  if (typeof authorization === "string") {
+    const [scheme, token] = authorization.split(" ");
+    if (scheme.toLowerCase() === "bearer" && token) return token;
+  }
+  return "";
+};
+
+const isRelayAuthorized = (request: Request): boolean => {
+  const expected = process.env.INBOUND_WEBHOOK_TOKEN || "";
+  if (!expected) return false;
+  return relayTokenFrom(request) === expected;
 };
 
 const isTwilioMediaUrl = (url: string): boolean => {
@@ -133,13 +173,22 @@ export class TwilioInboundController {
     // Twilio signs the exact URL it POSTed to, including query string.
     const url = `${request.protocol}://${request.get("host")}${request.originalUrl}`;
 
-    if (
-      !verifyTwilioSignature({
-        url,
-        body: request.body ?? {},
-        signature: (request.headers["x-twilio-signature"] as string) ?? null,
-      })
-    ) {
+    // Two trust paths reach this handler:
+    //   1. Real Twilio: valid X-Twilio-Signature (HMAC over url + params).
+    //   2. Trusted relay (the Zapier catch-hook Zap forwarding non-Twilio
+    //      multimedia messages): shared-token auth via X-PTP-Inbound-Token
+    //      or Authorization: Bearer. Relay sends may be JSON — the shape is
+    //      the same flat Twilio keys (From, Body, MediaUrl0, ...).
+    // Media fetching is stricter for (1): Twilio hosts only. Relay (2) may
+    // reference any https host, since the sender holds the token.
+    const signatureOk = verifyTwilioSignature({
+      url,
+      body: request.body ?? {},
+      signature: (request.headers["x-twilio-signature"] as string) ?? null,
+    });
+    const relayOk = isRelayAuthorized(request);
+
+    if (!signatureOk && !relayOk) {
       notifyBugsnag(
         new Error(
           `Twilio inbound webhook: signature verification failed for ${url}`,
@@ -148,6 +197,8 @@ export class TwilioInboundController {
       sendTwiml(response, 403);
       return null;
     }
+
+    const isAllowedMediaUrl = signatureOk ? isTwilioMediaUrl : isHttpsMediaUrl;
 
     const from = String(request.body?.From ?? "");
     const text = String(request.body?.Body ?? "");
@@ -208,7 +259,7 @@ export class TwilioInboundController {
           }
 
           // SSRF guard: only ever fetch media from Twilio's own hosts.
-          if (!isTwilioMediaUrl(item.url)) {
+          if (!isAllowedMediaUrl(item.url)) {
             unsupportedCount++;
             continue;
           }
