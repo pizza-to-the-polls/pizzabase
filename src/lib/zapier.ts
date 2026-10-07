@@ -81,6 +81,31 @@ const zapAny = async (objs: any, hook: ZapHooks): Promise<void> => {
   }
 };
 
+/**
+ * Form-encoded variant of zapAny for hooks whose Zap expects
+ * application/x-www-form-urlencoded rather than a JSON body. Fields are
+ * flat key/value pairs; `hook` rides along as the first pair so the Zap can
+ * route on it exactly like the JSON hooks do.
+ */
+const zapAnyForm = async (
+  fields: Record<string, string>,
+  hook: ZapHooks,
+): Promise<void> => {
+  if (!process.env[hook as string]) return;
+
+  const params = new URLSearchParams();
+  params.append("hook", hook);
+  for (const [key, value] of Object.entries(fields)) {
+    if (value != null) params.append(key, value);
+  }
+
+  await fetch(process.env[hook as string], {
+    method: "POST",
+    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    body: params,
+  });
+};
+
 export const zapNewReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_NEW_REPORT);
 export const zapNewLocation = async (report: Report) =>
@@ -165,28 +190,44 @@ export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
       .map(([, stored]) => cdnUrlFromStoredUrl(stored))
       .filter((url): url is string => Boolean(url));
 
-    await zapAny(
+    // ZAP_NEW_MMS_UPLOAD's Zap consumes a form-encoded (flat) body, not
+    // JSON — send every key on every call (empty string for absent
+    // values) so Zapier field mappings stay stable across events.
+    const location = upload.location;
+    await zapAnyForm(
       {
-        upload: {
-          id: upload.id,
-          source: upload.source,
-          sourcePhone: upload.sourcePhone,
-          mediaStatus: upload.mediaStatus,
-          moderationStatus: upload.moderationStatus,
-          sightengineScore: upload.sightengineScore,
-        },
-        location: await upload.location.asJSONPrivate(),
-        report: report ? { id: report.id, reportURL: report.reportURL } : null,
-        order: order
+        upload_id: String(upload.id),
+        source: upload.source,
+        source_phone: upload.sourcePhone ?? "",
+        media_status: upload.mediaStatus ?? "",
+        moderation_status: upload.moderationStatus ?? "",
+        sightengine_score:
+          upload.sightengineScore != null
+            ? String(upload.sightengineScore)
+            : "",
+        report_id: report ? String(report.id) : "",
+        report_url: report?.reportURL ?? "",
+        ...(order
           ? {
-              pizzas: order.quantity,
-              restaurant: order.restaurant,
-              orderType: order.orderType,
-              createdAt: order.createdAt,
-              cancelledAt: order.cancelledAt,
+              pizzas: String(order.quantity),
+              restaurant: order.restaurant ?? "",
+              order_type: order.orderType,
+              order_created_at: String(order.createdAt),
+              order_cancelled_at: order.cancelledAt
+                ? String(order.cancelledAt)
+                : "",
             }
-          : null,
-        mediaLinks,
+          : {
+              pizzas: "",
+              restaurant: "",
+              order_type: "",
+              order_created_at: "",
+              order_cancelled_at: "",
+            }),
+        location_full_address: location.fullAddress,
+        location_city: location.city,
+        location_state: location.state,
+        media_links: mediaLinks.join(","),
       },
       ZapHooks.ZAP_NEW_MMS_UPLOAD,
     );

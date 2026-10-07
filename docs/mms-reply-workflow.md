@@ -124,11 +124,16 @@ There is no dedicated Slack webhook. MMS media notifications ride the same
 `ZAP_*` hook infrastructure as every other event:
 
 1. When an MMS-origin upload finishes the pipeline, the app POSTs to the
-   `ZAP_NEW_MMS_UPLOAD` hook with `{ hook, upload, location, report, order,
-mediaLinks }` — `mediaLinks` holds the processed/scrubbed
-   `media.polls.pizza` URLs (never raw paths), `location` the full address,
-   and `order` (when the matched report has one) the order details: pizzas
-   sent (`pizzas`), `restaurant`, `orderType`, `createdAt`/`cancelledAt`.
+   `ZAP_NEW_MMS_UPLOAD` hook with a **form-encoded (flat) body** — not JSON,
+   unlike the other ZAP_* hooks. Fields: `hook` (first pair, for routing),
+   `upload_id`, `source`, `source_phone`, `media_status`,
+   `moderation_status`, `sightengine_score`, `report_id`, `report_url`,
+   order details when the matched report has one (`pizzas` = pizzas sent,
+   `restaurant`, `order_type`, `order_created_at`, `order_cancelled_at`),
+   `location_full_address`, `location_city`, `location_state`, and
+   `media_links` (comma-joined processed/scrubbed `media.polls.pizza` URLs —
+   never raw paths). Absent values arrive as empty strings so Zapier field
+   mappings stay stable.
 2. **Staging needs no new setup**: the deploy workflow maps
    `ZAP_NEW_MMS_UPLOAD` to the existing `STAGING_ZAP_ALL` catch-all. Add a
    path in that Zap (filter on `hook == "ZAP_NEW_MMS_UPLOAD"`) posting
