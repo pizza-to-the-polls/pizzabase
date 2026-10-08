@@ -16,6 +16,11 @@ const ADDRESS: NormalAddress = {
 
 const PHONE = "+14255551234";
 
+// A US number exercised in both its stored (web-form) and Twilio E.164
+// forms. The E.164 form of the bare 10 digits is "+1" + the digits.
+const BARE_US = "5038938626";
+const E164_US = "+15038938626";
+
 const backdate = async (report: Report, daysAgo: number) => {
   // Raw SQL because repository.update() deep-partial typing rejects Date for
   // CreateDateColumn fields (see TrucksController.test.ts for precedent).
@@ -131,6 +136,71 @@ describe("Report entity", () => {
 
       expect(found).not.toBeNull();
       expect(found!.id).toEqual(report.id);
+    });
+
+    it("matches a report stored as bare 10 digits when queried with the +1 E.164 form", async () => {
+      const report = await makeReport(BARE_US, "http://twitter.com/r/10dig");
+      await Order.placeOrder({ quantity: 1, cost: 5 }, report.location);
+
+      const found = await Report.findRecentFulfilledByPhone(E164_US);
+
+      expect(found).not.toBeNull();
+      expect(found!.id).toEqual(report.id);
+    });
+
+    it("matches a report stored as +1 E.164 when queried with bare 10 digits", async () => {
+      const report = await makeReport(E164_US, "http://twitter.com/r/e164");
+      await Order.placeOrder({ quantity: 1, cost: 5 }, report.location);
+
+      const found = await Report.findRecentFulfilledByPhone(BARE_US);
+
+      expect(found).not.toBeNull();
+      expect(found!.id).toEqual(report.id);
+    });
+
+    it("converges all common US formatting variants on the same report", async () => {
+      const report = await makeReport(BARE_US, "http://twitter.com/r/fmt");
+      await Order.placeOrder({ quantity: 1, cost: 5 }, report.location);
+
+      for (const q of [
+        E164_US,
+        "503-893-8626",
+        "(503) 893-8626",
+        BARE_US,
+        "15038938626",
+      ]) {
+        const found = await Report.findRecentFulfilledByPhone(q);
+        expect(found).not.toBeNull();
+        expect(found!.id).toEqual(report.id);
+      }
+    });
+
+    it("converges on the truck branch with variant forms too", async () => {
+      const report = await makeReport(BARE_US, "http://twitter.com/r/truck");
+      await report.location.assignTruck("admin", "truck-1");
+
+      const found = await Report.findRecentFulfilledByPhone(E164_US);
+
+      expect(found).not.toBeNull();
+      expect(found!.id).toEqual(report.id);
+      expect(found!.truck).not.toBeNull();
+      expect(found!.order).toBeNull();
+    });
+
+    it("non-US number still exact-matches itself and does not invent variants", async () => {
+      const ukPhone = "+442071234567";
+      const report = await makeReport(ukPhone, "http://twitter.com/r/uk");
+      await Order.placeOrder({ quantity: 1, cost: 5 }, report.location);
+
+      const found = await Report.findRecentFulfilledByPhone(ukPhone);
+      expect(found).not.toBeNull();
+      expect(found!.id).toEqual(report.id);
+
+      // The bare digits-with-country-code form must NOT match — no
+      // variants are invented for non-US numbers.
+      expect(
+        await Report.findRecentFulfilledByPhone("442071234567"),
+      ).toBeNull();
     });
 
     it("returns the report with its eager location loaded", async () => {

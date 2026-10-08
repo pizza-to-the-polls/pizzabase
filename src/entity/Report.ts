@@ -11,6 +11,7 @@ import {
   MoreThan,
   IsNull,
   Not,
+  In,
 } from "typeorm";
 import { Location } from "./Location";
 import { Order } from "./Order";
@@ -18,7 +19,7 @@ import { Truck } from "./Truck";
 import { Upload } from "./Upload";
 import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
-import { normalizePhone } from "../lib/validator/normalizeContact";
+import { phoneVariants } from "../lib/validator/normalizeContact";
 
 const OPEN_QUERY = {
   order: IsNull(),
@@ -149,28 +150,28 @@ export class Report extends BaseEntity {
    * reply workflow to resolve which report an inbound media message is
    * replying about.
    *
-   * NOTE: contactInfo is matched against the normalized (digits/+ only) form
-   * of the input phone. Reports submitted via the web flow store whatever
-   * formatting the user typed (e.g. "555-234-2345"), so only reports whose
-   * contactInfo is stored E.164-ish will match here today.
+   * NOTE: contactInfo is matched against the stored-form variants of the
+   * input phone (see phoneVariants). Reports submitted via the web flow
+   * store whatever formatting the user typed (often bare 10 digits) while
+   * Twilio delivers From as E.164, so both forms are matched.
    */
   static async findRecentFulfilledByPhone(
     phone: string,
     windowDays = 30,
   ): Promise<Report | null> {
-    const normalized = normalizePhone(phone);
+    const variants = phoneVariants(phone);
     const days = Number(process.env.MMS_MATCH_WINDOW_DAYS) || windowDays;
     const since = new Date(Number(new Date()) - days * 24 * 60 * 60 * 1000);
 
     const report = await this.findOne({
       where: [
         {
-          contactInfo: normalized,
+          contactInfo: In(variants),
           order: Not(IsNull()),
           createdAt: MoreThan(since),
         },
         {
-          contactInfo: normalized,
+          contactInfo: In(variants),
           truck: Not(IsNull()),
           createdAt: MoreThan(since),
         },
