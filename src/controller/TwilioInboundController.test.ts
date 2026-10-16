@@ -18,6 +18,7 @@ jest.mock("@aws-sdk/client-s3", () => {
 
 import { TwilioInboundController } from "./TwilioInboundController";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
+import { APIKey } from "../entity/APIKey";
 import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
 import { verifyTwilioSignature } from "../lib/twilio/verifySignature";
@@ -701,6 +702,51 @@ describe("TwilioInboundController #inbound", () => {
       expect(body.unsupportedCount).toBe(1);
       expect(body.savedCount).toBe(0);
       expect(body.reply).toContain("We couldn't process some of the files");
+    });
+
+    describe("API-key auth (Authorization: Basic <key> — same keys Retool uses)", () => {
+      it("accepts a valid pizzabase API key without any relay token", async () => {
+        const key = await APIKey.generate("relay auth test");
+        findReportSpy.mockResolvedValue(fakeReport);
+
+        const { response } = await callInbound(
+          { From: PHONE, Body: "api key auth" },
+          { authorization: `Basic ${key.key}`, "x-twilio-signature": "" },
+        );
+
+        expect(response.statusCode).toEqual(200);
+        const body = JSON.parse(response._getData());
+        expect(body.ok).toBe(true);
+        expect(body.matched).toBe(true);
+      });
+
+      it("403s (JSON) an unknown API key", async () => {
+        const { response } = await callInbound(
+          { From: PHONE, Body: "bad key" },
+          {
+            authorization: "Basic not-a-real-key",
+            "x-twilio-signature": "",
+          },
+        );
+        expect(response.statusCode).toEqual(403);
+        expect(response._getData()).toBe('{"ok":false}');
+      });
+
+      it("403s (TwiML) a bare probe with no relay credential attempt", async () => {
+        const { response } = await callInbound({ From: PHONE, Body: "probe" });
+        expect(response.statusCode).toEqual(403);
+        expect(response._getData()).toContain("<Response/>");
+      });
+
+      it("relay token still works alongside API keys (both credential forms live)", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        const { response } = await callInbound(
+          { From: PHONE, Body: "token still valid" },
+          RELAY_HEADERS,
+        );
+        expect(response.statusCode).toEqual(200);
+        expect(JSON.parse(response._getData()).ok).toBe(true);
+      });
     });
 
     it("does not allow the relay path when INBOUND_WEBHOOK_TOKEN is unset", async () => {

@@ -2,6 +2,7 @@ import crypto from "crypto";
 import { NextFunction, Request, Response } from "express";
 import { PutObjectCommand, S3Client } from "@aws-sdk/client-s3";
 import { verifyTwilioSignature } from "../lib/twilio/verifySignature";
+import { checkAuthorization } from "./helper";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { Report } from "../entity/Report";
@@ -81,10 +82,26 @@ const relayTokenFrom = (request: Request): string => {
   return "";
 };
 
-const isRelayAuthorized = (request: Request): boolean => {
+/**
+ * Authenticate the trusted-relay sender. Two credential forms, either suffices:
+ *
+ *   1. A regular pizzabase API key (Authorization: Basic <key>) — the same
+ *      DB-backed keys Retool and the rest of the API use. Preferred for
+ *      the Zapier relay: no separate secret to mint or rotate, keys are
+ *      managed through the existing api_keys flow.
+ *   2. The shared INBOUND_WEBHOOK_TOKEN (X-PTP-Inbound-Token header or
+ *      Bearer) — kept for already-deployed integrations. Unset = disabled.
+ */
+const isRelayAuthorized = async (request: Request): Promise<boolean> => {
+  // Shared token first (constant-time-ish compare against the env secret).
   const expected = process.env.INBOUND_WEBHOOK_TOKEN || "";
-  if (!expected) return false;
-  return relayTokenFrom(request) === expected;
+  if (expected && relayTokenFrom(request) === expected) return true;
+
+  // Fall back to the same DB-backed API-key auth the rest of the API uses
+  // (Authorization: Basic <key>, counted against the api_keys table).
+  // Only reached when no valid Twilio signature was present, same as the
+  // token path — never a bypass for signed Twilio traffic.
+  return checkAuthorization(request);
 };
 
 const isTwilioMediaUrl = (url: string): boolean => {
@@ -255,17 +272,19 @@ export class TwilioInboundController {
     // Two trust paths reach this handler:
     //   1. Real Twilio: valid X-Twilio-Signature (HMAC over url + params).
     //   2. Trusted relay (the Zapier catch-hook Zap forwarding non-Twilio
-    //      multimedia messages): shared-token auth via X-PTP-Inbound-Token
-    //      or Authorization: Bearer. Relay sends may be JSON — the shape is
-    //      the same flat Twilio keys (From, Body, MediaUrl0, ...).
+    //      multimedia messages): either a regular pizzabase API key
+    //      (Authorization: Basic <key>, DB-backed — same keys Retool uses)
+    //      or the shared INBOUND_WEBHOOK_TOKEN (X-PTP-Inbound-Token /
+    //      Bearer). Relay sends may be JSON — the shape is the same flat
+    //      Twilio keys (From, Body, MediaUrl0/Sid, ...).
     // Media fetching is stricter for (1): Twilio hosts only. Relay (2) may
-    // reference any https host, since the sender holds the token.
+    // reference any https host, since the sender holds a credential.
     const signatureOk = verifyTwilioSignature({
       url,
       body: request.body ?? {},
       signature: (request.headers["x-twilio-signature"] as string) ?? null,
     });
-    const relayOk = isRelayAuthorized(request);
+    const relayOk = await isRelayAuthorized(request);
 
     if (!signatureOk && !relayOk) {
       notifyBugsnag(
@@ -273,9 +292,15 @@ export class TwilioInboundController {
           `Twilio inbound webhook: signature verification failed for ${url}`,
         ),
       );
-      // Neither TwiML nor JSON here — this caller is nobody we trust; a
-      // bare empty <Response/> (or empty JSON object) says nothing.
-      if (request.headers["x-ptp-inbound-token"] !== undefined) {
+      // Neither TwiML nor JSON details here — this caller is nobody we
+      // trust; a bare empty <Response/> (or empty JSON object) says nothing.
+      // Reply shape follows how the caller tried to authenticate: a relay
+      // credential attempt (token header or Basic/Bearer) gets JSON back;
+      // a bare probe gets the usual empty TwiML.
+      const isRelayAuthAttempt =
+        request.headers["x-ptp-inbound-token"] !== undefined ||
+        request.headers.authorization !== undefined;
+      if (isRelayAuthAttempt) {
         response.status(403);
         response.set("Content-Type", "application/json");
         response.json({ ok: false });
