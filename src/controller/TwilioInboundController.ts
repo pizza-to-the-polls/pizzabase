@@ -175,6 +175,60 @@ function sendRelayJson(response: Response, status: number, reply: RelayReply) {
 interface MediaItem {
   url: string;
   contentType: string;
+  /**
+   * "twilio" = the url is one of OUR OWN Twilio API media endpoints and the
+   * download may carry the Twilio Basic-auth header. Only ever set on items
+   * we derived ourselves from the Twilio Media API (fetchTwilioMediaList) —
+   * never on caller-supplied MediaUrl values, so credentials are never
+   * forwarded to a relay-chosen host.
+   */
+  auth?: "twilio";
+}
+
+// Twilio message SIDs: "SM" + 32 lowercase hex. Validated before any URL
+// interpolation — a malformed MessageSid from a relay must never reach the
+// API path (injection guard).
+const TWILIO_MESSAGE_SID_REGEX = /^SM[0-9a-f]{32}$/;
+
+/** Basic auth header for Twilio's own API (AccountSid:AuthToken). */
+const twilioBasicAuth = (): string => {
+  const sid = process.env.TWILIO_ACCOUNT_SID || "";
+  const token = process.env.TWILIO_AUTH_TOKEN || "";
+  return `Basic ${Buffer.from(`${sid}:${token}`).toString("base64")}`;
+};
+
+/** Can this deployment fetch media by MessageSid at all? */
+const canFetchTwilioMediaBySid = (): boolean =>
+  Boolean(process.env.TWILIO_ACCOUNT_SID && process.env.TWILIO_AUTH_TOKEN);
+
+/**
+ * Resolve media for a message via the Twilio Media API — the relay Zap
+ * forwards `MessageSid`/`Ssid` but NOT MediaUrl fields, so we pull the
+ * media list straight from Twilio (Basic auth). Advantages over forwarded
+ * URLs: no ~4h expiry, media URLs never transit Zapier. The list fetch
+ * itself is capped (PageSize=20) and items are capped at MAX_MEDIA_ITEMS.
+ */
+async function fetchTwilioMediaList(messageSid: string): Promise<MediaItem[]> {
+  if (!canFetchTwilioMediaBySid()) return [];
+  const sid = process.env.TWILIO_ACCOUNT_SID as string;
+  const listUrl = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${messageSid}/Media.json?PageSize=20`;
+  const res = await fetch(listUrl, {
+    headers: { Authorization: twilioBasicAuth() },
+  });
+  if (!res.ok) {
+    throw new Error(
+      `Twilio Media API list failed with HTTP ${res.status} for ${messageSid}`,
+    );
+  }
+  const data = (await res.json()) as {
+    media_list?: { uri: string; content_type: string }[];
+  };
+  return (data.media_list ?? []).slice(0, MAX_MEDIA_ITEMS).map((m) => ({
+    // `uri` is relative to api.twilio.com (e.g. /2010-04-01/…/Media/MExxx)
+    url: `https://api.twilio.com${m.uri}`,
+    contentType: m.content_type,
+    auth: "twilio" as const,
+  }));
 }
 
 /** Collect MediaUrl{N} / MediaContentType{N} pairs from the parsed form body. */
@@ -235,6 +289,12 @@ export class TwilioInboundController {
     const from = String(request.body?.From ?? "");
     const text = String(request.body?.Body ?? "");
     const mediaItems = collectMediaItems(request.body);
+    // MessageSid (Zapier triggers expose it as `Ssid`/`MessageSid`): used
+    // ONLY when the caller sent no MediaUrl fields — the Zapier relay Zap
+    // forwards just the SID and we pull the media list from Twilio ourselves.
+    const messageSid = String(
+      request.body?.MessageSid ?? request.body?.Ssid ?? "",
+    );
     const normalizedPhone = normalizePhone(from);
 
     // Per-path response format: real Twilio (signatureOk) needs TwiML so the
@@ -307,6 +367,26 @@ export class TwilioInboundController {
       let oversizeCount = 0;
       let unsupportedCount = 0;
       let failedCount = 0;
+
+      // Resolve media by MessageSid when the caller sent no MediaUrl fields
+      // (the Zapier relay forwards only the SID). Direct URLs always win —
+      // they are already-signed. Done after the report match on purpose:
+      // orphan senders (no report) never trigger a Twilio API round trip.
+      if (
+        mediaItems.length === 0 &&
+        TWILIO_MESSAGE_SID_REGEX.test(messageSid) &&
+        canFetchTwilioMediaBySid()
+      ) {
+        try {
+          const resolved = await fetchTwilioMediaList(messageSid);
+          mediaItems.push(...resolved);
+        } catch (e) {
+          // List failure shouldn't kill the text-only reply path — surface
+          // it as a failed media item instead.
+          failedCount++;
+          notifyBugsnag(e as Error);
+        }
+      }
       // Mirror the counters onto details as they move so the relay JSON
       // reflects exactly what happened.
       const track = () => {
@@ -332,8 +412,17 @@ export class TwilioInboundController {
           }
 
           // Twilio media URLs are short-lived signed S3 redirects — download
-          // immediately, never defer.
-          const mediaResponse = await fetch(item.url);
+          // immediately, never defer. SID-resolved items point at our own
+          // Twilio API media endpoints and need the Basic-auth header; the
+          // auth flag is only ever set on items we derived from Twilio's
+          // Media API response, so credentials never go to a caller-chosen
+          // host.
+          const mediaResponse = await fetch(
+            item.url,
+            item.auth === "twilio"
+              ? { headers: { Authorization: twilioBasicAuth() } }
+              : undefined,
+          );
           if (!mediaResponse.ok) {
             throw new Error(
               `Twilio media download failed with HTTP ${mediaResponse.status}`,

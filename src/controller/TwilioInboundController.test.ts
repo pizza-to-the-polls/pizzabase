@@ -407,6 +407,8 @@ describe("TwilioInboundController #inbound", () => {
     const TOKEN = "relay-test-token-abcdef";
     const RELAY_HEADERS = { "x-ptp-inbound-token": TOKEN };
 
+    const ACCOUNT_SID = "AC" + "a".repeat(32);
+
     beforeEach(() => {
       process.env.INBOUND_WEBHOOK_TOKEN = TOKEN;
       // Relay requests carry no (valid) Twilio signature.
@@ -415,6 +417,7 @@ describe("TwilioInboundController #inbound", () => {
 
     afterEach(() => {
       delete process.env.INBOUND_WEBHOOK_TOKEN;
+      delete process.env.TWILIO_ACCOUNT_SID;
     });
 
     it("403s without either signature or token", async () => {
@@ -457,10 +460,12 @@ describe("TwilioInboundController #inbound", () => {
 
       expect(returned).toBeNull();
       expect(response.statusCode).toEqual(200);
-      // Relay media may be any https host — fetched and stored.
+      // Relay media may be any https host — fetched and stored. No Basic
+      // auth on caller-supplied URLs (only SID-resolved items carry it).
       expect(global.fetch).toHaveBeenCalledTimes(1);
       expect(global.fetch).toHaveBeenCalledWith(
         "https://relay.example.test/m/photo.jpg",
+        undefined,
       );
       expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
       expect(send).toHaveBeenCalledTimes(1);
@@ -488,6 +493,161 @@ describe("TwilioInboundController #inbound", () => {
       expect(body.ok).toBe(true);
       expect(body.reply).toContain(THANKS_FRAGMENT);
       expect(body.matched).toBe(true);
+    });
+
+    describe("media by MessageSid (Zapier forwards only the SID)", () => {
+      const SID = "SM" + "0".repeat(32);
+
+      /** Mock the Media API list response + media bytes (two fetches). */
+      const mockMediaApi = (mediaCount = 1) => {
+        (global.fetch as jest.Mock)
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              media_list: Array.from({ length: mediaCount }, (_, i) => ({
+                uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media/ME${String(i).padStart(2, "0")}`,
+                content_type: "image/jpeg",
+              })),
+            }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            headers: { get: () => String(64) },
+            arrayBuffer: async () => Buffer.alloc(64),
+          });
+      };
+
+      beforeEach(() => {
+        process.env.TWILIO_ACCOUNT_SID = ACCOUNT_SID;
+        process.env.TWILIO_AUTH_TOKEN = "test-token";
+      });
+
+      afterEach(() => {
+        delete process.env.TWILIO_AUTH_TOKEN;
+      });
+
+      it("fetches the media list from Twilio and stores with Basic auth", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        mockMediaApi(1);
+
+        const { response } = await callInbound(
+          { From: PHONE, Body: "sid only", MessageSid: SID },
+          RELAY_HEADERS,
+        );
+
+        const calls = (global.fetch as jest.Mock).mock.calls;
+        // First fetch: the Media API list, authorized with Basic sid:token.
+        const [listUrl, listOpts] = calls[0];
+        expect(listUrl).toBe(
+          `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media.json?PageSize=20`,
+        );
+        expect(listOpts.headers.Authorization).toMatch(/^Basic /);
+        expect(listOpts.headers.Authorization).toContain(
+          Buffer.from(`${ACCOUNT_SID}:test-token`).toString("base64"),
+        );
+        // Second fetch: the media content itself, also authorized.
+        const [mediaUrl, mediaOpts] = calls[1];
+        expect(mediaUrl).toBe(
+          `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media/ME00`,
+        );
+        expect(mediaOpts.headers.Authorization).toMatch(/^Basic /);
+        // ...and stored.
+        expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+        expect(send).toHaveBeenCalledTimes(1);
+        const body = JSON.parse(response._getData());
+        expect(body.savedCount).toBe(1);
+        expect(body.uploadIds).toEqual([fakeUpload.id]);
+      });
+
+      it("accepts the SID under the `Ssid` key too (Zapier trigger naming)", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        mockMediaApi(1);
+
+        const { response } = await callInbound(
+          { From: PHONE, Body: "zapier naming", Ssid: SID },
+          RELAY_HEADERS,
+        );
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(response._getData()).savedCount).toBe(1);
+      });
+
+      it("prefers direct MediaUrl fields and never calls the Media API", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        mockFetchBody(Buffer.alloc(64));
+
+        await callInbound(
+          {
+            From: PHONE,
+            Body: "both",
+            MessageSid: SID,
+            MediaUrl0: "https://relay.example.test/m/photo.jpg",
+            MediaContentType0: "image/jpeg",
+          },
+          RELAY_HEADERS,
+        );
+        const calls = (global.fetch as jest.Mock).mock.calls;
+        expect(calls).toHaveLength(1);
+        expect(calls[0][0]).toBe("https://relay.example.test/m/photo.jpg");
+      });
+
+      it("never interpolates a malformed SID into the API URL (injection guard)", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+
+        const { response } = await callInbound(
+          {
+            From: PHONE,
+            Body: "evil sid",
+            MessageSid: "SM../../evil",
+          },
+          RELAY_HEADERS,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+        // Falls through to the text-only path.
+        expect(JSON.parse(response._getData()).reply).toContain(
+          THANKS_FRAGMENT,
+        );
+      });
+
+      it("does not call the Media API without TWILIO_ACCOUNT_SID", async () => {
+        delete process.env.TWILIO_ACCOUNT_SID;
+        findReportSpy.mockResolvedValue(fakeReport);
+
+        await callInbound(
+          { From: PHONE, Body: "no sid configured", MessageSid: SID },
+          RELAY_HEADERS,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+      });
+
+      it("list failure surfaces as a failed media item, not a crash", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        (global.fetch as jest.Mock).mockResolvedValueOnce({
+          ok: false,
+          status: 404,
+          json: async () => ({}),
+        });
+
+        const { response } = await callInbound(
+          { From: PHONE, Body: "list 404", MessageSid: SID },
+          RELAY_HEADERS,
+        );
+        const body = JSON.parse(response._getData());
+        expect(body.failedCount).toBe(1);
+        expect(body.savedCount).toBe(0);
+      });
+
+      it("orphan senders (no matched report) never trigger the Media API", async () => {
+        findReportSpy.mockResolvedValue(null);
+
+        const { response } = await callInbound(
+          { From: PHONE, Body: "orphan with sid", MessageSid: SID },
+          RELAY_HEADERS,
+        );
+        expect(global.fetch).not.toHaveBeenCalled();
+        expect(JSON.parse(response._getData()).matched).toBe(false);
+      });
     });
 
     it("still requires https for relay media URLs", async () => {
