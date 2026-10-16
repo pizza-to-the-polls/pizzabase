@@ -172,7 +172,11 @@ Inbound-media setup (the relay Zap):
    - **URL**: `https://base-next.polls.pizza/twilio/inbound` (staging) /
      `https://base.polls.pizza/twilio/inbound` (prod)
    - **Payload Type**: JSON or Form (both accepted)
-   - **Headers**: `X-PTP-Inbound-Token: <INBOUND_WEBHOOK_TOKEN value>`
+   - **Headers**: `Authorization: Basic <API key>` — any regular pizzabase
+     API key (same DB-backed keys Retool uses; generate via
+     `scripts/generateAPIKey.ts`). `X-PTP-Inbound-Token: <token>` also
+     works if that's already wired, but the API key is preferred (no
+     separate secret to mint or rotate).
    - **Data**: map the upstream fields to the Twilio shape —
      `From` (phone, E.164 ideal), `Body` (text), and **either** the media
      fields (`MediaUrl0`, `MediaContentType0`, …) **or just the message SID**
