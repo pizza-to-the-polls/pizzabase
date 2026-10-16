@@ -561,6 +561,37 @@ describe("TwilioInboundController #inbound", () => {
         expect(body.uploadIds).toEqual([fakeUpload.id]);
       });
 
+      it("accepts MM-prefixed SIDs (real MMS messages) — not just SM", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        const MM_SID = "MM" + "0".repeat(32);
+        (global.fetch as jest.Mock)
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            json: async () => ({
+              media_list: [
+                {
+                  uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${MM_SID}/Media/ME00`,
+                  content_type: "image/jpeg",
+                },
+              ],
+            }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 200,
+            headers: { get: () => String(64) },
+            arrayBuffer: async () => Buffer.alloc(64),
+          });
+
+        const { response } = await callInbound(
+          { From: PHONE, Body: "mms sid", MessageSid: MM_SID },
+          RELAY_HEADERS,
+        );
+        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(JSON.parse(response._getData()).savedCount).toBe(1);
+      });
+
       it("accepts the SID under the `Ssid` key too (Zapier trigger naming)", async () => {
         findReportSpy.mockResolvedValue(fakeReport);
         mockMediaApi(1);

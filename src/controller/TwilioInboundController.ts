@@ -185,10 +185,11 @@ interface MediaItem {
   auth?: "twilio";
 }
 
-// Twilio message SIDs: "SM" + 32 lowercase hex. Validated before any URL
-// interpolation — a malformed MessageSid from a relay must never reach the
-// API path (injection guard).
-const TWILIO_MESSAGE_SID_REGEX = /^SM[0-9a-f]{32}$/;
+// Twilio message SIDs: SM (SMS) / MM (MMS) + 32 lowercase hex. Validated
+// before any URL interpolation — a malformed MessageSid from a relay must
+// never reach the API path (injection guard). MM is the COMMON case for
+// this workflow: media-bearing messages are MMS.
+const TWILIO_MESSAGE_SID_REGEX = /^(SM|MM)[0-9a-f]{32}$/;
 
 /** Basic auth header for Twilio's own API (AccountSid:AuthToken). */
 const twilioBasicAuth = (): string => {
