@@ -56,6 +56,7 @@ function parseEnvExample(content: string): Map<string, EnvVarDoc> {
 describe("MMS env var documentation (MMS-006)", () => {
   const MMS_ENV_VARS = [
     "TWILIO_AUTH_TOKEN",
+    "TWILIO_ACCOUNT_SID",
     "ZAP_NEW_MMS_UPLOAD",
     "MMS_MATCH_WINDOW_DAYS",
     "TWILIO_MEDIA_EXTRA_HOSTS",
@@ -110,6 +111,7 @@ describe("MMS env var documentation (MMS-006)", () => {
       "MMS_MATCH_WINDOW_DAYS",
       "TWILIO_MEDIA_EXTRA_HOSTS",
       "TWILIO_AUTH_TOKEN",
+      "TWILIO_ACCOUNT_SID",
       "media_status",
       "BannedPhoneNumber",
       "fileHash|file_hash",

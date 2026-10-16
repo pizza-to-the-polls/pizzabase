@@ -174,8 +174,12 @@ Inbound-media setup (the relay Zap):
    - **Payload Type**: JSON or Form (both accepted)
    - **Headers**: `X-PTP-Inbound-Token: <INBOUND_WEBHOOK_TOKEN value>`
    - **Data**: map the upstream fields to the Twilio shape —
-     `From` (phone, E.164 ideal), `Body` (text), `MediaUrl0`,
-     `MediaContentType0` (upstream media URL + type).
+     `From` (phone, E.164 ideal), `Body` (text), and **either** the media
+     fields (`MediaUrl0`, `MediaContentType0`, …) **or just the message SID**
+     (`MessageSid` / `Ssid`). With only the SID, pizzabase pulls the media
+     list from Twilio's Media API itself (`TWILIO_ACCOUNT_SID` +
+     `TWILIO_AUTH_TOKEN`): no ~4h URL expiry, media never transits Zapier,
+     and only messages that match a report trigger the API round trip.
 
 2. Everything downstream is shared with the Twilio path: STOP/ban handling,
    report matching (`MMS_MATCH_WINDOW_DAYS`), dedup by file hash, the
