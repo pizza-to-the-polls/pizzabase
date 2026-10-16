@@ -1,4 +1,5 @@
 import { validateReport } from ".";
+import { phoneVariants } from "./normalizeContact";
 import {
   ADDRESS_ERROR,
   URL_ERROR,
@@ -119,4 +120,67 @@ test("facebook link with story is invalid", async () => {
   });
 
   expect(errors).toEqual({ url: FACEBOOK_ERROR });
+});
+
+describe("phoneVariants", () => {
+  test("E.164 US number returns both E.164 and bare 10-digit forms", () => {
+    expect(phoneVariants("+15038938626")).toEqual([
+      "+15038938626",
+      "5038938626",
+      "15038938626",
+    ]);
+  });
+
+  test("bare 10-digit number returns both bare and E.164 forms", () => {
+    expect(phoneVariants("5038938626")).toEqual([
+      "5038938626",
+      "+15038938626",
+      "15038938626",
+    ]);
+  });
+
+  test("formatted US number strips formatting first, then expands", () => {
+    expect(phoneVariants("(503) 893-8626")).toEqual([
+      "5038938626",
+      "+15038938626",
+      "15038938626",
+    ]);
+    expect(phoneVariants("503-893-8626")).toEqual([
+      "5038938626",
+      "+15038938626",
+      "15038938626",
+    ]);
+  });
+
+  test("1-prefixed US number expands to all three forms", () => {
+    expect(phoneVariants("15038938626")).toEqual([
+      "15038938626",
+      "+15038938626",
+      "5038938626",
+    ]);
+    expect(phoneVariants("1-503-893-8626")).toEqual([
+      "15038938626",
+      "+15038938626",
+      "5038938626",
+    ]);
+  });
+
+  test("non-US E.164 number is exact-match only", () => {
+    expect(phoneVariants("+442071234567")).toEqual(["+442071234567"]);
+  });
+
+  test("11 digits not starting with 1 is exact-match only", () => {
+    expect(phoneVariants("442071234567")).toEqual(["442071234567"]);
+  });
+
+  test("short codes and malformed values are exact-match only", () => {
+    expect(phoneVariants("12345")).toEqual(["12345"]);
+    expect(phoneVariants("+15551234")).toEqual(["+15551234"]);
+  });
+
+  test("emails pass through untouched", () => {
+    expect(phoneVariants("someone@example.com")).toEqual([
+      "someone@example.com",
+    ]);
+  });
 });

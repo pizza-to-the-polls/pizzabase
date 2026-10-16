@@ -5,8 +5,12 @@ import {
   Column,
   Index,
   CreateDateColumn,
+  In,
 } from "typeorm";
-import { normalizePhone } from "../lib/validator/normalizeContact";
+import {
+  normalizePhone,
+  phoneVariants,
+} from "../lib/validator/normalizeContact";
 
 @Entity({ name: "banned_phone_numbers" })
 export class BannedPhoneNumber extends BaseEntity {
@@ -32,8 +36,11 @@ export class BannedPhoneNumber extends BaseEntity {
   }
 
   static async isBanned(phoneNumber: string): Promise<boolean> {
-    const normalized = normalizePhone(phoneNumber);
-    return (await this.count({ where: { phoneNumber: normalized } })) > 0;
+    return (
+      (await this.count({
+        where: { phoneNumber: In(phoneVariants(phoneNumber)) },
+      })) > 0
+    );
   }
 
   static async findByIdOrPhoneNumber(
