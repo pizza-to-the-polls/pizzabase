@@ -499,7 +499,12 @@ describe("TwilioInboundController #inbound", () => {
     describe("media by MessageSid (Zapier forwards only the SID)", () => {
       const SID = "SM" + "0".repeat(32);
 
-      /** Mock the Media API list response + media bytes (two fetches). */
+      /**
+       * Mock the Media API flow (three fetches):
+       *   1. list (Basic auth) -> media_list
+       *   2. instance URI (Basic auth, Accept) -> 307 + Location (presigned CDN)
+       *   3. presigned CDN URL (NO auth) -> actual bytes
+       */
       const mockMediaApi = (mediaCount = 1) => {
         (global.fetch as jest.Mock)
           .mockResolvedValueOnce({
@@ -511,6 +516,16 @@ describe("TwilioInboundController #inbound", () => {
                 content_type: "image/jpeg",
               })),
             }),
+          })
+          .mockResolvedValueOnce({
+            ok: true,
+            status: 307,
+            headers: {
+              get: (name: string) =>
+                name.toLowerCase() === "location"
+                  ? `https://mms.twiliocdn.com/${ACCOUNT_SID}/signed${mediaCount}`
+                  : null,
+            },
           })
           .mockResolvedValueOnce({
             ok: true,
@@ -545,15 +560,19 @@ describe("TwilioInboundController #inbound", () => {
           `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media.json?PageSize=20`,
         );
         expect(listOpts.headers.Authorization).toMatch(/^Basic /);
-        expect(listOpts.headers.Authorization).toContain(
-          Buffer.from(`${ACCOUNT_SID}:test-token`).toString("base64"),
-        );
-        // Second fetch: the media content itself, also authorized.
-        const [mediaUrl, mediaOpts] = calls[1];
-        expect(mediaUrl).toBe(
+        expect(listOpts.headers.Accept).toBe("application/json");
+        // Second fetch: the instance URI (authorized, Accept set) -> 307.
+        const [instanceUrl, instanceOpts] = calls[1];
+        expect(instanceUrl).toBe(
           `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media/ME00`,
         );
-        expect(mediaOpts.headers.Authorization).toMatch(/^Basic /);
+        expect(instanceOpts.headers.Authorization).toMatch(/^Basic /);
+        expect(instanceOpts.headers.Accept).toBe("*/*");
+        expect(instanceOpts.redirect).toBe("manual");
+        // Third fetch: the presigned CDN URL — NO auth header on it.
+        const [cdnUrl, cdnOpts] = calls[2];
+        expect(cdnUrl).toBe(`https://mms.twiliocdn.com/${ACCOUNT_SID}/signed1`);
+        expect(cdnOpts).toBeUndefined();
         // ...and stored.
         expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
         expect(send).toHaveBeenCalledTimes(1);
@@ -580,6 +599,16 @@ describe("TwilioInboundController #inbound", () => {
           })
           .mockResolvedValueOnce({
             ok: true,
+            status: 307,
+            headers: {
+              get: (name: string) =>
+                name.toLowerCase() === "location"
+                  ? `https://mms.twiliocdn.com/${ACCOUNT_SID}/mm-signed`
+                  : null,
+            },
+          })
+          .mockResolvedValueOnce({
+            ok: true,
             status: 200,
             headers: { get: () => String(64) },
             arrayBuffer: async () => Buffer.alloc(64),
@@ -589,7 +618,7 @@ describe("TwilioInboundController #inbound", () => {
           { From: PHONE, Body: "mms sid", MessageSid: MM_SID },
           RELAY_HEADERS,
         );
-        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(global.fetch).toHaveBeenCalledTimes(3);
         expect(JSON.parse(response._getData()).savedCount).toBe(1);
       });
 
@@ -601,7 +630,7 @@ describe("TwilioInboundController #inbound", () => {
           { From: PHONE, Body: "zapier naming", Ssid: SID },
           RELAY_HEADERS,
         );
-        expect(global.fetch).toHaveBeenCalledTimes(2);
+        expect(global.fetch).toHaveBeenCalledTimes(3);
         expect(JSON.parse(response._getData()).savedCount).toBe(1);
       });
 
