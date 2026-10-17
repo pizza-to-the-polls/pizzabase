@@ -460,6 +460,9 @@ export class TwilioInboundController {
               },
               redirect: "manual",
             });
+            console.log(
+              `[mms-sid-fetch] instance ${mediaResponse.status} ct=${mediaResponse.headers.get("content-type")} loc=${(mediaResponse.headers.get("location") || "none").slice(0, 80)}`,
+            );
             if (mediaResponse.status >= 300 && mediaResponse.status < 400) {
               const location = mediaResponse.headers.get("location");
               if (!location || !isTwilioMediaUrl(location)) {
@@ -471,6 +474,9 @@ export class TwilioInboundController {
               // account credential to the signed URL's audit logs).
               mediaResponse = await fetch(location);
             }
+            console.log(
+              `[mms-sid-fetch] content ${mediaResponse.status} ct=${mediaResponse.headers.get("content-type")} len=${mediaResponse.headers.get("content-length")}`,
+            );
           } else {
             mediaResponse = await fetch(item.url, undefined);
           }
