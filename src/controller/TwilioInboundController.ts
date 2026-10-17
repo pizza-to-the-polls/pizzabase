@@ -231,7 +231,7 @@ async function fetchTwilioMediaList(messageSid: string): Promise<MediaItem[]> {
   const sid = process.env.TWILIO_ACCOUNT_SID as string;
   const listUrl = `https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages/${messageSid}/Media.json?PageSize=20`;
   const res = await fetch(listUrl, {
-    headers: { Authorization: twilioBasicAuth() },
+    headers: { Authorization: twilioBasicAuth(), Accept: "application/json" },
   });
   if (!res.ok) {
     throw new Error(
@@ -443,12 +443,37 @@ export class TwilioInboundController {
           // auth flag is only ever set on items we derived from Twilio's
           // Media API response, so credentials never go to a caller-chosen
           // host.
-          const mediaResponse = await fetch(
-            item.url,
-            item.auth === "twilio"
-              ? { headers: { Authorization: twilioBasicAuth() } }
-              : undefined,
-          );
+          //
+          // Twilio's media instance URI 307-redirects to a presigned
+          // mms.twiliocdn.com URL — but undici sends no Accept header, and
+          // then Twilio serves the JSON *metadata* instead of redirecting
+          // (observed live: 438 bytes of JSON stored where a JPEG belonged).
+          // So: explicit Accept (redirect, not JSON), redirect:"manual",
+          // verify the Location is a Twilio host (SSRF discipline — we
+          // initiated this), then fetch the presigned URL WITHOUT auth.
+          let mediaResponse: Response;
+          if (item.auth === "twilio") {
+            mediaResponse = await fetch(item.url, {
+              headers: {
+                Authorization: twilioBasicAuth(),
+                Accept: "*/*",
+              },
+              redirect: "manual",
+            });
+            if (mediaResponse.status >= 300 && mediaResponse.status < 400) {
+              const location = mediaResponse.headers.get("location");
+              if (!location || !isTwilioMediaUrl(location)) {
+                throw new Error(
+                  `Twilio media redirect to non-Twilio host: ${location}`,
+                );
+              }
+              // Presigned CDN URL — no auth header (it would leak the
+              // account credential to the signed URL's audit logs).
+              mediaResponse = await fetch(location);
+            }
+          } else {
+            mediaResponse = await fetch(item.url, undefined);
+          }
           if (!mediaResponse.ok) {
             throw new Error(
               `Twilio media download failed with HTTP ${mediaResponse.status}`,
