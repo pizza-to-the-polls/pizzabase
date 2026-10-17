@@ -242,8 +242,11 @@ async function fetchTwilioMediaList(messageSid: string): Promise<MediaItem[]> {
     media_list?: { uri: string; content_type: string }[];
   };
   return (data.media_list ?? []).slice(0, MAX_MEDIA_ITEMS).map((m) => ({
-    // `uri` is relative to api.twilio.com (e.g. /2010-04-01/…/Media/MExxx)
-    url: `https://api.twilio.com${m.uri}`,
+    // `uri` is relative to api.twilio.com and, in JSON responses, carries a
+    // `.json` suffix (…/Media/MExxx.json) — that URL always serves the JSON
+    // *metadata*, never the bytes. Strip it: the bare instance URI is what
+    // 307-redirects to the presigned mms.twiliocdn.com content URL.
+    url: `https://api.twilio.com${m.uri.replace(/\.json$/, "")}`,
     contentType: m.content_type,
     auth: "twilio" as const,
   }));
@@ -460,9 +463,6 @@ export class TwilioInboundController {
               },
               redirect: "manual",
             });
-            console.log(
-              `[mms-sid-fetch] instance ${mediaResponse.status} ct=${mediaResponse.headers.get("content-type")} loc=${(mediaResponse.headers.get("location") || "none").slice(0, 80)}`,
-            );
             if (mediaResponse.status >= 300 && mediaResponse.status < 400) {
               const location = mediaResponse.headers.get("location");
               if (!location || !isTwilioMediaUrl(location)) {
@@ -474,9 +474,6 @@ export class TwilioInboundController {
               // account credential to the signed URL's audit logs).
               mediaResponse = await fetch(location);
             }
-            console.log(
-              `[mms-sid-fetch] content ${mediaResponse.status} ct=${mediaResponse.headers.get("content-type")} len=${mediaResponse.headers.get("content-length")}`,
-            );
           } else {
             mediaResponse = await fetch(item.url, undefined);
           }
