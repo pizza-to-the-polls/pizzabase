@@ -242,8 +242,11 @@ async function fetchTwilioMediaList(messageSid: string): Promise<MediaItem[]> {
     media_list?: { uri: string; content_type: string }[];
   };
   return (data.media_list ?? []).slice(0, MAX_MEDIA_ITEMS).map((m) => ({
-    // `uri` is relative to api.twilio.com (e.g. /2010-04-01/…/Media/MExxx)
-    url: `https://api.twilio.com${m.uri}`,
+    // `uri` is relative to api.twilio.com and, in JSON responses, carries a
+    // `.json` suffix (…/Media/MExxx.json) — that URL always serves the JSON
+    // *metadata*, never the bytes. Strip it: the bare instance URI is what
+    // 307-redirects to the presigned mms.twiliocdn.com content URL.
+    url: `https://api.twilio.com${m.uri.replace(/\.json$/, "")}`,
     contentType: m.content_type,
     auth: "twilio" as const,
   }));

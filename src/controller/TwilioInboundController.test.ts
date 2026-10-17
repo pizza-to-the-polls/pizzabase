@@ -512,7 +512,8 @@ describe("TwilioInboundController #inbound", () => {
             status: 200,
             json: async () => ({
               media_list: Array.from({ length: mediaCount }, (_, i) => ({
-                uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media/ME${String(i).padStart(2, "0")}`,
+                // Real Twilio JSON responses carry a .json suffix on uri.
+                uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media/ME${String(i).padStart(2, "0")}.json`,
                 content_type: "image/jpeg",
               })),
             }),
@@ -565,7 +566,7 @@ describe("TwilioInboundController #inbound", () => {
         const [instanceUrl, instanceOpts] = calls[1];
         expect(instanceUrl).toBe(
           `https://api.twilio.com/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${SID}/Media/ME00`,
-        );
+        ); // (stripped the .json suffix the list response carried)
         expect(instanceOpts.headers.Authorization).toMatch(/^Basic /);
         expect(instanceOpts.headers.Accept).toBe("*/*");
         expect(instanceOpts.redirect).toBe("manual");
@@ -591,7 +592,7 @@ describe("TwilioInboundController #inbound", () => {
             json: async () => ({
               media_list: [
                 {
-                  uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${MM_SID}/Media/ME00`,
+                  uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${MM_SID}/Media/ME00.json`,
                   content_type: "image/jpeg",
                 },
               ],
