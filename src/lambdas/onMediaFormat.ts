@@ -4,7 +4,9 @@
  * Triggered by S3 ObjectCreated:* on the raw.polls.pizza bucket.
  *
  * Routes based on content type:
- *   Image path: resizes with sharp, outputs WebP + JPEG to reports.polls.pizza.
+ *   Image path: resizes with sharp, outputs WebP + JPEG to reports.polls.pizza
+ *     (HEIC/HEIF inputs are transcoded to JPEG via ffmpeg first — prebuilt
+ *     libvips cannot decode HEVC).
  *   Video path: kicks off AWS MediaConvert job (H.264/AAC MP4, max 1080p).
  *
  * Updates DB: media_status = 'ready' (or 'failed'), processed_file_path.
@@ -31,9 +33,14 @@ import {
 } from "../lib/mp4-rotation";
 import { zapNewMmsUpload, zapNewUpload } from "../lib/zapier";
 import { cdnUrlForKey } from "../lib/media-cdn";
+import { execFile } from "child_process";
+import * as fs from "fs";
+import * as os from "os";
 import * as path from "path";
+import { promisify } from "util";
 
 const s3 = new S3Client({ region: process.env.AWS_REGION || "us-west-2" });
+const execFileAsync = promisify(execFile);
 
 const PROCESSED_BUCKET = process.env.UPLOAD_S3_BUCKET || "reports.polls.pizza";
 const RAW_BUCKET = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
@@ -184,6 +191,54 @@ export async function handler(event: S3Event): Promise<void> {
 
 // ── Image processing (sharp) ──────────────────────────────
 
+/**
+ * HEIC/HEIF transcode fallback.
+ *
+ * The sharp Lambda layer uses prebuilt libvips, whose bundled libheif is
+ * built WITHOUT libde265 on every prebuilt platform — HEVC stills fail with
+ * "Support for this compression format has not been built in: HEVC (a
+ * suitable decoder plugin is libde265)". ffmpeg (the same layer the video
+ * path uses) decodes HEIF stills and bakes the display rotation into the
+ * pixels, so sharp can take over from the transcoded JPEG.
+ */
+async function heifToJpeg(
+  raw: Buffer,
+  uploadId: number,
+): Promise<Buffer<ArrayBuffer>> {
+  const ffmpeg = process.env.FFMPEG_PATH || "/opt/bin/ffmpeg";
+  const inPath = path.join(os.tmpdir(), `heif-${uploadId}.in`);
+  const outPath = path.join(os.tmpdir(), `heif-${uploadId}.jpg`);
+  await fs.promises.writeFile(inPath, raw);
+  try {
+    await execFileAsync(ffmpeg, [
+      "-y",
+      "-loglevel",
+      "error",
+      "-i",
+      inPath,
+      // Grid/tiled HEICs decode as multiple frames — keep the still only.
+      "-frames:v",
+      "1",
+      "-f",
+      "image2",
+      outPath,
+    ]);
+    const out = await fs.promises.readFile(outPath);
+    return Buffer.from(out);
+  } catch (err) {
+    const stderr = (err as { stderr?: string })?.stderr;
+    throw new Error(
+      `HEIF ffmpeg transcode failed: ${String(stderr ?? (err as Error)?.message).slice(0, 300)}`,
+    );
+  } finally {
+    // Lambda /tmp is reused across warm invocations — never leave temp media.
+    await Promise.allSettled([
+      fs.promises.unlink(inPath),
+      fs.promises.unlink(outPath),
+    ]);
+  }
+}
+
 async function processImage(
   key: string,
   uploadId: number,
@@ -200,9 +255,17 @@ async function processImage(
     throw new Error(`Empty body for ${key}`);
   }
 
-  const buffer = Buffer.from(await s3Object.Body.transformToByteArray());
+  let buffer = Buffer.from(await s3Object.Body.transformToByteArray());
 
   const ext = path.extname(key).toLowerCase();
+
+  // HEIC/HEIF: sharp's prebuilt libheif cannot decode HEVC — transcode to
+  // JPEG via ffmpeg first (rotation is baked into the pixels, so .rotate()
+  // below stays a no-op).
+  if (ext === ".heic" || ext === ".heif") {
+    buffer = await heifToJpeg(buffer, uploadId);
+  }
+
   const image = sharp(buffer, {
     failOnError: false,
     animated: ext === ".gif",

@@ -199,6 +199,9 @@ functions:
     memorySize: 1024
     layers:
       - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:sharp:6
+      # ffmpeg layer: HEIC/HEIF stills are transcoded to JPEG before sharp
+      # (prebuilt libvips ships libheif without libde265 — no HEVC decode).
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1
     environment:
       RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
       UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
@@ -208,6 +211,7 @@ functions:
       IMAGE_MAX_DIMENSION: ${env:IMAGE_MAX_DIMENSION, '1920'}
       IMAGE_QUALITY: ${env:IMAGE_QUALITY, '85'}
       MEDIACONVERT_ROLE_ARN: ${env:MEDIACONVERT_ROLE_ARN, ''}
+      FFMPEG_PATH: /opt/bin/ffmpeg
     # No direct S3 trigger: two ObjectCreated:* configs on one bucket overlap.
     # on-s3-upload-process-exif chains this function via lambda:InvokeFunction.
 

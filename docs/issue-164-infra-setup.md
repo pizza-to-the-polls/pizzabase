@@ -169,9 +169,7 @@ If a layer exists, grab its ARN. If not, create one:
 ### 3b. Create layer from scratch (only if no public layer available)
 
 Use the build script — it installs the linux-x64 prebuilt with the correct
-npm platform flags and FAILS if the bundled libvips lacks HEIC/HEIF decode
-(`de265`). libvips < 8.18.7 (layer `sharp:5`, sharp 0.35.4) shipped libheif
-without HEVC decoders, so HEIC report photos failed in `on-media-format`:
+npm platform flags and verifies the N-API binding is a linux-x64 ELF:
 
 ```bash
 scripts/build-sharp-layer.sh /tmp/sharp-layer.zip
@@ -187,6 +185,11 @@ aws lambda publish-layer-version \
 wrong — modern npm needs `--os=linux --cpu=x64 --libc=glibc`, which is what
 the script uses. `--platform/--arch` are silently accepted as no-ops and the
 darwin binaries end up in the layer.)
+
+NOTE: prebuilt libvips does NOT decode HEVC HEIC (libheif is built without
+libde265 on every prebuilt platform). HEIC/HEIF uploads are transcoded to
+JPEG via the ffmpeg layer in `on-media-format` (see `scripts/build-ffmpeg-layer.sh`)
+before sharp sees them — do not rely on sharp for HEIC decode.
 
 ### 3c. Get the layer ARN
 

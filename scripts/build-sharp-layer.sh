@@ -5,16 +5,14 @@
 # Produces sharp-layer.zip containing:
 #   nodejs/node_modules/sharp                  — sharp npm package
 #   nodejs/node_modules/@img/sharp-*           — linux-x64 N-API binding
-#   nodejs/node_modules/@img/sharp-libvips-*    — prebuilt libvips (statically
-#                                                linked: libheif, de265, dav1d,
-#                                                aom, x265, ...)
+#   nodejs/node_modules/@img/sharp-libvips-*   — prebuilt libvips
 #
-# libvips >= 8.18.7 (sharp-libvips >= 1.3.4) is REQUIRED for HEIC decode:
-# earlier prebuilts (libvips 8.18.6, shipped as layer sharp:5 / sharp 0.35.4)
-# bundled libheif WITHOUT the HEVC decoders, so iPhone HEIC report photos
-# failed in on-media-format with
-#   "heif: Decoder plugin generated an error: Unspecified (7.0)"
-# and the upload died as a silent 404 permalink. The script guards for this.
+# NOTE: prebuilt libvips bundles libheif WITHOUT HEVC decode (no libde265) on
+# EVERY prebuilt platform (linux-x64 and darwin alike) — iPhone HEIC report
+# photos are transcoded to JPEG via the ffmpeg layer in on-media-format
+# before sharp sees them. Do NOT assume `strings libvips | grep de265` proves
+# decode support: prebuilt 8.18.7+ carries that string only inside libheif's
+# "a suitable decoder plugin is libde265" error message text.
 #
 # Publish with (see docs/issue-164-infra-setup.md §3):
 #   aws lambda publish-layer-version \
@@ -51,21 +49,9 @@ test -n "$SHARP_NODE" || {
   exit 1
 }
 
-echo "==> Verifying HEIC/HEIF decode support..."
-# NOTE: use `grep -c ... >/dev/null`, not `grep -q`: -q closes stdin early,
-# strings takes SIGPIPE, and with pipefail the pipeline exits 141 — a
-# successful match would read as failure.
+echo "==> Verifying platform binaries..."
 file "$SHARP_NODE" | grep -c 'ELF 64-bit.*x86-64' >/dev/null || {
   echo "sharp binding is not linux-x64 ELF: $SHARP_NODE" >&2
-  exit 1
-}
-strings "$LIBVIPS_SO" | grep -ci de265 >/dev/null || {
-  echo "libvips prebuilt lacks de265 — HEVC (HEIC) decode would fail" >&2
-  echo "need sharp-libvips >= 1.3.4 (libvips 8.18.7)" >&2
-  exit 1
-}
-strings "$LIBVIPS_SO" | grep -ci heifload >/dev/null || {
-  echo "libvips prebuilt lacks heifload" >&2
   exit 1
 }
 
