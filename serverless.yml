@@ -18,6 +18,12 @@ provider:
     # fire-and-forget async invoke; renderer function arrives via CF-6).
     RENDER_CLIP_FUNCTION_NAME: pizzabase-${sls:stage}-renderClip
 
+    # Social-post target. Stage-scoped like RENDER_CLIP_FUNCTION_NAME —
+    # without this, prod falls back to the hard-coded dev function name and
+    # the async invoke "succeeds" against the dev DB (order not found, no
+    # post, silent failure).
+    SOCIAL_POST_FUNCTION_NAME: pizzabase-${sls:stage}-onSocialPost
+
     DB_NAME: ${env:DB_NAME}
     AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
     AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
