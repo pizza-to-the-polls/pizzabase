@@ -107,10 +107,14 @@ export async function seedClipsForOrder(order: Order): Promise<Clip[]> {
         if (clip) seeded.push(clip);
       }
 
+      // MMS replies linked to this report (arrive after delivery). No
+      // mediaStatus predicate: the Aurora Data API can't compare enum
+      // columns to text parameters — filter in JS instead.
       const mmsUploads = await Upload.find({
-        where: { report: { id: report.id }, mediaStatus: "ready" },
+        where: { report: { id: report.id } },
       });
       for (const upload of mmsUploads) {
+        if (upload.mediaStatus !== "ready") continue;
         const clip = await seedClipForUpload(report, upload);
         if (clip) seeded.push(clip);
       }
@@ -146,14 +150,13 @@ export async function seedUnclippedOrderMedia(): Promise<number> {
     });
 
     // MMS uploads point back at their report (uploads.report_id); the
-    // report's order is what makes them clip-worthy.
+    // report's order is what makes them clip-worthy. mediaStatus and the
+    // order linkage are filtered in JS (Aurora Data API can't compare
+    // enum columns to text parameters, and nested relation filters on
+    // report.order aren't expressible here).
     const mmsUploads = await Upload.find({
-      where: {
-        report: { order: Not(IsNull()) },
-        mediaStatus: "ready",
-        createdAt: MoreThan(cutoff),
-      },
-      relations: ["report"],
+      where: { report: Not(IsNull()), createdAt: MoreThan(cutoff) },
+      relations: { report: { order: true } },
     });
 
     let seeded = 0;
@@ -164,6 +167,8 @@ export async function seedUnclippedOrderMedia(): Promise<number> {
     }
     for (const upload of mmsUploads) {
       if (!upload.report) continue;
+      if (upload.mediaStatus !== "ready") continue;
+      if (!upload.report.order) continue; // order linkage makes it clip-worthy
       if (await seedClipForUpload(upload.report, upload)) seeded += 1;
     }
     if (seeded > 0) {

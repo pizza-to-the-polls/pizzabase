@@ -31,7 +31,7 @@
 import * as fs from "fs/promises";
 import * as os from "os";
 import * as path from "path";
-import { In, IsNull, Not } from "typeorm";
+import { IsNull, Not } from "typeorm";
 import {
   S3Client,
   GetObjectCommand,
@@ -118,15 +118,17 @@ export async function runCompilation(): Promise<Clip | null> {
   // before placement-time seeding shipped). Never throws.
   await seedUnclippedOrderMedia();
 
-  const candidates = await Clip.find({
-    where: {
-      status: In(COMPILABLE_STATUSES),
-      compiledAt: IsNull(),
-      upload: Not(IsNull()),
-    },
+  // Aurora Data API strictness: clip_status is a Postgres enum and can't
+  // be compared to text parameters (operator does not exist). Fetch
+  // without the status predicate and filter in JS instead.
+  const uncompiled = await Clip.find({
+    where: { compiledAt: IsNull(), upload: Not(IsNull()) },
     relations: ["upload"],
     order: { createdAt: "ASC" },
   });
+  const candidates = uncompiled.filter((clip) =>
+    COMPILABLE_STATUSES.includes(clip.status),
+  );
 
   if (candidates.length === 0) {
     console.log("[compile-clips] No new clips to compile — exiting");
