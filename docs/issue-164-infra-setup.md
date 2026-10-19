@@ -168,13 +168,13 @@ If a layer exists, grab its ARN. If not, create one:
 
 ### 3b. Create layer from scratch (only if no public layer available)
 
+Use the build script — it installs the linux-x64 prebuilt with the correct
+npm platform flags and FAILS if the bundled libvips lacks HEIC/HEIF decode
+(`de265`). libvips < 8.18.7 (layer `sharp:5`, sharp 0.35.4) shipped libheif
+without HEVC decoders, so HEIC report photos failed in `on-media-format`:
+
 ```bash
-mkdir -p /tmp/sharp-layer/nodejs
-cd /tmp/sharp-layer/nodejs
-npm init -y
-npm install sharp --platform=linux --arch=x64
-cd /tmp/sharp-layer
-zip -r /tmp/sharp-layer.zip nodejs
+scripts/build-sharp-layer.sh /tmp/sharp-layer.zip
 
 aws lambda publish-layer-version \
   --layer-name sharp \
@@ -182,6 +182,11 @@ aws lambda publish-layer-version \
   --compatible-runtimes nodejs22.x \
   --region us-west-2
 ```
+
+(The old manual recipe `npm install sharp --platform=linux --arch=x64` is
+wrong — modern npm needs `--os=linux --cpu=x64 --libc=glibc`, which is what
+the script uses. `--platform/--arch` are silently accepted as no-ops and the
+darwin binaries end up in the layer.)
 
 ### 3c. Get the layer ARN
 

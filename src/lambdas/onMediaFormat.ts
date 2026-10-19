@@ -167,6 +167,13 @@ export async function handler(event: S3Event): Promise<void> {
       console.error(`[on-media-format] Failed for ${key}:`, err);
       try {
         upload.mediaStatus = "failed";
+        // Surface the failure reason (Retool/support queries) — otherwise a
+        // failed encode is indistinguishable from "still processing" and the
+        // permalink just 404s forever (e.g. HEIC-on-broken-layer incidents).
+        upload.failureReason = String((err as Error)?.message ?? err).slice(
+          0,
+          500,
+        );
         await upload.save();
       } catch {
         // DB update failed too — nothing we can do
