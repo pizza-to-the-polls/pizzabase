@@ -263,8 +263,11 @@ export async function runCompilation(): Promise<Clip | null> {
         )}`,
     );
 
-    // Fire-and-forget kit distribution — same pattern as approve().
-    notifyClipKit(compilation).catch((err) => {
+    // Awaited: the handler returns as soon as runCompilation resolves,
+    // and Lambda freezes the container — an un-awaited notifyClipKit races
+    // the freeze and the #feed-clips post is silently dropped. The .catch
+    // is defensive depth (notifyClipKit never throws on its own).
+    await notifyClipKit(compilation).catch((err) => {
       console.error("notifyClipKit crashed:", err);
       notifyBugsnag(err instanceof Error ? err : new Error(String(err)));
     });
