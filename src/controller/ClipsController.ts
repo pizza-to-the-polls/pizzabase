@@ -190,11 +190,12 @@ export class ClipsController {
 
     await clip.save();
 
-    // Fire-and-forget Slack kit distribution (DIST-001): the response
-    // returns immediately and a failed notification never breaks clip
-    // approval. notifyClipKit never throws (it logs + Bugsnags internally);
-    // the .catch is purely defensive, mirroring the socialPost pattern.
-    notifyClipKit(clip).catch((err) =>
+    // Kit distribution (DIST-001): awaited, not fire-and-forget —
+    // lambda.ts sets callbackWaitsForEmptyEventLoop=false, so the container
+    // freezes the moment the response is sent and an un-awaited notify
+    // races the freeze. The .catch keeps approval working even if the
+    // notifier ever crashes (it never throws on its own).
+    await notifyClipKit(clip).catch((err) =>
       console.error("notifyClipKit crashed:", err),
     );
 
