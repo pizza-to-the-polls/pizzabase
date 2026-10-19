@@ -22,8 +22,11 @@ export class OrdersController {
 
     await zapNewOrder(order);
 
-    // Fire-and-forget: social posting never blocks the response.
-    invokeSocialPost(order.id);
+    // Awaited, not fire-and-forget: lambda.ts sets
+    // callbackWaitsForEmptyEventLoop=false, so the container freezes the
+    // moment the response is sent — an un-awaited invoke races the freeze
+    // and is silently dropped some of the time (observed on order 12806).
+    await invokeSocialPost(order.id);
 
     return { address: order.location.fullAddress };
   }
