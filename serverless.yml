@@ -201,7 +201,10 @@ functions:
       - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:sharp:6
       # ffmpeg layer: HEIC/HEIF stills are transcoded to JPEG before sharp
       # (prebuilt libvips ships libheif without libde265 — no HEVC decode).
-      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1
+      # ffmpeg:2 = ffmpeg 8.1 (BtbN linux64-lgpl): applies HEIF display rotation
+      # and assembles grid images — ffmpeg:1 (johnvansickle 7.x) does neither,
+      # producing sideways/tile output. Video functions stay pinned to ffmpeg:1.
+      - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:2
     environment:
       RAW_UPLOADS_BUCKET: ${env:RAW_UPLOADS_BUCKET, 'raw.polls.pizza'}
       UPLOAD_S3_BUCKET: ${env:UPLOAD_S3_BUCKET, 'reports.polls.pizza'}
