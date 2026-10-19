@@ -17,7 +17,11 @@ const mockMediaConvertSend = jest.fn();
 // JPEG via the real fs (the handler cleans up /tmp temp files itself).
 const realFs = jest.requireActual("fs") as typeof import("fs");
 const mockExecFile = jest.fn(
-  (_file: string, args: string[], cb: (e: Error | null, r: unknown) => void) => {
+  (
+    _file: string,
+    args: string[],
+    cb: (e: Error | null, r: unknown) => void,
+  ) => {
     const outPath = args[args.length - 1];
     realFs.writeFile(outPath, Buffer.from("transcoded-jpeg-bytes"), (e) =>
       e ? cb(e, null) : cb(null, { stdout: "", stderr: "" }),
