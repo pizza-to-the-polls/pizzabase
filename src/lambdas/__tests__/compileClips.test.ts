@@ -39,6 +39,10 @@ jest.mock("../../lib/clipKit", () => ({
   notifyClipKit: jest.fn(),
 }));
 
+jest.mock("../../lib/clip-auto", () => ({
+  seedUnclippedOrderMedia: jest.fn(async () => 0),
+}));
+
 // fs/promises: capture writes; reads return fake bytes for any path.
 jest.mock("fs/promises", () => ({
   mkdir: jest.fn(async () => undefined),
