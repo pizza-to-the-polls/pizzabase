@@ -4,6 +4,19 @@ import { IntegrationSession } from "../entity/IntegrationSession";
 import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
+import { Report } from "../entity/Report";
+
+// Link an upload to the order via a fresh report so collectMedia finds it
+// (media is sourced from the order's reports, not the location history).
+async function linkUploadToOrder(order: Order, upload: Upload): Promise<void> {
+  const report = new Report();
+  report.contactInfo = "3125550100";
+  report.reportURL = `https://polls.pizza/${upload.filePath}`;
+  report.location = order.location;
+  report.order = order;
+  report.upload = upload;
+  await report.save();
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -244,6 +257,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/chicago-il-threads-test.jpg";
       upload.fileHash = "threads_hash_img";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       // Step 1: container creation returns id
       (global.fetch as jest.Mock)
@@ -287,6 +301,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/chicago-il-threads-video.mp4";
       upload.fileHash = "threads_hash_vid";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({
@@ -328,6 +343,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/chicago-il-threads-err.mp4";
       upload.fileHash = "threads_err_vid";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       (global.fetch as jest.Mock)
         // Video container succeeds
@@ -376,6 +392,7 @@ describe("threadsPost", () => {
       vidUpload.filePath = "uploads/threads-pref-video.mp4";
       vidUpload.fileHash = "pref_vid";
       await vidUpload.save();
+      await linkUploadToOrder(order, vidUpload);
 
       // Image upload
       const imgUpload = new Upload();
@@ -384,6 +401,7 @@ describe("threadsPost", () => {
       imgUpload.filePath = "uploads/threads-pref-image.jpg";
       imgUpload.fileHash = "pref_img";
       await imgUpload.save();
+      await linkUploadToOrder(order, imgUpload);
 
       // Video fails, image succeeds
       (global.fetch as jest.Mock)
@@ -431,6 +449,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/all-fail-image.jpg";
       upload.fileHash = "all_fail";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       (global.fetch as jest.Mock)
         // Image container fails
@@ -472,6 +491,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/publish-fail.jpg";
       upload.fileHash = "pub_fail";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       const errorSpy = jest
         .spyOn(console, "error")
@@ -538,6 +558,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/container-fail.jpg";
       upload.fileHash = "ctr_fail";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       (global.fetch as jest.Mock)
         // Container creation fails
@@ -564,6 +585,7 @@ describe("threadsPost", () => {
       upload.filePath = "uploads/pub-error.jpg";
       upload.fileHash = "pub_err";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({

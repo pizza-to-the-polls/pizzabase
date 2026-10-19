@@ -1,5 +1,6 @@
 import { collectMedia } from "./media";
 import { Order, OrderTypes } from "../entity/Order";
+import { Report } from "../entity/Report";
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
 import { AppDataSource } from "../data-source";
@@ -29,12 +30,14 @@ async function addUpload(
   order: Order,
   filePath: string,
   ageMinutes: number = 0,
-): Promise<void> {
+  report?: Report,
+): Promise<Upload> {
   const upload = new Upload();
   upload.location = order.location;
   upload.ipAddress = "127.0.0.1";
   upload.filePath = filePath;
   upload.fileHash = `hash-${filePath}`;
+  if (report) upload.report = report;
   await upload.save();
   if (ageMinutes > 0) {
     await AppDataSource.getRepository(Upload).update(
@@ -42,6 +45,35 @@ async function addUpload(
       { createdAt: new Date(Date.now() - ageMinutes * 60 * 1000) as never },
     );
   }
+  return upload;
+}
+
+async function addReport(
+  order: Order,
+  {
+    reportURL = "https://polls.pizza/uploads/report.jpg",
+    upload = null,
+    ageMinutes = 0,
+  }: {
+    reportURL?: string;
+    upload?: Upload | null;
+    ageMinutes?: number;
+  } = {},
+): Promise<Report> {
+  const report = new Report();
+  report.contactInfo = "3125550100";
+  report.reportURL = reportURL;
+  report.location = order.location;
+  report.order = order;
+  if (upload) report.upload = upload;
+  await report.save();
+  if (ageMinutes > 0) {
+    await AppDataSource.getRepository(Report).update(
+      { id: report.id },
+      { createdAt: new Date(Date.now() - ageMinutes * 60 * 1000) as never },
+    );
+  }
+  return report;
 }
 
 // ---------------------------------------------------------------------------
@@ -49,9 +81,10 @@ async function addUpload(
 // ---------------------------------------------------------------------------
 
 describe("collectMedia", () => {
-  it("includes uploads attached to the location", async () => {
+  it("uses the web upload attached to the order's report", async () => {
     const order = await createTestOrder();
-    await addUpload(order, "uploads/line.jpg", 5);
+    const upload = await addUpload(order, "uploads/line.jpg");
+    await addReport(order, { upload });
 
     const media = await collectMedia(order);
 
@@ -59,10 +92,37 @@ describe("collectMedia", () => {
     expect(media.images[0]).toContain("line.jpg");
   });
 
-  it("sorts uploads newest first", async () => {
+  it("ignores uploads at the location that belong to no report of the order", async () => {
     const order = await createTestOrder();
-    await addUpload(order, "uploads/older.jpg", 50);
-    await addUpload(order, "uploads/newer.jpg", 40);
+    // An old photo from a previous election cycle, still tied to the
+    // location but not to any report this order was placed against.
+    await addUpload(order, "uploads/last-election.jpg", 60 * 24 * 365);
+    const upload = await addUpload(order, "uploads/line.jpg");
+    await addReport(order, { upload });
+
+    const media = await collectMedia(order);
+
+    expect(media.images).toHaveLength(1);
+    expect(media.images[0]).toContain("line.jpg");
+  });
+
+  it("includes MMS uploads linked to the order's reports", async () => {
+    const order = await createTestOrder();
+    const report = await addReport(order);
+    await addUpload(order, "uploads/mms-reply.jpg", 5, report);
+
+    const media = await collectMedia(order);
+
+    expect(media.images).toHaveLength(1);
+    expect(media.images[0]).toContain("mms-reply.jpg");
+  });
+
+  it("sorts media newest first", async () => {
+    const order = await createTestOrder();
+    const older = await addUpload(order, "uploads/older.jpg", 50);
+    const newer = await addUpload(order, "uploads/newer.jpg", 40);
+    await addReport(order, { upload: older, ageMinutes: 50 });
+    await addReport(order, { upload: newer, ageMinutes: 40 });
 
     const media = await collectMedia(order);
 
@@ -73,18 +133,48 @@ describe("collectMedia", () => {
 
   it("caps images at four and videos at one", async () => {
     const order = await createTestOrder();
-    await addUpload(order, "uploads/p1.jpg", 50);
-    await addUpload(order, "uploads/p2.jpg", 49);
-    await addUpload(order, "uploads/p3.jpg", 48);
-    await addUpload(order, "uploads/p4.jpg", 47);
-    await addUpload(order, "uploads/p5.jpg", 46);
-    await addUpload(order, "uploads/v1.mp4", 45);
-    await addUpload(order, "uploads/v2.mp4", 44);
+    for (const [file, age] of [
+      ["uploads/p1.jpg", 50],
+      ["uploads/p2.jpg", 49],
+      ["uploads/p3.jpg", 48],
+      ["uploads/p4.jpg", 47],
+      ["uploads/p5.jpg", 46],
+      ["uploads/v1.mp4", 45],
+      ["uploads/v2.mp4", 44],
+    ] as const) {
+      const upload = await addUpload(order, file, age);
+      await addReport(order, { upload, ageMinutes: age });
+    }
 
     const media = await collectMedia(order);
 
     expect(media.images).toHaveLength(4);
     expect(media.videos).toHaveLength(1);
+  });
+
+  it("falls back to the report's public URL when there is no upload", async () => {
+    const order = await createTestOrder();
+    await addReport(order, {
+      reportURL: "https://polls.pizza/uploads/legacy-line.jpg",
+    });
+
+    const media = await collectMedia(order);
+
+    expect(media.images).toEqual([
+      "https://polls.pizza/uploads/legacy-line.jpg",
+    ]);
+  });
+
+  it("skips non-media report URLs", async () => {
+    const order = await createTestOrder();
+    await addReport(order, {
+      reportURL: "https://polls.pizza/report-submitted",
+    });
+
+    const media = await collectMedia(order);
+
+    expect(media.images).toHaveLength(0);
+    expect(media.videos).toHaveLength(0);
   });
 
   it("serves pipeline uploads from their processed output", async () => {
@@ -100,6 +190,7 @@ describe("collectMedia", () => {
       mp4: "https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/99/pipeline_transcoded.mp4",
     };
     await upload.save();
+    await addReport(order, { upload });
 
     const media = await collectMedia(order);
 
@@ -118,6 +209,7 @@ describe("collectMedia", () => {
     upload.rawFilePath = "uploads/processing.mp4";
     upload.mediaStatus = "processing";
     await upload.save();
+    await addReport(order, { upload });
 
     const media = await collectMedia(order);
 

@@ -2,6 +2,19 @@ import { twitterPost } from "./twitter";
 import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
 import { Upload } from "../entity/Upload";
+import { Report } from "../entity/Report";
+
+// Link an upload to the order via a fresh report so collectMedia finds it
+// (media is sourced from the order's reports, not the location history).
+async function linkUploadToOrder(order: Order, upload: Upload): Promise<void> {
+  const report = new Report();
+  report.contactInfo = "3125550100";
+  report.reportURL = `https://polls.pizza/${upload.filePath}`;
+  report.location = order.location;
+  report.order = order;
+  report.upload = upload;
+  await report.save();
+}
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -421,6 +434,8 @@ describe("twitterPost with media", () => {
       location,
     );
 
+    await linkUploadToOrder(order, upload);
+
     // Mock S3 download + Twitter media upload + metadata + tweet
     (global.fetch as jest.Mock)
       // S3 download for image
@@ -495,6 +510,8 @@ describe("twitterPost with media", () => {
       { quantity: 5, orderType: OrderTypes.pizzas, cost: 50 },
       location,
     );
+
+    await linkUploadToOrder(order, upload);
 
     const videoBytes = Buffer.alloc(5 * 1024 * 1024 + 12345); // > 1 chunk → 2 segments
     (global.fetch as jest.Mock)
@@ -606,6 +623,8 @@ describe("twitterPost with media", () => {
       location,
     );
 
+    await linkUploadToOrder(order, upload);
+
     // HEAD reports 513 MB — video skipped before any download
     (global.fetch as jest.Mock)
       .mockResolvedValueOnce(headResponse(513 * 1024 * 1024))
@@ -657,6 +676,8 @@ describe("twitterPost with media", () => {
       { quantity: 2, orderType: OrderTypes.pizzas, cost: 20 },
       location,
     );
+
+    await linkUploadToOrder(order, upload);
 
     // S3 download returns buffer > 5 MB
     const bigBuffer = new ArrayBuffer(6 * 1024 * 1024); // 6 MB
@@ -713,6 +734,8 @@ describe("twitterPost with media", () => {
       { quantity: 3, orderType: OrderTypes.pizzas, cost: 30 },
       location,
     );
+
+    await linkUploadToOrder(order, upload);
 
     (global.fetch as jest.Mock)
       // S3 download succeeds
@@ -776,6 +799,8 @@ describe("twitterPost with media", () => {
       { quantity: 4, orderType: OrderTypes.pizzas, cost: 40 },
       location,
     );
+
+    await linkUploadToOrder(order, upload);
 
     (global.fetch as jest.Mock)
       // HEAD — size check
@@ -878,6 +903,8 @@ describe("twitterPost with media", () => {
       location,
     );
 
+    await linkUploadToOrder(order, upload);
+
     (global.fetch as jest.Mock)
       // HEAD
       .mockResolvedValueOnce(headResponse(1000000))
@@ -943,6 +970,8 @@ describe("twitterPost with media", () => {
       { quantity: 7, orderType: OrderTypes.pizzas, cost: 70 },
       location,
     );
+
+    await linkUploadToOrder(order, upload);
 
     (global.fetch as jest.Mock)
       // S3 download

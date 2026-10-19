@@ -5,7 +5,20 @@ import { Order, OrderTypes } from "../entity/Order";
 import { Location } from "../entity/Location";
 import { IntegrationSession } from "../entity/IntegrationSession";
 import { Upload } from "../entity/Upload";
+import { Report } from "../entity/Report";
 import { QueryFailedError } from "typeorm";
+
+// Link an upload to the order via a fresh report so collectMedia finds it
+// (media is sourced from the order's reports, not the location history).
+async function linkUploadToOrder(order: Order, upload: Upload): Promise<void> {
+  const report = new Report();
+  report.contactInfo = "3125550100";
+  report.reportURL = `https://polls.pizza/${upload.filePath}`;
+  report.location = order.location;
+  report.order = order;
+  report.upload = upload;
+  await report.save();
+}
 
 // Helper to build mock fetch Response objects
 function mockRes(
@@ -500,6 +513,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-abc123.jpg";
       upload.fileHash = "hash123";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       let recordBody: any;
       routeMock(
@@ -534,6 +548,7 @@ describe("blueskyPost", () => {
         upload.filePath = `uploads/chicago-il-img${i}.jpg`;
         upload.fileHash = `hash_img${i}`;
         await upload.save();
+        await linkUploadToOrder(order, upload);
       }
 
       let recordBody: any;
@@ -560,6 +575,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-large.jpg";
       upload.fileHash = "hash_large_img";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       let downloadUrlCalled: string | null = null;
       routeMock(
@@ -608,6 +624,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-toobig.jpg";
       upload.fileHash = "hash_toobig";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       let recordBody: any;
       let uploadBlobCalled = false;
@@ -695,6 +712,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-vid.mp4";
       upload.fileHash = "hash_video";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       let recordBody: any;
       routeMock(
@@ -751,6 +769,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-stream.mp4";
       upload.fileHash = "hash_stream_vid";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       function streamFromBuffer(buf: Buffer): ReadableStream<Uint8Array> {
         return new ReadableStream<Uint8Array>({
@@ -819,6 +838,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-retry.mp4";
       upload.fileHash = "hash_retry_vid";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       function streamFromBuffer(buf: Buffer): ReadableStream<Uint8Array> {
         return new ReadableStream<Uint8Array>({
@@ -886,6 +906,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-huge.mp4";
       upload.fileHash = "hash_huge_vid";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       let recordBody: any;
       let uploadBlobCalled = false;
@@ -932,6 +953,7 @@ describe("blueskyPost", () => {
       videoUpload.filePath = "uploads/chicago-il-vid2.mp4";
       videoUpload.fileHash = "hash_vid2";
       await videoUpload.save();
+      await linkUploadToOrder(order, videoUpload);
 
       const imageUpload = new Upload();
       imageUpload.location = order.location;
@@ -939,6 +961,7 @@ describe("blueskyPost", () => {
       imageUpload.filePath = "uploads/chicago-il-pic.jpg";
       imageUpload.fileHash = "hash_pic";
       await imageUpload.save();
+      await linkUploadToOrder(order, imageUpload);
 
       let recordBody: any;
       routeMock(
@@ -1132,6 +1155,7 @@ describe("blueskyPost", () => {
       upload.filePath = "uploads/chicago-il-bad.jpg";
       upload.fileHash = "hash_bad_img";
       await upload.save();
+      await linkUploadToOrder(order, upload);
 
       let recordBody: any;
       routeMock(
