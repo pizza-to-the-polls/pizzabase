@@ -54,14 +54,9 @@ export class ClipsController {
       return { errors: ["Upload not found"] };
     }
 
-    if (upload.moderationStatus !== "clean") {
-      response.status(400);
-      return {
-        errors: [
-          "Upload must be moderated as clean before it can become a clip",
-        ],
-      };
-    }
+    // Note: upload moderation no longer gates clips — any sent order is
+    // clip worthy. The report-with-order gate below is the only
+    // clip-worthiness rule.
 
     if (upload.mediaStatus !== "ready") {
       response.status(400);

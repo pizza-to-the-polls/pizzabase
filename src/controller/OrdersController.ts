@@ -4,6 +4,7 @@ import { Order } from "../entity/Order";
 import { validateOrder } from "../lib/validator";
 import { zapNewOrder, zapCancelOrderReport } from "../lib/zapier";
 import { invokeSocialPost } from "../lib/invoke-social-post";
+import { seedClipsForOrder } from "../lib/clip-auto";
 
 export class OrdersController {
   async create(request: Request, response: Response, next: NextFunction) {
@@ -27,6 +28,11 @@ export class OrdersController {
     // moment the response is sent — an un-awaited invoke races the freeze
     // and is silently dropped some of the time (observed on order 12806).
     await invokeSocialPost(order.id);
+
+    // Any sent order is clip worthy — seed its media as clips now so they
+    // render immediately and the 3-hourly compile run picks them up.
+    // Never throws.
+    await seedClipsForOrder(order);
 
     return { address: order.location.fullAddress };
   }

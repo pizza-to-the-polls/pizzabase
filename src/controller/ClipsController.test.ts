@@ -165,8 +165,9 @@ describe("#create", () => {
     expect(body).toEqual({ errors: ["Upload not found"] });
   });
 
-  it("returns 400 when upload is not moderated as clean", async () => {
+  it("creates a queued clip even while moderation is still pending", async () => {
     const upload = await makeUpload({ moderationStatus: "pending" });
+    await makeReportWithOrder(upload);
     const request = http_mocks.createRequest({
       method: "POST",
       body: { ...validBody(), uploadId: upload.id },
@@ -180,9 +181,10 @@ describe("#create", () => {
       () => undefined,
     )) as JsonResponse;
 
-    expect(response.statusCode).toEqual(400);
-    expect(body.errors[0]).toMatch(/moderated as clean/i);
-    expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+    // Moderation no longer gates clips — any sent order is clip worthy.
+    expect(response.statusCode).toEqual(200);
+    expect(body.status).toEqual("queued");
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
   });
 
   it("returns 400 when upload media is not ready", async () => {
@@ -246,7 +248,7 @@ describe("#create", () => {
     expect(mockInvokeRenderClip).not.toHaveBeenCalled();
   });
 
-  it("creates a queued clip from a clean+ready upload and fires the render", async () => {
+  it("creates a queued clip from a ready upload and fires the render", async () => {
     const upload = await makeUpload();
     await makeReportWithOrder(upload);
     const request = http_mocks.createRequest({

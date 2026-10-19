@@ -6,6 +6,10 @@
  * video clips into one reel and posts it to the kit Zapier hook.
  *
  * Flow:
+ *   0. Backstop seeding: order media that hasn't become a clip yet is
+ *      seeded now (see lib/clip-auto — any sent order is clip worthy).
+ *      Newly seeded clips fire their renders and are compiled by the
+ *      NEXT run; this run compiles what's already rendered.
  *   1. Gather new content: per-upload clips (compilations excluded via
  *      upload IS NOT NULL) with status in ready/approved/published and
  *      compiled_at NULL, oldest first. None found → log and exit (the
@@ -38,6 +42,7 @@ import { Clip } from "../entity/Clip";
 import { TARGET_WIDTH, TARGET_HEIGHT } from "../lib/clipTemplate";
 import { runFfmpeg } from "../lib/ffmpeg-exec";
 import { notifyClipKit } from "../lib/clipKit";
+import { seedUnclippedOrderMedia } from "../lib/clip-auto";
 import { uploadPermalink } from "../lib/upload-permalink";
 import { photoEntryForUpload, ClipPhotoEntry } from "../lib/photo-entry";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
@@ -108,6 +113,11 @@ async function putObject(
  * drive it directly with mocked S3/ffmpeg.
  */
 export async function runCompilation(): Promise<Clip | null> {
+  // Backstop: seed any order media that hasn't become a clip yet (MMS
+  // replies arriving after the order, late media processing, orders placed
+  // before placement-time seeding shipped). Never throws.
+  await seedUnclippedOrderMedia();
+
   const candidates = await Clip.find({
     where: {
       status: In(COMPILABLE_STATUSES),
@@ -218,8 +228,8 @@ export async function runCompilation(): Promise<Clip | null> {
       video: `${prefix}/clip.mp4`,
       poster: `${prefix}/poster.jpg`,
     };
-    // Compilations skip the volunteer approval gate (the per-clip upload
-    // moderation already vetted every member) — mark approved so the
+    // Compilations skip the volunteer approval gate (they only fold in
+    // already-rendered clips of order media) — mark approved so the
     // publish-confirmation loop can close on it.
     compilation.status = "approved";
     compilation.approvedBy = "compile-clips";

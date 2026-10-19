@@ -11,6 +11,7 @@ import {
 } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 import { invokeSocialPost } from "../lib/invoke-social-post";
+import { seedClipsForOrder } from "../lib/clip-auto";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -174,6 +175,11 @@ export class LocationsController {
     // moment the response is sent — an un-awaited invoke races the freeze
     // and is silently dropped some of the time.
     await invokeSocialPost(placedOrder.id);
+
+    // Any sent order is clip worthy — seed its media as clips now so they
+    // render immediately and the 3-hourly compile run picks them up.
+    // Never throws.
+    await seedClipsForOrder(placedOrder);
 
     return { success: true };
   }
