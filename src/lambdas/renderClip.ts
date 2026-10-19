@@ -153,9 +153,13 @@ export async function handler(event: { clipId?: number }): Promise<void> {
   const dailyBudget = Number.isFinite(budget) ? budget : DEFAULT_DAILY_BUDGET;
   const startOfDay = new Date();
   startOfDay.setUTCHours(0, 0, 0, 0);
-  const renderedToday = await Clip.count({
-    where: { status: "ready", updatedAt: MoreThan(startOfDay) },
+  // Aurora Data API strictness: enum columns (clip_status) can't be
+  // compared to text parameters — fetch today's renders without the enum
+  // predicate and count ready ones in JS.
+  const todaysClips = await Clip.find({
+    where: { updatedAt: MoreThan(startOfDay) },
   });
+  const renderedToday = todaysClips.filter((c) => c.status === "ready").length;
   if (renderedToday >= dailyBudget) {
     console.log(
       `[render-clip] Daily render budget exhausted ` +
