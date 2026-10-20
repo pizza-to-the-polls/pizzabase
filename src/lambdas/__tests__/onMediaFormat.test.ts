@@ -13,6 +13,26 @@ import { Location } from "../../entity/Location";
 const mockS3Send = jest.fn();
 const mockMediaConvertSend = jest.fn();
 
+// Stand-in "ffmpeg" for the HEIC/HEIF transcode path: writes the fake output
+// JPEG via the real fs (the handler cleans up /tmp temp files itself).
+const realFs = jest.requireActual("fs") as typeof import("fs");
+const mockExecFile = jest.fn(
+  (
+    _file: string,
+    args: string[],
+    cb: (e: Error | null, r: unknown) => void,
+  ) => {
+    const outPath = args[args.length - 1];
+    realFs.writeFile(outPath, Buffer.from("transcoded-jpeg-bytes"), (e) =>
+      e ? cb(e, null) : cb(null, { stdout: "", stderr: "" }),
+    );
+  },
+);
+jest.mock("child_process", () => ({
+  ...jest.requireActual("child_process"),
+  execFile: (...a: unknown[]) => (mockExecFile as any)(...a),
+}));
+
 // Mutated per-test to drive the mocked sharp metadata
 const mockSharpMetadata = { width: 4000, height: 3000, format: "jpeg" };
 
@@ -200,6 +220,7 @@ function createdJobInput(): any {
 beforeEach(() => {
   mockS3Send.mockReset();
   mockMediaConvertSend.mockReset();
+  mockExecFile.mockClear();
   mockSharpMetadata.width = 4000;
   mockSharpMetadata.height = 3000;
   mockSharpMetadata.format = "jpeg";
@@ -253,6 +274,36 @@ describe("image uploads", () => {
         }),
       ]),
     );
+  });
+
+  it("transcodes HEIC uploads through ffmpeg before the sharp pipeline", async () => {
+    const upload = await createUpload("uploads/photo.heic");
+    s3ServesRaw(Buffer.from("raw-heic-bytes"));
+    const sharpFactory = require("sharp") as jest.Mock;
+    sharpFactory.mockClear();
+
+    await handler(s3Event("uploads/photo.heic"));
+
+    // ffmpeg ran against the temp input and produced the JPEG sharp saw
+    const [ffmpegPath, ffmpegArgs] = mockExecFile.mock.calls.at(-1)!;
+    expect(ffmpegPath).toBe("/opt/bin/ffmpeg");
+    expect(ffmpegArgs).toContain("-i");
+    expect(sharpFactory).toHaveBeenCalledTimes(1);
+    expect((sharpFactory.mock.calls[0][0] as Buffer).toString()).toBe(
+      "transcoded-jpeg-bytes",
+    );
+
+    const updated = (await Upload.findOne({
+      where: { id: upload.id },
+    }))!;
+    expect(updated.mediaStatus).toBe("ready");
+    const processed = updated.processedFilePath!;
+    expect(processed.webp).toBe(
+      `https://s3.us-west-2.amazonaws.com/${BUCKET}/uploads/${upload.id}.webp`,
+    );
+    // Temp media never lingers in /tmp across warm invocations
+    const tmp = jest.requireActual("fs");
+    expect(tmp.existsSync(ffmpegArgs[ffmpegArgs.length - 1])).toBe(false);
   });
 
   it("uses the gif output as its own poster for animated GIFs", async () => {

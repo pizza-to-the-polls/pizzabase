@@ -160,6 +160,27 @@ jobs:
               --region us-west-2
           fi
 
+      # Regression guard for the on-media-format HEIC fallback (#297/#298):
+      # runs the EXACT layer binary on the runner's linux-x86_64 and asserts
+      # HEIF decode behavior the fallback depends on —
+      #   1. display-rotation is applied (tiny-rotated.heic: stored 32x24 +
+      #      irot -90 must decode to 24x32), and
+      #   2. grid/tiled HEICs are assembled (grid.heic: 512x512 tiles must
+      #      decode to the full 900x1200, not a single tile).
+      # ffmpeg:1 (johnvansickle 7.x) fails both. Also proves the UPX-packed
+      # ffmpeg:3 binary executes.
+      - name: Verify ffmpeg layer HEIC decode (HEIF rotation + grid)
+        run: |
+          aws s3 cp s3://raw.polls.pizza/layers/ffmpeg-3.zip /tmp/ff-layer.zip
+          unzip -o -q /tmp/ff-layer.zip -d /tmp/ff-layer
+          chmod +x /tmp/ff-layer/bin/ffmpeg
+          /tmp/ff-layer/bin/ffmpeg -y -loglevel error -i src/tests/fixtures/tiny-rotated.heic -frames:v 1 -f image2 /tmp/tiny.jpg
+          file /tmp/tiny.jpg | tee /tmp/tiny.info
+          grep -q "24x32" /tmp/tiny.info
+          /tmp/ff-layer/bin/ffmpeg -y -loglevel error -i src/tests/fixtures/grid.heic -frames:v 1 -f image2 /tmp/grid.jpg
+          file /tmp/grid.jpg | tee /tmp/grid.info
+          grep -q "900x1200" /tmp/grid.info
+
       - name: deploy to aws
         uses: serverless/github-action@v4.0.0
         with:
