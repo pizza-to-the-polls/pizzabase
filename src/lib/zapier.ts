@@ -29,9 +29,53 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
           }
         : undefined,
       truck: report.truck ? report.truck.asJSON() : undefined,
+      media: await reportMediaUrls(report),
+      otherReports: await otherReportsByContact(report),
     },
     hook,
   );
+
+/**
+ * Primary CDN URLs for all media associated with a report — inbound MMS
+ * replies plus the original web upload — newest first. Only ready media
+ * that passed moderation is included (mirrors ReportsController.media).
+ */
+const reportMediaUrls = async (report: Report): Promise<string[]> => {
+  const uploads = await Upload.find({
+    where: { report: { id: report.id } },
+    order: { createdAt: "DESC" },
+  });
+  if (report.upload) uploads.push(report.upload);
+
+  const urls: string[] = [];
+  for (const upload of uploads) {
+    if (upload.mediaStatus !== "ready") continue;
+    if (
+      upload.moderationStatus === "flagged" ||
+      upload.moderationStatus === "rejected"
+    ) {
+      continue;
+    }
+    const processed = upload.processedFilePath;
+    const cdn =
+      cdnUrlFromStoredUrl(processed?.mp4) ||
+      cdnUrlFromStoredUrl(processed?.webp) ||
+      cdnUrlFromStoredUrl(processed?.jpeg) ||
+      cdnUrlFromStoredUrl(processed?.gif);
+    if (cdn) urls.push(cdn);
+  }
+  return urls;
+};
+
+/**
+ * How many OTHER reports this contact has made (excludes the current one).
+ */
+const otherReportsByContact = async (report: Report): Promise<number> => {
+  const contactInfo = report.contactInfo;
+  if (!contactInfo) return 0;
+  const count = await Report.count({ where: { contactInfo } });
+  return Math.max(0, count - 1);
+};
 
 const zapOrder = async (order: Order, hook: ZapHooks): Promise<void> =>
   zapAny(
