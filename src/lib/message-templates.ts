@@ -178,7 +178,7 @@ export const TEMPLATES: readonly string[] = [
   "if you're waiting at {{2. Location Address}} {{2. Location City}}, check the horizon: {{3. Pizzas}} from {{2. Restaurant}} are coming to rescue your stomach",
   "just a casual delivery of {{3. Pizzas}} from {{2. Restaurant}} to {{2. Location Address}} in {{2. Location City}} because voters are the real VIPs 🌟",
   'the line at {{2. Location Address}} {{2. Location City}} is long, but help is on the way (and by "help" we mean {{3. Pizzas}} from {{2. Restaurant}})',
-  "fueling the ballot box with pizza boxes. {{3. Pizzas}} from {{2. Restaurant}} headed to {{2. Location Address}} in {{2. Location City}} 🗳️📦",
+  "Ballot box meet pizza box 🗳️🤝🍕. {{3. Pizzas}} from {{2. Restaurant}} headed to {{2. Location Address}} in {{2. Location City}}",
   'putting the "party" back in non-partisan. {{3. Pizzas}} from {{2. Restaurant}} headed to {{2. Location Address}} {{2. Location City}} 🎉',
   "nothing but respect for the voters at {{2. Location Address}} {{2. Location City}} — and nothing but cheese for {{3. Pizzas}} from {{2. Restaurant}} 🫡",
   "we can't make the line move faster at {{2. Location Address}} {{2. Location City}}, but we can make it taste like {{3. Pizzas}} from {{2. Restaurant}}",
