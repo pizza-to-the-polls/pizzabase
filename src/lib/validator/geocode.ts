@@ -7,6 +7,7 @@ const GMAPS_COMPONENT_MAPPING = {
   route: "street",
   street_number: "num",
   administrative_area_level_1: "state",
+  administrative_area_level_2: "county",
   premise: "premise",
   establishmen: "premise",
   transit_station: "premise",
@@ -82,7 +83,7 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       address_components,
     } = result;
 
-    const { city, state, zip, num, street, premise } =
+    const { city, state, zip, num, street, premise, county } =
       address_components.reduce(
         (obj, { short_name, types }) => {
           for (const type of types) {
@@ -99,6 +100,7 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
           num: "",
           street: "",
           premise: "",
+          county: "",
         },
       );
     const address = num && street ? `${num} ${street}` : premise;
@@ -117,6 +119,7 @@ const gmapsGeocode = async (body: string): Promise<null | NormalAddress> => {
       zip,
       latitude,
       longitude,
+      ...(county ? { county } : {}),
     };
   }
   return null;
