@@ -58,6 +58,10 @@ export class Location extends BaseEntity {
   @Index()
   zip!: string;
 
+  @Column({ nullable: true })
+  @Index()
+  county: string | null;
+
   @Column({
     name: "validated_at",
     type: "timestamp with time zone",
@@ -125,6 +129,7 @@ export class Location extends BaseEntity {
       state,
       address,
       zip,
+      county,
       fullAddress,
       lat,
       lng,
@@ -136,6 +141,7 @@ export class Location extends BaseEntity {
       city,
       state,
       zip,
+      county,
       address,
       fullAddress,
       lat,
@@ -222,8 +228,16 @@ export class Location extends BaseEntity {
   static async createFromAddress(
     normalAddress: NormalAddress,
   ): Promise<Location> {
-    const { fullAddress, address, city, state, zip, latitude, longitude } =
-      normalAddress;
+    const {
+      fullAddress,
+      address,
+      city,
+      state,
+      zip,
+      county,
+      latitude,
+      longitude,
+    } = normalAddress;
 
     const location = new this();
 
@@ -232,6 +246,7 @@ export class Location extends BaseEntity {
     location.zip = zip;
     location.city = city;
     location.state = state;
+    location.county = county || null;
     location.lat = `${latitude}`;
     location.lng = `${longitude}`;
 

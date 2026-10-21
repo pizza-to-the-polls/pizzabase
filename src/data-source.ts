@@ -17,6 +17,7 @@ import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
 import { BannedPhoneNumber } from "./entity/BannedPhoneNumber";
 import { Clip } from "./entity/Clip";
+import { WaitTimeSource } from "./entity/WaitTimeSource";
 
 const entities = [
   Action,
@@ -32,6 +33,7 @@ const entities = [
   Report,
   Truck,
   Upload,
+  WaitTimeSource,
 ];
 const migrations = [path.join(__dirname, "migration", "*.{ts,js}")];
 const subscribers = [path.join(__dirname, "subscriber", "*.{ts,js}")];

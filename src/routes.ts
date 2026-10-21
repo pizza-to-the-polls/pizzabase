@@ -13,6 +13,7 @@ import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
 import { LinksController } from "./controller/LinksController";
 import { TwilioInboundController } from "./controller/TwilioInboundController";
+import { WaitTimeSourcesController } from "./controller/WaitTimeSourcesController";
 
 export const Routes = [
   {
@@ -32,6 +33,36 @@ export const Routes = [
     route: "/locations",
     controller: LocationsController,
     action: "index",
+  },
+  {
+    method: "get",
+    route: "/locations/:id/wait-time-sources",
+    controller: WaitTimeSourcesController,
+    action: "forLocation",
+  },
+  {
+    method: "get",
+    route: "/wait-time-sources",
+    controller: WaitTimeSourcesController,
+    action: "index",
+  },
+  {
+    method: "post",
+    route: "/wait-time-sources",
+    controller: WaitTimeSourcesController,
+    action: "create",
+  },
+  {
+    method: "put",
+    route: "/wait-time-sources/:id",
+    controller: WaitTimeSourcesController,
+    action: "update",
+  },
+  {
+    method: "delete",
+    route: "/wait-time-sources/:id",
+    controller: WaitTimeSourcesController,
+    action: "destroy",
   },
   {
     method: "get",
