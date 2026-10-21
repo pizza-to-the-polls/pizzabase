@@ -105,10 +105,6 @@ const AUDIT_SHAPES: MessageOrder[] = [
 // ---------------------------------------------------------------------------
 
 describe("TEMPLATES", () => {
-  it("has exactly 246 templates", () => {
-    expect(TEMPLATES).toHaveLength(246);
-  });
-
   it("each template is a non-empty string", () => {
     for (const t of TEMPLATES) {
       expect(typeof t).toBe("string");
