@@ -33,6 +33,7 @@ import {
 } from "../lib/mp4-rotation";
 import { zapNewMmsUpload, zapNewUpload } from "../lib/zapier";
 import { cdnUrlForKey } from "../lib/media-cdn";
+import { isIsoBmff } from "../lib/exif/extract";
 import { execFile } from "child_process";
 import * as fs from "fs";
 import * as os from "os";
@@ -64,6 +65,29 @@ const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm"]);
 
 const POSTER_MAX_DIMENSION = 1080;
 const POSTER_JPEG_QUALITY = 80;
+
+// HEIF brands whose stills are HEVC-encoded (libde265). AVIF is deliberately
+// excluded: sharp/libheif can decode it and the ffmpeg layer may not.
+const HEVC_HEIF_BRANDS = [
+  "heic",
+  "heix",
+  "heim",
+  "heis",
+  "mif1",
+  "msf1",
+  "hevc",
+  "hevx",
+  "hevm",
+  "hevs",
+];
+
+const HEVC_NOT_BUILT_IN_SIGNATURE =
+  "Support for this compression format has not been built in";
+
+function isHevcNotBuiltInError(err: unknown): boolean {
+  const message = err instanceof Error ? err.message : String(err);
+  return message.includes(HEVC_NOT_BUILT_IN_SIGNATURE);
+}
 
 /**
  * Scale {width, height} so the longest edge is at most `max`, preserving
@@ -259,115 +283,138 @@ async function processImage(
 
   const ext = path.extname(key).toLowerCase();
 
-  // HEIC/HEIF: sharp's prebuilt libheif cannot decode HEVC — transcode to
-  // JPEG via ffmpeg first (rotation is baked into the pixels, so .rotate()
-  // below stays a no-op).
-  if (ext === ".heic" || ext === ".heif") {
+  // Content sniff first: clients rename/strip extensions (e.g. a real
+  // HEIC/HEVC still uploaded as .jpeg). Route HEIF/HEVC content to the
+  // ffmpeg transcode regardless of filename. The extension check stays for
+  // brands not in HEVC_HEIF_BRANDS.
+  const isHeifExtension = ext === ".heic" || ext === ".heif";
+  let transcoded = false;
+  if (isHeifExtension || isIsoBmff(buffer, HEVC_HEIF_BRANDS)) {
     buffer = await heifToJpeg(buffer, uploadId);
+    transcoded = true;
   }
 
-  const image = sharp(buffer, {
-    failOnError: false,
-    animated: ext === ".gif",
-  }).rotate(); // auto-orient from EXIF — phone portrait photos come in with
-  // landscape pixels + Orientation≠1, and the re-encode strips the EXIF that
-  // would otherwise fix display, so bake the rotation into the pixels now.
+  const runSharpPipeline = async (
+    input: Buffer,
+  ): Promise<Record<string, string>> => {
+    const image = sharp(input, {
+      failOnError: false,
+      animated: ext === ".gif",
+    }).rotate(); // auto-orient from EXIF — phone portrait photos come in with
+    // landscape pixels + Orientation≠1, and the re-encode strips the EXIF that
+    // would otherwise fix display, so bake the rotation into the pixels now.
 
-  const metadata = await image.metadata();
-  const longestEdge = Math.max(metadata.width || 0, metadata.height || 0);
-  const needsResize = longestEdge > IMAGE_MAX_DIMENSION;
+    const metadata = await image.metadata();
+    const longestEdge = Math.max(metadata.width || 0, metadata.height || 0);
+    const needsResize = longestEdge > IMAGE_MAX_DIMENSION;
 
-  const prefix = `uploads/${uploadId}`;
-  const processedPath: Record<string, string> = {};
+    const prefix = `uploads/${uploadId}`;
+    const processedPath: Record<string, string> = {};
 
-  if (metadata.format === "gif") {
-    // Animated GIF: preserve animation, resize if needed
-    const resized = needsResize
-      ? await sharp(buffer, { animated: true })
-          .resize({
-            width: IMAGE_MAX_DIMENSION,
-            height: IMAGE_MAX_DIMENSION,
-            fit: "inside",
-            withoutEnlargement: true,
-          })
-          .toBuffer()
-      : buffer;
+    if (metadata.format === "gif") {
+      // Animated GIF: preserve animation, resize if needed
+      const resized = needsResize
+        ? await sharp(input, { animated: true })
+            .resize({
+              width: IMAGE_MAX_DIMENSION,
+              height: IMAGE_MAX_DIMENSION,
+              fit: "inside",
+              withoutEnlargement: true,
+            })
+            .toBuffer()
+        : input;
 
-    const gifKey = `${prefix}.gif`;
+      const gifKey = `${prefix}.gif`;
+      await s3.send(
+        new PutObjectCommand({
+          Bucket: PROCESSED_BUCKET,
+          Key: gifKey,
+          Body: resized,
+          ContentType: "image/gif",
+        }),
+      );
+
+      processedPath.gif =
+        cdnUrlForKey(gifKey) ??
+        `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${gifKey}`;
+      // Poster: the resized image is its own thumbnail, so consumers never
+      // branch on media type. (Key, not URL — see processed_file_path docs.)
+      processedPath.poster = gifKey;
+      return processedPath;
+    }
+
+    // Build resize pipeline if needed
+    const resizePipeline = needsResize
+      ? image.resize({
+          width: IMAGE_MAX_DIMENSION,
+          height: IMAGE_MAX_DIMENSION,
+          fit: "inside",
+          withoutEnlargement: true,
+        })
+      : image;
+
+    // WebP (primary)
+    const webpBuffer = await resizePipeline
+      .clone()
+      .webp({ quality: IMAGE_QUALITY })
+      .toBuffer();
+
+    const webpKey = `${prefix}.webp`;
     await s3.send(
       new PutObjectCommand({
         Bucket: PROCESSED_BUCKET,
-        Key: gifKey,
-        Body: resized,
-        ContentType: "image/gif",
+        Key: webpKey,
+        Body: webpBuffer,
+        ContentType: "image/webp",
       }),
     );
 
-    processedPath.gif =
-      cdnUrlForKey(gifKey) ??
-      `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${gifKey}`;
-    // Poster: the resized image is its own thumbnail, so consumers never
-    // branch on media type. (Key, not URL — see processed_file_path docs.)
-    processedPath.poster = gifKey;
+    processedPath.webp =
+      cdnUrlForKey(webpKey) ??
+      `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${webpKey}`;
+
+    // JPEG (fallback)
+    const jpegBuffer = await resizePipeline
+      .clone()
+      .jpeg({ quality: IMAGE_QUALITY })
+      .toBuffer();
+
+    const jpegKey = `${prefix}.jpeg`;
+    await s3.send(
+      new PutObjectCommand({
+        Bucket: PROCESSED_BUCKET,
+        Key: jpegKey,
+        Body: jpegBuffer,
+        ContentType: "image/jpeg",
+      }),
+    );
+
+    processedPath.jpeg =
+      cdnUrlForKey(jpegKey) ??
+      `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${jpegKey}`;
+
+    // Poster: the resized JPEG (universally compatible as a thumbnail, already
+    // capped at IMAGE_MAX_DIMENSION) doubles as the image poster. Consumers
+    // read processed_file_path.poster without branching on media type.
+    processedPath.poster = jpegKey;
+
     return processedPath;
+  };
+
+  try {
+    return await runSharpPipeline(buffer);
+  } catch (err) {
+    // Belt and braces: if sharp still hits the HEVC-not-built-in signature
+    // (e.g. a brand we do not sniff), transcode once via ffmpeg and retry.
+    if (!transcoded && isHevcNotBuiltInError(err)) {
+      console.warn(
+        `[on-media-format] sharp cannot decode HEVC for ${key}; retrying via ffmpeg`,
+      );
+      const fallback = await heifToJpeg(buffer, uploadId);
+      return await runSharpPipeline(fallback);
+    }
+    throw err;
   }
-
-  // Build resize pipeline if needed
-  const resizePipeline = needsResize
-    ? image.resize({
-        width: IMAGE_MAX_DIMENSION,
-        height: IMAGE_MAX_DIMENSION,
-        fit: "inside",
-        withoutEnlargement: true,
-      })
-    : image;
-
-  // WebP (primary)
-  const webpBuffer = await resizePipeline
-    .clone()
-    .webp({ quality: IMAGE_QUALITY })
-    .toBuffer();
-
-  const webpKey = `${prefix}.webp`;
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: PROCESSED_BUCKET,
-      Key: webpKey,
-      Body: webpBuffer,
-      ContentType: "image/webp",
-    }),
-  );
-
-  processedPath.webp =
-    cdnUrlForKey(webpKey) ??
-    `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${webpKey}`;
-
-  // JPEG (fallback)
-  const jpegBuffer = await resizePipeline
-    .clone()
-    .jpeg({ quality: IMAGE_QUALITY })
-    .toBuffer();
-
-  const jpegKey = `${prefix}.jpeg`;
-  await s3.send(
-    new PutObjectCommand({
-      Bucket: PROCESSED_BUCKET,
-      Key: jpegKey,
-      Body: jpegBuffer,
-      ContentType: "image/jpeg",
-    }),
-  );
-
-  processedPath.jpeg =
-    cdnUrlForKey(jpegKey) ??
-    `https://s3.us-west-2.amazonaws.com/${PROCESSED_BUCKET}/${jpegKey}`;
-
-  // Poster: the resized JPEG (universally compatible as a thumbnail, already
-  // capped at IMAGE_MAX_DIMENSION) doubles as the image poster. Consumers
-  // read processed_file_path.poster without branching on media type.
-  processedPath.poster = jpegKey;
-
-  return processedPath;
 }
 
 // ── Video transcoding (AWS MediaConvert) ──────────────────

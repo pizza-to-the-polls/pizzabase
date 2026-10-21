@@ -9,6 +9,7 @@
  */
 import { Upload } from "../../entity/Upload";
 import { Location } from "../../entity/Location";
+import * as path from "path";
 
 const mockS3Send = jest.fn();
 const mockMediaConvertSend = jest.fn();
@@ -35,6 +36,10 @@ jest.mock("child_process", () => ({
 
 // Mutated per-test to drive the mocked sharp metadata
 const mockSharpMetadata = { width: 4000, height: 3000, format: "jpeg" };
+// When > 0, the mocked sharp pipeline rejects metadata() with the exact
+// HEVC-not-built-in error the prebuilt libheif throws (issue #308 belt-and-
+// braces retry path); it then self-decrements.
+let mockSharpHevcFailures = 0;
 
 jest.mock("@aws-sdk/client-s3", () => {
   const original = jest.requireActual("@aws-sdk/client-s3");
@@ -80,7 +85,18 @@ jest.mock(
       inst.webp = chain;
       inst.jpeg = chain;
       inst.gif = chain;
-      inst.metadata = () => Promise.resolve(mockSharpMetadata);
+      inst.metadata = () => {
+        if (mockSharpHevcFailures > 0) {
+          mockSharpHevcFailures--;
+          return Promise.reject(
+            new Error(
+              "heif: Support for this compression format has not been built in: " +
+                "HEVC (a suitable decoder plugin is libde265) (11.6003)",
+            ),
+          );
+        }
+        return Promise.resolve(mockSharpMetadata);
+      };
       inst.toBuffer = () => Promise.resolve(Buffer.from("sharp-encoded"));
       return inst;
     };
@@ -217,10 +233,13 @@ function createdJobInput(): any {
   return createCall![0].input;
 }
 
+const FIXTURES = path.join(__dirname, "../../tests/fixtures");
+
 beforeEach(() => {
   mockS3Send.mockReset();
   mockMediaConvertSend.mockReset();
   mockExecFile.mockClear();
+  mockSharpHevcFailures = 0;
   mockSharpMetadata.width = 4000;
   mockSharpMetadata.height = 3000;
   mockSharpMetadata.format = "jpeg";
@@ -276,6 +295,39 @@ describe("image uploads", () => {
     );
   });
 
+  it.each(["grid.heic", "tiny-rotated.heic"])(
+    "transcodes HEIC content (%s) under a .jpeg key before the sharp pipeline",
+    async (fixture) => {
+      // Regression test for issue #308 (BUG-015): upload 13297 was HEIF/HEVC
+      // content under a .jpeg key, so the extension-only check skipped the
+      // ffmpeg transcode and sharp failed. The fixtures are genuine HEIF
+      // files (major ftyp brand 'heic' — verified: bytes 8–12 of both are
+      // 'heic'), proving content sniffing works regardless of extension.
+      const upload = await createUpload("uploads/pittsboro-nc-bef9d045.jpeg");
+      s3ServesRaw(realFs.readFileSync(path.join(FIXTURES, fixture)));
+      const sharpFactory = require("sharp") as jest.Mock;
+      sharpFactory.mockClear();
+
+      await handler(s3Event("uploads/pittsboro-nc-bef9d045.jpeg"));
+
+      expect(mockExecFile).toHaveBeenCalledTimes(1);
+      const [ffmpegPath] = mockExecFile.mock.calls.at(-1)!;
+      expect(ffmpegPath).toBe("/opt/bin/ffmpeg");
+      expect((sharpFactory.mock.calls[0][0] as Buffer).toString()).toBe(
+        "transcoded-jpeg-bytes",
+      );
+
+      const updated = (await Upload.findOne({
+        where: { id: upload.id },
+      }))!;
+      expect(updated.mediaStatus).toBe("ready");
+      expect(updated.failureReason).toBeNull();
+      expect(updated.processedFilePath!.webp).toBe(
+        `https://s3.us-west-2.amazonaws.com/${BUCKET}/uploads/${upload.id}.webp`,
+      );
+    },
+  );
+
   it("transcodes HEIC uploads through ffmpeg before the sharp pipeline", async () => {
     const upload = await createUpload("uploads/photo.heic");
     s3ServesRaw(Buffer.from("raw-heic-bytes"));
@@ -304,6 +356,54 @@ describe("image uploads", () => {
     // Temp media never lingers in /tmp across warm invocations
     const tmp = jest.requireActual("fs");
     expect(tmp.existsSync(ffmpegArgs[ffmpegArgs.length - 1])).toBe(false);
+  });
+
+  it("does not transcode plain JPEG content without HEIF/HEVC ftyp bytes", async () => {
+    const upload = await createUpload("uploads/photo.jpg");
+    s3ServesRaw(Buffer.from("raw-image-bytes"));
+
+    await handler(s3Event("uploads/photo.jpg"));
+
+    expect(mockExecFile).not.toHaveBeenCalled();
+    const updated = (await Upload.findOne({
+      where: { id: upload.id },
+    }))!;
+    expect(updated.mediaStatus).toBe("ready");
+  });
+
+  it("retries via ffmpeg when sharp throws the HEVC-not-built-in error", async () => {
+    // Belt-and-braces fallback: a HEIF whose major brand is not in
+    // HEVC_HEIF_BRANDS (so the sniff misses it) but whose HEVC payload
+    // sharp cannot decode. The sharp mock fails metadata() exactly once
+    // with the prod signature, then the handler transcodes and retries.
+    const upload = await createUpload("uploads/looks-like-jpeg.jpg");
+    s3ServesRaw(Buffer.from("raw-deceptive-jpeg-bytes"));
+    const sharpFactory = require("sharp") as jest.Mock;
+    sharpFactory.mockClear();
+    mockSharpHevcFailures = 1;
+
+    await handler(s3Event("uploads/looks-like-jpeg.jpg"));
+
+    expect(mockExecFile).toHaveBeenCalledTimes(1);
+    const [ffmpegPath, ffmpegArgs] = mockExecFile.mock.calls.at(-1)!;
+    expect(ffmpegPath).toBe("/opt/bin/ffmpeg");
+    expect(ffmpegArgs).toContain("-i");
+    // First sharp call got the raw buffer, retry got the transcoded JPEG.
+    expect(sharpFactory).toHaveBeenCalledTimes(2);
+    expect((sharpFactory.mock.calls[0][0] as Buffer).toString()).toBe(
+      "raw-deceptive-jpeg-bytes",
+    );
+    expect((sharpFactory.mock.calls[1][0] as Buffer).toString()).toBe(
+      "transcoded-jpeg-bytes",
+    );
+
+    const updated = (await Upload.findOne({
+      where: { id: upload.id },
+    }))!;
+    expect(updated.mediaStatus).toBe("ready");
+    expect(updated.failureReason).toBeNull();
+    // Temp media never lingers in /tmp across warm invocations
+    expect(realFs.existsSync(ffmpegArgs[ffmpegArgs.length - 1])).toBe(false);
   });
 
   it("uses the gif output as its own poster for animated GIFs", async () => {
