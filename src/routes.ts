@@ -13,6 +13,7 @@ import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
 import { LinksController } from "./controller/LinksController";
 import { TwilioInboundController } from "./controller/TwilioInboundController";
+import { FeedObservationsController } from "./controller/FeedObservationsController";
 
 export const Routes = [
   {
@@ -266,6 +267,19 @@ export const Routes = [
     route: "/clips/:id/requeue",
     controller: ClipsController,
     action: "requeue",
+  },
+  // ── Feedflag observations (FEAT-002d) ───────────────────────
+  {
+    method: "post",
+    route: "/feed-observations",
+    controller: FeedObservationsController,
+    action: "create",
+  },
+  {
+    method: "get",
+    route: "/feed-observations",
+    controller: FeedObservationsController,
+    action: "index",
   },
   {
     method: "get",
