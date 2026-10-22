@@ -628,7 +628,7 @@ export class SeedWaitTimeSources1862800000000 implements MigrationInterface {
           "scope", "state", "county", "url", "source_type",
           "display_label", "notes", "discovery_method",
           "discovery_confidence", "is_active"
-        ) VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10)`,
+        ) VALUES ($1::wait_time_scope, $2, $3, $4, $5::source_type, $6, $7, $8, $9, $10)`,
         params,
       );
     }
