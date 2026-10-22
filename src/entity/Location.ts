@@ -209,13 +209,21 @@ export class Location extends BaseEntity {
     await Action.log(canonicalLocation, `absorbed ${this.id}`, mergedBy);
   }
 
+  /**
+   * Resolve a location from a numeric id or its fullAddress (BUG-017):
+   * a string of digits only (after trimming) is treated as a numeric id;
+   * anything else (including uppercase-only strings like Retool placeholder
+   * text) is treated as a fullAddress. Never calls Number() on a
+   * non-numeric string, so NaN ids can never reach the query.
+   */
   static async fidByIdOrFullAddress(
     idOrAddress: string,
   ): Promise<Location | null> {
+    const trimmed = idOrAddress.trim();
     return this.findOne({
-      where: idOrAddress.match(/[a-z]/g)
-        ? { fullAddress: idOrAddress.replace(/\+|\%20/g, " ") }
-        : { id: Number(idOrAddress) },
+      where: /^\d+$/.test(trimmed)
+        ? { id: Number(trimmed) }
+        : { fullAddress: idOrAddress.replace(/\+|\%20/g, " ") },
     });
   }
 

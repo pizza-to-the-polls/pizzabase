@@ -215,4 +215,56 @@ describe("Report entity", () => {
       expect(found!.location.fullAddress).toEqual(ADDRESS.fullAddress);
     });
   });
+
+  describe("#findByIdOrReportUrl", () => {
+    // BUG-017: the old lowercase heuristic sent any string without a
+    // lowercase letter into the numeric-id branch, producing
+    // WHERE id = Number("NEW REPORT HOOK, ...") = NaN, which crashed the
+    // Aurora driver with 'param_1' is an invalid type (HTTP 500).
+
+    it("returns null for an uppercase-only string (BUG-017 regression)", async () => {
+      const report = await Report.findByIdOrReportUrl(
+        "NEW REPORT HOOK, NEW LOCATION HOOK",
+      );
+      expect(report).toBeNull();
+    });
+
+    it("queries by numeric id when given a digit-only string", async () => {
+      const [created] = await Report.createNewReport(
+        PHONE,
+        "http://twitter.com/r/id-or-url",
+        ADDRESS,
+      );
+
+      const found = await Report.findByIdOrReportUrl(`${created.id}`);
+      expect(found).not.toBeNull();
+      expect(found!.id).toEqual(created.id);
+    });
+
+    it("queries by reportURL when given a mixed-case URL", async () => {
+      const [created] = await Report.createNewReport(
+        PHONE,
+        "http://twitter.com/r/by-url",
+        ADDRESS,
+      );
+
+      const found = await Report.findByIdOrReportUrl(
+        "http://twitter.com/r/by-url",
+      );
+      expect(found).not.toBeNull();
+      expect(found!.id).toEqual(created.id);
+    });
+
+    it("returns null when no report matches an uppercase-only reportURL", async () => {
+      await Report.createNewReport(
+        PHONE,
+        "http://twitter.com/r/no-match",
+        ADDRESS,
+      );
+
+      expect(
+        await Report.findByIdOrReportUrl("HTTP://TWITTER.COM/R/NO-MATCH"),
+      ).toBeNull();
+    });
+  });
 });

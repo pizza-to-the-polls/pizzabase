@@ -183,9 +183,11 @@ export class Report extends BaseEntity {
   }
   /**
    * Resolve a report from a numeric id or its reportURL (the public URL the
-   * report was created from). Mirrors Location.fidByIdOrFullAddress: any
-   * value containing a lowercase letter is treated as a reportURL, anything
-   * else as a numeric id.
+   * report was created from). Mirrors Location.fidByIdOrFullAddress: a
+   * string of digits only (after trimming) is treated as a numeric id,
+   * anything else (including uppercase-only strings like Retool placeholder
+   * text) as a reportURL — so a non-numeric string can never produce a NaN
+   * id query (BUG-017).
    *
    * The web upload relation is loaded eagerly so callers get the report's
    * original upload (reports.upload_id) in the same round trip.
@@ -193,10 +195,11 @@ export class Report extends BaseEntity {
   static async findByIdOrReportUrl(
     idOrAddress: string,
   ): Promise<Report | null> {
+    const trimmed = idOrAddress.trim();
     return this.findOne({
-      where: idOrAddress.match(/[a-z]/g)
-        ? { reportURL: idOrAddress }
-        : { id: Number(idOrAddress) },
+      where: /^\d+$/.test(trimmed)
+        ? { id: Number(trimmed) }
+        : { reportURL: idOrAddress },
       relations: ["upload"],
     });
   }

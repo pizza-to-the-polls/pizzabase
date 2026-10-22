@@ -62,6 +62,58 @@ describe("#show", () => {
     expect(body).toBeFalsy();
   });
 
+  test("returns 404 for an uppercase-only path param (BUG-017 regression)", async () => {
+    // From Bugsnag 6ad8e5dbdbd69358a880ff26: a Retool workflow hit
+    // GET /locations/NEW%20REPORT%20HOOK,%20NEW%20LOCATION%20HOOK/ — an
+    // unsubstituted URL placeholder. The old lowercase heuristic treated
+    // it as a numeric id, produced WHERE id = NaN, and the Aurora driver
+    // threw 'param_1' is an invalid type (500). It must 404 instead.
+    const response = http_mocks.createResponse();
+
+    const body = await controller.show(
+      http_mocks.createRequest({
+        params: { idOrAddress: "NEW REPORT HOOK, NEW LOCATION HOOK" },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toBeFalsy();
+  });
+
+  test("finds a location by a fully-uppercase address", async () => {
+    // BUG-017: uppercase-only addresses like "123 MAIN ST" were previously
+    // misrouted into the numeric-id branch (no lowercase letters) and 500ed.
+    const upperLocation = await Location.createFromAddress({
+      latitude: 41.8,
+      longitude: -87.6,
+
+      fullAddress: "123 MAIN ST CHICAGO IL 60616",
+
+      address: "123 MAIN ST",
+      city: "CHICAGO",
+      state: "IL",
+      zip: "60616",
+    });
+
+    const body = await controller.show(
+      http_mocks.createRequest({
+        params: { idOrAddress: upperLocation.fullAddress },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body).toEqual({
+      ...(await upperLocation.asJSON()),
+      hasTruck: false,
+      reports: [],
+      orders: [],
+      trucks: [],
+    });
+  });
+
   test("Gets a location with an ID, returns orders and reports", async () => {
     const { id, fullAddress } = location ? location : null;
 
