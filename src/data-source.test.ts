@@ -122,6 +122,49 @@ describe("sanitizeQueryParameters", () => {
       null,
     ]);
   });
+
+  // ── BUG-017: NaN params crashed the Aurora driver ──────────────
+
+  it("replaces NaN with null in array params (BUG-017)", () => {
+    expect(sanitizeQueryParameters([NaN, 1, "x", null])).toEqual([
+      null,
+      1,
+      "x",
+      null,
+    ]);
+  });
+
+  it("replaces NaN with null in named-param objects (BUG-017)", () => {
+    expect(sanitizeQueryParameters({ a: NaN, b: 1, c: null, d: "hi" })).toEqual(
+      { a: null, b: 1, c: null, d: "hi" },
+    );
+  });
+
+  it("preserves undefined→null alongside NaN→null in arrays", () => {
+    expect(sanitizeQueryParameters([NaN, undefined, 42])).toEqual([
+      null,
+      null,
+      42,
+    ]);
+  });
+
+  it("preserves undefined→null alongside NaN→null in records", () => {
+    expect(sanitizeQueryParameters({ x: NaN, y: undefined, z: "ok" })).toEqual({
+      x: null,
+      y: null,
+      z: "ok",
+    });
+  });
+
+  it("does not treat non-numeric falsy values as NaN", () => {
+    expect(sanitizeQueryParameters([0, false, "", null, Infinity])).toEqual([
+      0,
+      false,
+      "",
+      null,
+      Infinity,
+    ]);
+  });
 });
 
 // ── installAuroraCompatibilityPatches ──────────────────────────────

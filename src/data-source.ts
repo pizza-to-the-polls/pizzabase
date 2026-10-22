@@ -97,21 +97,25 @@ export const AppDataSource = new DataSource(options);
 // but the Aurora RDS Data API is stricter.
 //
 // This helper walks top-level positional/named parameters and replaces
-// every undefined with null so the driver maps them to type "NULL".
+// every undefined or NaN with null so the driver maps them to type "NULL".
+// (BUG-017: NaN reached the driver via `WHERE id = Number(nonNumeric)`
+// and getType(NaN) returned undefined, throwing 'param_N' is an invalid
+// type. WHERE id = NULL matches no rows, so findOne returns null and the
+// caller 404s instead of 500ing.)
+
+const sanitizeValue = (v: unknown): unknown =>
+  v === undefined || (typeof v === "number" && Number.isNaN(v)) ? null : v;
 
 export const sanitizeQueryParameters = (
   parameters?: any[] | Record<string, unknown>,
 ): any[] | Record<string, unknown> | undefined => {
   if (parameters == null) return parameters;
   if (Array.isArray(parameters)) {
-    return parameters.map((p) => (p === undefined ? null : p));
+    return parameters.map((p) => sanitizeValue(p));
   }
   if (typeof parameters === "object") {
     return Object.fromEntries(
-      Object.entries(parameters).map(([k, v]) => [
-        k,
-        v === undefined ? null : v,
-      ]),
+      Object.entries(parameters).map(([k, v]) => [k, sanitizeValue(v)]),
     );
   }
   return parameters;
@@ -122,7 +126,7 @@ export const sanitizeQueryParameters = (
 // "resuming after being auto-paused". Wrap every query runner's query()
 // and transaction methods with retry+backoff so the request survives.
 //
-// Also sanitizes undefined→null in query parameters so the Aurora Data
+// Also sanitizes undefined/NaN→null in query parameters so the Aurora Data
 // API driver doesn't throw "'param_N' is an invalid type".
 //
 // This patch is only installed for the aurora-postgres driver.
