@@ -976,4 +976,266 @@ describe("TwilioInboundController #inbound", () => {
       expect.objectContaining({ sourcePhone: PHONE }),
     );
   });
+
+  // ---------------------------------------------------------------------
+  // Deployed Zapier workflow shape (JSON, Basic API-key auth, MessageSid)
+  // ---------------------------------------------------------------------
+  describe("deployed Zapier workflow shape (JSON body, Basic auth, MessageSid-only)", () => {
+    const WORKFLOW_SID = "SM" + "0".repeat(32);
+    const ACCOUNT_SID = "AC" + "a".repeat(32);
+
+    /**
+     * Mock the Media API flow (three fetches):
+     *   1. list (Basic auth) -> media_list
+     *   2. instance URI (Basic auth, Accept) -> 307 + Location
+     *   3. presigned CDN URL (NO auth) -> actual bytes
+     */
+    const mockWorkflowMediaApi = (mediaCount = 1) => {
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          json: async () => ({
+            media_list: Array.from({ length: mediaCount }, (_, i) => ({
+              uri: `/2010-04-01/Accounts/${ACCOUNT_SID}/Messages/${WORKFLOW_SID}/Media/ME${String(i).padStart(2, "0")}.json`,
+              content_type: "image/jpeg",
+            })),
+          }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 307,
+          headers: {
+            get: (name: string) =>
+              name.toLowerCase() === "location"
+                ? `https://mms.twiliocdn.com/${ACCOUNT_SID}/signed${mediaCount}`
+                : null,
+          },
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          status: 200,
+          headers: { get: () => String(64) },
+          arrayBuffer: async () => Buffer.alloc(64),
+        });
+    };
+
+    beforeEach(() => {
+      process.env.TWILIO_ACCOUNT_SID = ACCOUNT_SID;
+      process.env.TWILIO_AUTH_TOKEN = "test-token";
+      // The deployed workflow sends unsigned requests with Basic auth.
+      verifyMock.mockImplementation(() => false);
+    });
+
+    afterEach(() => {
+      delete process.env.TWILIO_ACCOUNT_SID;
+      delete process.env.TWILIO_AUTH_TOKEN;
+    });
+
+    it("accepts the exact deployed workflow shape: JSON body with MessageSid/Body/From via Basic auth", async () => {
+      const key = await APIKey.generate("deployed workflow test");
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockWorkflowMediaApi(1);
+
+      const { response } = await callInbound(
+        {
+          MessageSid: WORKFLOW_SID,
+          Body: "text here",
+          From: PHONE,
+        },
+        {
+          "content-type": "application/json",
+          authorization: `Basic ${key.key}`,
+          "x-twilio-signature": "",
+        },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      const body = relayJson(response);
+      expect(body.ok).toBe(true);
+      expect(body.savedCount).toBe(1);
+      expect(body.matched).toBe(true);
+    });
+
+    it("accepts media-only MMS (empty Body) via the deployed shape", async () => {
+      const key = await APIKey.generate("media only mms test");
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockWorkflowMediaApi(1);
+
+      const { response } = await callInbound(
+        {
+          MessageSid: WORKFLOW_SID,
+          Body: "",
+          From: PHONE,
+        },
+        {
+          "content-type": "application/json",
+          authorization: `Basic ${key.key}`,
+          "x-twilio-signature": "",
+        },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      const body = relayJson(response);
+      expect(body.ok).toBe(true);
+      expect(body.savedCount).toBe(1);
+      expect(body.matched).toBe(true);
+    });
+
+    it("returns THANKS_REPLY for empty Body with no media and no report match", async () => {
+      const key = await APIKey.generate("no match test");
+      findReportSpy.mockResolvedValue(null);
+
+      const { response } = await callInbound(
+        {
+          From: PHONE,
+          Body: "",
+        },
+        {
+          "content-type": "application/json",
+          authorization: `Basic ${key.key}`,
+          "x-twilio-signature": "",
+        },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      const body = relayJson(response);
+      expect(body.ok).toBe(true);
+      expect(body.reply).toContain(THANKS_FRAGMENT);
+      expect(body.matched).toBe(false);
+    });
+
+    it("handles requests without a To field gracefully", async () => {
+      const key = await APIKey.generate("no to field test");
+      findReportSpy.mockResolvedValue(fakeReport);
+      mockWorkflowMediaApi(1);
+
+      const { response } = await callInbound(
+        {
+          MessageSid: WORKFLOW_SID,
+          Body: "no To field",
+          From: PHONE,
+        },
+        {
+          "content-type": "application/json",
+          authorization: `Basic ${key.key}`,
+          "x-twilio-signature": "",
+        },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      const body = relayJson(response);
+      expect(body.ok).toBe(true);
+      expect(body.savedCount).toBe(1);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Relay 502 failure contract (MessageSid resolution failure)
+  // ---------------------------------------------------------------------
+  describe("relay 502 failure contract (MessageSid resolution failure)", () => {
+    const FAIL_SID = "SM" + "f".repeat(32);
+    const ACCOUNT_SID = "AC" + "a".repeat(32);
+
+    beforeEach(() => {
+      process.env.TWILIO_ACCOUNT_SID = ACCOUNT_SID;
+      process.env.TWILIO_AUTH_TOKEN = "test-token";
+      // Relay path (unsigned).
+      verifyMock.mockImplementation(() => false);
+    });
+
+    afterEach(() => {
+      delete process.env.TWILIO_ACCOUNT_SID;
+      delete process.env.TWILIO_AUTH_TOKEN;
+    });
+
+    it("returns 502 when MessageSid resolution fails (relay path) — non-2xx contract", async () => {
+      const key = await APIKey.generate("relay failure test");
+      findReportSpy.mockResolvedValue(fakeReport);
+      // Simulate Media API failure (network error)
+      (global.fetch as jest.Mock).mockRejectedValue(
+        new Error("Twilio API down"),
+      );
+
+      const { response } = await callInbound(
+        {
+          MessageSid: FAIL_SID,
+          From: PHONE,
+          Body: "",
+        },
+        {
+          "content-type": "application/json",
+          authorization: `Basic ${key.key}`,
+          "x-twilio-signature": "",
+        },
+      );
+
+      expect(response.statusCode).toEqual(502);
+      const body = relayJson(response);
+      expect(body.ok).toBe(false);
+      expect(body.failedCount).toBe(1);
+    });
+
+    it("still returns 200 TwiML when MessageSid resolution fails for signed Twilio — no regression", async () => {
+      // Real Twilio requests are signed.
+      verifyMock.mockImplementation(() => true);
+      findReportSpy.mockResolvedValue(fakeReport);
+      (global.fetch as jest.Mock).mockRejectedValue(
+        new Error("Twilio API down"),
+      );
+
+      const { response } = await callInbound(
+        {
+          MessageSid: FAIL_SID,
+          From: PHONE,
+          Body: "",
+        },
+        {
+          "x-twilio-signature": "validsig==",
+        },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getHeaders()["content-type"]).toContain("text/xml");
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // Signed Twilio bypasses relay auth (no regression)
+  // ---------------------------------------------------------------------
+  describe("signed Twilio bypasses relay auth", () => {
+    beforeEach(() => {
+      // Valid signature.
+      verifyMock.mockImplementation(() => true);
+    });
+
+    it("bypasses relay auth and passes through when signature is valid (even with bad relay auth)", async () => {
+      process.env.INBOUND_WEBHOOK_TOKEN = "real-token";
+      findReportSpy.mockResolvedValue(null);
+
+      const { response } = await callInbound(
+        { From: PHONE, Body: "hi" },
+        { "x-ptp-inbound-token": "wrong-token" },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getHeaders()["content-type"]).toContain("text/xml");
+      expect(response._getData()).toContain(THANKS_FRAGMENT);
+
+      delete process.env.INBOUND_WEBHOOK_TOKEN;
+    });
+
+    it("bypasses relay auth with invalid API key when signature is valid", async () => {
+      findReportSpy.mockResolvedValue(null);
+
+      const { response } = await callInbound(
+        { From: PHONE, Body: "hi" },
+        { authorization: "Basic invalid-key" },
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getHeaders()["content-type"]).toContain("text/xml");
+      expect(response._getData()).toContain(THANKS_FRAGMENT);
+    });
+  });
 });
