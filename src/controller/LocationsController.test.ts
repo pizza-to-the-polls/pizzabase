@@ -356,6 +356,7 @@ describe("#validate", () => {
         hook: "ZAP_NEW_REPORT",
         report: report.asJSONPrivate(),
         location: await report.location.asJSONPrivate(),
+        hasUpload: false,
         media: [],
         otherReports: 0,
       }),
