@@ -15,12 +15,19 @@ jest.mock("@aws-sdk/client-s3", () => {
     PutObjectCommand: jest.fn((input: any) => ({ input })),
   };
 });
+// Mock the clip-auto helper so tests verify the controller calls it at the
+// right time (MMS ingestion) without hitting the real DB/Lambda layer.
+jest.mock("../lib/clip-auto", () => ({
+  seedClipForUpload: jest.fn(),
+}));
 
 import { TwilioInboundController } from "./TwilioInboundController";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { APIKey } from "../entity/APIKey";
 import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
+import { Order } from "../entity/Order";
+import { seedClipForUpload } from "../lib/clip-auto";
 import { verifyTwilioSignature } from "../lib/twilio/verifySignature";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { S3Client, PutObjectCommand } from "@aws-sdk/client-s3";
@@ -37,9 +44,23 @@ const SHARED_FRAGMENT = "Thanks for sharing!";
 
 const controller = new TwilioInboundController();
 
+const fakeOrder = {
+  id: 101,
+  restaurant: "Test Pizzeria",
+  orderType: "pizzas",
+  quantity: 5,
+} as unknown as Order;
+
 const fakeReport = {
   id: 42,
-  location: { id: 7, city: "Chicago", state: "IL" },
+  reportURL: "https://example.com/reports/42",
+  location: {
+    id: 7,
+    city: "Chicago",
+    state: "IL",
+    fullAddress: "123 Test St, Chicago, IL 60601",
+  },
+  order: fakeOrder,
 } as unknown as Report;
 
 const fakeUpload = {
@@ -55,6 +76,7 @@ let createFromMmsSpy: jest.SpyInstance;
 const verifyMock = verifyTwilioSignature as jest.Mock;
 const bugsnagMock = notifyBugsnag as jest.Mock;
 const putObjectMock = PutObjectCommand as unknown as jest.Mock;
+const mockSeedClipForUpload = seedClipForUpload as jest.Mock;
 
 function buildRequest(
   body: Record<string, any>,
@@ -135,6 +157,8 @@ beforeEach(() => {
   createFromMmsSpy = jest
     .spyOn(Upload, "createFromMms")
     .mockResolvedValue([fakeUpload, false]);
+  mockSeedClipForUpload.mockReset();
+  mockSeedClipForUpload.mockResolvedValue(undefined);
 });
 
 afterEach(() => {
@@ -1236,6 +1260,136 @@ describe("TwilioInboundController #inbound", () => {
       expect(response.statusCode).toEqual(200);
       expect(response._getHeaders()["content-type"]).toContain("text/xml");
       expect(response._getData()).toContain(THANKS_FRAGMENT);
+    });
+  });
+
+  // ---------------------------------------------------------------------
+  // MMS clip seeding + relay matchedReport context (issue #322)
+  // ---------------------------------------------------------------------
+  describe("MMS clip seeding and relay matchedReport context", () => {
+    it("includes matchedReport with location and order in the relay JSON on match", async () => {
+      // Relay path (no Twilio signature) with a valid shared token.
+      verifyMock.mockImplementation(() => false);
+      process.env.INBOUND_WEBHOOK_TOKEN = "test-token";
+      findReportSpy.mockResolvedValue(fakeReport);
+
+      const { response } = await callInbound(mediaBody("image/jpeg"), {
+        "x-ptp-inbound-token": "test-token",
+      });
+
+      delete process.env.INBOUND_WEBHOOK_TOKEN;
+
+      expect(response.statusCode).toEqual(200);
+      const body = relayJson(response);
+      expect(body.matched).toBe(true);
+      expect(body.matchedReport).toEqual({
+        id: 42,
+        reportURL: "https://example.com/reports/42",
+        location: {
+          fullAddress: "123 Test St, Chicago, IL 60601",
+          city: "Chicago",
+          state: "IL",
+        },
+        order: {
+          restaurant: "Test Pizzeria",
+          orderType: "pizzas",
+          quantity: 5,
+        },
+      });
+    });
+
+    it("returns matchedReport: null in relay JSON when no report matches", async () => {
+      verifyMock.mockImplementation(() => false);
+      process.env.INBOUND_WEBHOOK_TOKEN = "test-token";
+      findReportSpy.mockResolvedValue(null);
+
+      const { response } = await callInbound(
+        { From: PHONE, Body: "hi" },
+        {
+          "x-ptp-inbound-token": "test-token",
+        },
+      );
+
+      delete process.env.INBOUND_WEBHOOK_TOKEN;
+
+      expect(response.statusCode).toEqual(200);
+      const body = relayJson(response);
+      expect(body.matched).toBe(false);
+      expect(body.matchedReport).toBeNull();
+    });
+
+    it("seeds a clip immediately on new MMS ingestion", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      createFromMmsSpy.mockResolvedValue([{ ...fakeUpload }, false]);
+      mockFetchBody(Buffer.from("clip-seed-test-bytes"));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(mockSeedClipForUpload).toHaveBeenCalledTimes(1);
+      // First arg is the matched report, second is the freshly created upload.
+      expect(mockSeedClipForUpload.mock.calls[0][0]).toBe(fakeReport);
+      const seededUpload = mockSeedClipForUpload.mock.calls[0][1];
+      expect(seededUpload.filePath).toEqual(fakeUpload.filePath);
+    });
+
+    it("does not seed a clip on duplicate-hash re-delivery", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+      // Same content re-delivered: createFromMms flags it as duplicate.
+      createFromMmsSpy.mockResolvedValue([fakeUpload, true]);
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      // No S3 write for duplicates, and no clip seeding either.
+      expect(send).not.toHaveBeenCalled();
+      expect(mockSeedClipForUpload).not.toHaveBeenCalled();
+    });
+
+    it("never seeds a clip when no report matches the sender", async () => {
+      findReportSpy.mockResolvedValue(null);
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(findReportSpy).toHaveBeenCalledTimes(1);
+      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      expect(mockSeedClipForUpload).not.toHaveBeenCalled();
+    });
+
+    it("never seeds a clip on STOP keyword", async () => {
+      findReportSpy.mockResolvedValue(fakeReport);
+
+      const { response } = await callInbound({
+        From: PHONE,
+        Body: "STOP",
+        MediaUrl0: "https://media.twilio.com/f1/0",
+        MediaContentType0: "image/jpeg",
+      });
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getData()).toContain(UNSUBSCRIBED_FRAGMENT);
+      // STOP path returns early before report matching or media ingestion.
+      expect(findReportSpy).not.toHaveBeenCalled();
+      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      expect(mockSeedClipForUpload).not.toHaveBeenCalled();
+    });
+
+    it("signed Twilio path is unaffected (no clip seeding regression)", async () => {
+      // Real Twilio requests are signed.
+      verifyMock.mockImplementation(() => true);
+      findReportSpy.mockResolvedValue(fakeReport);
+      createFromMmsSpy.mockResolvedValue([{ ...fakeUpload }, false]);
+      mockFetchBody(Buffer.from("clip-seed-test-bytes"));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getHeaders()["content-type"]).toContain("text/xml");
+      expect(response._getData()).toContain(SHARED_FRAGMENT);
+      // Clip seeding works identically on the signed Twilio path.
+      expect(mockSeedClipForUpload).toHaveBeenCalledTimes(1);
+      expect(mockSeedClipForUpload.mock.calls[0][0]).toBe(fakeReport);
     });
   });
 });
