@@ -8,6 +8,7 @@ import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
 import { normalizePhone } from "../lib/validator/normalizeContact";
+import { seedClipForUpload } from "../lib/clip-auto";
 
 /**
  * MMS-003: inbound Twilio SMS/MMS webhook.
@@ -181,6 +182,20 @@ interface RelayReply {
   unsupportedCount: number;
   failedCount: number;
   uploadIds: number[];
+  matchedReport: {
+    id: number;
+    reportURL: string;
+    location: {
+      fullAddress: string;
+      city: string;
+      state: string;
+    };
+    order: {
+      restaurant: string | null;
+      orderType: string;
+      quantity: number;
+    } | null;
+  } | null;
 }
 
 function sendRelayJson(response: Response, status: number, reply: RelayReply) {
@@ -339,6 +354,7 @@ export class TwilioInboundController {
       unsupportedCount: 0,
       failedCount: 0,
       uploadIds: [] as number[],
+      matchedReport: null as RelayReply["matchedReport"],
     };
     const respond = (status: number, reply: string) => {
       if (signatureOk) {
@@ -386,6 +402,22 @@ export class TwilioInboundController {
         return null;
       }
       details.matched = true;
+      details.matchedReport = {
+        id: report.id,
+        reportURL: report.reportURL,
+        location: {
+          fullAddress: report.location.fullAddress,
+          city: report.location.city,
+          state: report.location.state,
+        },
+        order: report.order
+          ? {
+              restaurant: report.order.restaurant ?? null,
+              orderType: report.order.orderType,
+              quantity: report.order.quantity,
+            }
+          : null,
+      };
 
       // --- Media ingestion --------------------------------------------------
       const s3Client = new S3Client({
@@ -523,6 +555,9 @@ export class TwilioInboundController {
                 Body: bytes,
               }),
             );
+            // Seed the clip immediately for fresh MMS media rather than
+            // waiting for the 3-hourly backstop. Idempotent and never throws.
+            await seedClipForUpload(report, upload);
           }
           savedCount++;
           details.savedCount = savedCount;
