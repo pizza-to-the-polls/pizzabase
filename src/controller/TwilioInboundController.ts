@@ -553,7 +553,21 @@ export class TwilioInboundController {
         message += " We couldn't process some of the files you sent.";
       }
 
-      respond(200, message);
+      // Determine response status. The relay caller (Zapier) needs non-2xx to
+      // alert on failures — it treats any 2xx as success.
+      let status = 200;
+      if (
+        !signatureOk &&
+        TWILIO_MESSAGE_SID_REGEX.test(messageSid) &&
+        savedCount === 0 &&
+        failedCount > 0
+      ) {
+        // Bad Gateway — the Twilio Media API (upstream dependency) failed.
+        // SID was provided but ALL media items failed, so the caller must
+        // know the media was never fetched.
+        status = 502;
+      }
+      respond(status, message);
       return null;
     } catch (e) {
       // Robustness: never leak stack traces into TwiML, always reply XML.
