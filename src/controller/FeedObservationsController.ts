@@ -14,6 +14,42 @@ const MAX_BATCH = 3000;
 type ObservationInput = Record<string, any>;
 
 /**
+ * Normalize a raw client-supplied timestamp to an ISO 8601 string suitable
+ * for a `$n::TIMESTAMPTZ` bind parameter, or null if the value is absent or
+ * unparseable. Mirrors the normalization feedflag does in
+ * `scripts/emit-to-db.ts` so the endpoint tolerates the same input shapes.
+ *
+ * Accepts:
+ *  - null / undefined → null
+ *  - JS number → epoch-millis (if > 1e12) or epoch-seconds (× 1000)
+ *  - digit-only string matching /^\d{12,14}$/ → parsed as epoch-millis
+ *  - string parseable by `new Date()` → ISO 8601 (UTC)
+ *  - anything else (booleans, objects, garbage strings) → null
+ */
+export function toIsoTimestamp(v: unknown): string | null {
+  if (v === null || v === undefined) return null;
+
+  if (typeof v === "number") {
+    if (!Number.isFinite(v)) return null;
+    // Heuristic: values > 1e12 are epoch-millis; anything smaller is
+    // treated as epoch-seconds.
+    return new Date(v > 1e12 ? v : v * 1000).toISOString();
+  }
+
+  if (typeof v === "string") {
+    if (/^\d{12,14}$/.test(v)) {
+      // Digit-only string in the epoch-millis magnitude range (e.g. the
+      // Bugsnag-provoking "1792642500000").
+      return new Date(Number.parseInt(v, 10)).toISOString();
+    }
+    const d = new Date(v);
+    return Number.isFinite(d.getTime()) ? d.toISOString() : null;
+  }
+
+  return null;
+}
+
+/**
  * feedflag machine-token observation intake (FEAT-002d).
  *
  * POST /feed-observations — bulk insert of feedflag/observation@1 records,
@@ -42,10 +78,59 @@ export class FeedObservationsController {
       };
     }
 
+    // Validate/normalize timestamps (and wait_minutes) before building the
+    // INSERT so that a single malformed row is a clean 400 naming the row
+    // index instead of an unhandled Postgres cast error (22008) that would
+    // 500 the whole batch. BUG-019.
+    const errors: string[] = [];
+    const normalizedTimestamps: Array<{
+      observedAt: string | null;
+      postedAt: string | null;
+    }> = [];
+
+    observations.forEach((o: ObservationInput, i: number) => {
+      const observedAt = toIsoTimestamp(o.observed_at);
+      if (observedAt === null) {
+        // observed_at is required (half the idempotency key) — never
+        // substitute a fabricated value like new Date(), which would
+        // corrupt ON CONFLICT (source_ref, observed_at) dedup.
+        errors.push(
+          `observations[${i}].observed_at is not a valid timestamp: ${JSON.stringify(
+            o.observed_at ?? null,
+          )}`,
+        );
+      }
+
+      const waitMinutes = o.wait_minutes;
+      if (
+        waitMinutes !== null &&
+        waitMinutes !== undefined &&
+        (!Number.isFinite(Number(waitMinutes)) ||
+          !Number.isInteger(Number(waitMinutes)))
+      ) {
+        errors.push(
+          `observations[${i}].wait_minutes must be an integer: ${JSON.stringify(
+            waitMinutes,
+          )}`,
+        );
+      }
+
+      normalizedTimestamps.push({
+        observedAt,
+        postedAt: toIsoTimestamp(o.posted_at),
+      });
+    });
+
+    if (errors.length > 0) {
+      response.status(400);
+      return { errors };
+    }
+
     const values: unknown[] = [];
     const placeholders: string[] = [];
 
     observations.forEach((o: ObservationInput, i: number) => {
+      const { observedAt, postedAt } = normalizedTimestamps[i];
       const base = i * INSERT_COLUMNS;
       placeholders.push(
         `($${base + 1}::TEXT, $${base + 2}::TEXT, $${base + 3}::TEXT, ` +
@@ -61,8 +146,8 @@ export class FeedObservationsController {
         o.url ?? null,
         o.author ?? null,
         o.platform ?? null,
-        o.observed_at,
-        o.posted_at ?? null,
+        observedAt,
+        postedAt,
         o.location == null ? null : JSON.stringify(o.location),
         o.signal_kind,
         o.wait_minutes ?? null,

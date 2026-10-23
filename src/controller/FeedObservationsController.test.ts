@@ -214,6 +214,186 @@ describe("#create", () => {
     expect(body).toEqual({ inserted: 2, skipped: 0 });
     expect(await FeedObservation.count()).toEqual(2);
   });
+
+  // BUG-019: epoch-millis / non-ISO timestamps previously flowed verbatim
+  // into $n::TIMESTAMPTZ bind params, so Postgres threw SQLState 22008 and
+  // the whole batch 500'd. The endpoint now normalizes timestamps and
+  // rejects malformed observed_at with a 400 naming the row index.
+  describe("BUG-019 timestamp normalization", () => {
+    const EPOCH_MS = 1792642500000; // the value from the prod Bugsnag report
+    const expectedInstant = new Date(EPOCH_MS);
+
+    it("inserts posted_at given as an epoch-millis string as the ISO instant", async () => {
+      const { body, response } = await postObservations(
+        [sampleObservation({ posted_at: String(EPOCH_MS) })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(body).toEqual({ inserted: 1, skipped: 0 });
+      const saved = (await FeedObservation.find())[0];
+      expect(saved.postedAt).toEqual(expectedInstant);
+      // observed_at passed through ISO unchanged.
+      expect(saved.observedAt).toEqual(new Date("2025-01-15T14:30:00Z"));
+    });
+
+    it("inserts posted_at given as an epoch-millis number as the same instant", async () => {
+      const { body, response } = await postObservations(
+        [sampleObservation({ posted_at: EPOCH_MS })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(body).toEqual({ inserted: 1, skipped: 0 });
+      const saved = (await FeedObservation.find())[0];
+      expect(saved.postedAt).toEqual(expectedInstant);
+    });
+
+    it("inserts observed_at given as an epoch-millis string, normalized", async () => {
+      const { body, response } = await postObservations(
+        [sampleObservation({ observed_at: String(EPOCH_MS) })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(200);
+      expect(body).toEqual({ inserted: 1, skipped: 0 });
+      const saved = (await FeedObservation.find())[0];
+      expect(saved.observedAt).toEqual(expectedInstant);
+    });
+
+    it("keeps idempotency when observed_at is epoch-millis: re-post reports inserted 0", async () => {
+      const batch = [
+        sampleObservation({
+          source_ref: "apify:clockworks/tiktok-scraper#12",
+          observed_at: String(EPOCH_MS),
+        }),
+        sampleObservation({
+          source_ref: "apify:clockworks/tiktok-scraper#13",
+          observed_at: String(EPOCH_MS),
+        }),
+      ];
+
+      const first = await postObservations(batch, authHeaders());
+      expect(first.body).toEqual({ inserted: 2, skipped: 0 });
+
+      const reload = await postObservations(batch, authHeaders());
+      expect(reload.body).toEqual({ inserted: 0, skipped: 2 });
+      expect(await FeedObservation.count()).toEqual(2);
+    });
+
+    it("returns 400 naming the row index for an unparseable observed_at", async () => {
+      const { body, response } = await postObservations(
+        [sampleObservation({ observed_at: "not-a-date" })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(400);
+      expect((body as JsonResponse).errors).toEqual([
+        'observations[0].observed_at is not a valid timestamp: "not-a-date"',
+      ]);
+      expect(await FeedObservation.count()).toEqual(0);
+    });
+
+    it("inserts nothing and names the offending row when one row in a batch is invalid", async () => {
+      const { body, response } = await postObservations(
+        [
+          sampleObservation({ source_ref: "ref-good" }),
+          sampleObservation({
+            source_ref: "ref-bad",
+            observed_at: "17926425000",
+          }), // 11 digits, not epoch-ms
+          sampleObservation({ source_ref: "ref-also-good" }),
+        ],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(400);
+      expect((body as JsonResponse).errors).toEqual([
+        'observations[1].observed_at is not a valid timestamp: "17926425000"',
+      ]);
+      expect(await FeedObservation.count()).toEqual(0);
+    });
+
+    it("returns 400 for observed_at as epoch-seconds string (not epoch-ms magnitude)", async () => {
+      // Per the helper's contract, digit-only strings are only interpreted
+      // as epoch-millis at 12-14 digits; an 11-digit string is unparseable.
+      const { body, response } = await postObservations(
+        [sampleObservation({ observed_at: "17926425000" })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(400);
+      expect((body as JsonResponse).errors[0]).toMatch(
+        /observations\[0\]\.observed_at is not a valid timestamp/,
+      );
+      expect(await FeedObservation.count()).toEqual(0);
+    });
+
+    it("returns 400 for observed_at epoch-ms beyond the 14-digit range", async () => {
+      const { response } = await postObservations(
+        [sampleObservation({ observed_at: "17926425000000000" })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(400);
+      expect(await FeedObservation.count()).toEqual(0);
+    });
+
+    it("returns 400 when observed_at is null or missing", async () => {
+      const nullCase = await postObservations(
+        [sampleObservation({ observed_at: null })],
+        authHeaders(),
+      );
+      expect(nullCase.response.statusCode).toEqual(400);
+      expect((nullCase.body as JsonResponse).errors[0]).toMatch(
+        /observations\[0\]\.observed_at is not a valid timestamp: null/,
+      );
+
+      const missingCase = await postObservations(
+        [sampleObservation({ observed_at: undefined })],
+        authHeaders(),
+      );
+      expect(missingCase.response.statusCode).toEqual(400);
+      expect(await FeedObservation.count()).toEqual(0);
+    });
+
+    it("still inserts when posted_at is null or omitted (regression)", async () => {
+      const nullPosted = await postObservations(
+        [sampleObservation({ source_ref: "ref-null-posted", posted_at: null })],
+        authHeaders(),
+      );
+      expect(nullPosted.response.statusCode).toEqual(200);
+      expect(nullPosted.body).toEqual({ inserted: 1, skipped: 0 });
+
+      const omittedPosted = await postObservations(
+        [
+          sampleObservation({
+            source_ref: "ref-omitted-posted",
+            posted_at: undefined,
+          }),
+        ],
+        authHeaders(),
+      );
+      expect(omittedPosted.response.statusCode).toEqual(200);
+      expect(omittedPosted.body).toEqual({ inserted: 1, skipped: 0 });
+
+      const saved = await FeedObservation.find({ order: { id: "ASC" } });
+      expect(saved.map((o) => o.postedAt)).toEqual([null, null]);
+    });
+
+    it("returns 400 naming the row index when wait_minutes is not an integer", async () => {
+      const { body, response } = await postObservations(
+        [sampleObservation({ wait_minutes: "forty-five" })],
+        authHeaders(),
+      );
+
+      expect(response.statusCode).toEqual(400);
+      expect((body as JsonResponse).errors).toEqual([
+        'observations[0].wait_minutes must be an integer: "forty-five"',
+      ]);
+      expect(await FeedObservation.count()).toEqual(0);
+    });
+  });
 });
 
 describe("#index", () => {
