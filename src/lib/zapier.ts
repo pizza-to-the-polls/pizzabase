@@ -29,6 +29,7 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
           }
         : undefined,
       truck: report.truck ? report.truck.asJSON() : undefined,
+      hasUpload: report.upload != null,
       media: await reportMediaUrls(report),
       otherReports: await otherReportsByContact(report),
     },
