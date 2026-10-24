@@ -3,12 +3,7 @@ import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
 import { Truck } from "../entity/Truck";
 import { findOr404, isAuthorized, checkAuthorization } from "./helper";
-import {
-  zapNewReport,
-  zapSkipReport,
-  zapNewOrder,
-  zapNewTruck,
-} from "../lib/zapier";
+import { zapSkipReport, zapNewOrder, zapNewTruck } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 import { invokeSocialPost } from "../lib/invoke-social-post";
 import { seedClipsForOrder } from "../lib/clip-auto";
@@ -103,15 +98,6 @@ export class LocationsController {
     if (!location) return;
 
     await location.validate(request.body?.user);
-    const openReports = await location.openReports();
-    const submittedReports: Set<string> = new Set();
-
-    for (const report of openReports) {
-      if (!submittedReports.has(report.reportURL)) {
-        await zapNewReport(report);
-        submittedReports.add(report.reportURL);
-      }
-    }
 
     return { success: true };
   }
