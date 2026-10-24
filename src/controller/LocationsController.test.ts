@@ -286,45 +286,10 @@ describe("#validate", () => {
     expect(response.statusCode).toEqual(401);
   });
 
-  it("validates and submits all open reports with unique urls", async () => {
+  it("does not re-announce open reports when validating", async () => {
     const { fullAddress } = location ? location : null;
 
-    const [ordered] = await Report.createNewReport(
-      "333-234-2345",
-      "http://twitter.com/what",
-      {
-        latitude: 41.79907,
-        longitude: -87.58413,
-
-        fullAddress,
-
-        address: "5335 S Kimbark Ave",
-        city: "Chicago",
-        state: "IL",
-        zip: "60615",
-      },
-    );
-
-    await Order.placeOrder({ quantity: 1, cost: 5 }, ordered.location);
-
-    const [report] = await Report.createNewReport(
-      "222-234-2345",
-      "http://insta.com/what",
-      {
-        latitude: 41.79907,
-        longitude: -87.58413,
-
-        fullAddress,
-
-        address: "5335 S Kimbark Ave",
-        city: "Chicago",
-        state: "IL",
-        zip: "60615",
-      },
-    );
-
-    // Will skip the duplicate url report
-    await Report.createNewReport("555-234-2345", "http://insta.com/what", {
+    await Report.createNewReport("222-234-2345", "http://insta.com/what", {
       latitude: 41.79907,
       longitude: -87.58413,
 
@@ -347,20 +312,14 @@ describe("#validate", () => {
       () => undefined,
     );
 
-    await report.reload();
-
-    const [url, { body }] = (global.fetch as jest.Mock).mock.calls[0];
-    expect(url).toEqual(process.env.ZAP_NEW_REPORT);
-    expect(body).toEqual(
-      JSON.stringify({
-        hook: "ZAP_NEW_REPORT",
-        report: report.asJSONPrivate(),
-        location: await report.location.asJSONPrivate(),
-        hasUpload: false,
-        media: [],
-        otherReports: 0,
-      }),
+    // Reports are announced to Slack once, when they arrive via the
+    // reports route (ZAP_NEW_LOCATION for a never-validated location,
+    // ZAP_NEW_REPORT otherwise). Validating a location must not
+    // re-announce its open reports.
+    const announced = (global.fetch as jest.Mock).mock.calls.filter(
+      ([url]) => url === process.env.ZAP_NEW_REPORT,
     );
+    expect(announced).toHaveLength(0);
   });
 });
 
