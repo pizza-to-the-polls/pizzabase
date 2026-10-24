@@ -37,20 +37,32 @@ export class RetoolPiiViews1862900000000 implements MigrationInterface {
     `);
 
     // Seal the base tables from retool; grant the views
-    await queryRunner.query(`REVOKE SELECT ON public.donations, public.reports FROM retool`);
+    await queryRunner.query(
+      `REVOKE SELECT ON public.donations, public.reports FROM retool`,
+    );
     await queryRunner.query(`GRANT USAGE ON SCHEMA retool_ro TO retool`);
-    await queryRunner.query(`GRANT SELECT ON retool_ro.donations, retool_ro.reports TO retool`);
+    await queryRunner.query(
+      `GRANT SELECT ON retool_ro.donations, retool_ro.reports TO retool`,
+    );
 
     // Redirect unqualified table names for the retool role
-    await queryRunner.query(`ALTER ROLE retool SET search_path = retool_ro, public`);
+    await queryRunner.query(
+      `ALTER ROLE retool SET search_path = retool_ro, public`,
+    );
   }
 
   public async down(queryRunner: QueryRunner): Promise<void> {
     await queryRunner.query(`ALTER ROLE retool RESET search_path`);
-    await queryRunner.query(`REVOKE SELECT ON retool_ro.donations, retool_ro.reports FROM retool`);
+    await queryRunner.query(
+      `REVOKE SELECT ON retool_ro.donations, retool_ro.reports FROM retool`,
+    );
     await queryRunner.query(`REVOKE USAGE ON SCHEMA retool_ro FROM retool`);
-    await queryRunner.query(`GRANT SELECT ON public.donations, public.reports TO retool`);
-    await queryRunner.query(`DROP VIEW IF EXISTS retool_ro.donations, retool_ro.reports`);
+    await queryRunner.query(
+      `GRANT SELECT ON public.donations, public.reports TO retool`,
+    );
+    await queryRunner.query(
+      `DROP VIEW IF EXISTS retool_ro.donations, retool_ro.reports`,
+    );
     await queryRunner.query(`DROP SCHEMA IF EXISTS retool_ro`);
   }
 }
