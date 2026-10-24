@@ -1097,3 +1097,112 @@ describe("#media", () => {
     expect(byId.get(image.id).cdnUrl).toContain("image.webp");
   });
 });
+
+describe("#create logging", () => {
+  const eventsFrom = (spy: jest.SpyInstance) =>
+    spy.mock.calls.map(([line]) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    });
+
+  test("logs attempt + validation failure (field names only, no values)", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await controller.create(
+        http_mocks.createRequest({
+          method: "POST",
+          body: {
+            url: "not-valid",
+            contact: "not-valid",
+            address: "not-valid",
+          },
+        }),
+        http_mocks.createResponse(),
+        () => undefined,
+      );
+
+      const events = eventsFrom(logSpy);
+      expect(
+        events.find((e) => e?.event === "report.submit.attempt"),
+      ).toMatchObject({
+        authed: false,
+        uploadId: null,
+        hasAddress: true,
+        hasUrl: true,
+        hasContact: true,
+      });
+
+      const failed = events.find(
+        (e) => e?.event === "report.submit.validation_failed",
+      );
+      expect(failed.fields).toEqual(
+        expect.arrayContaining(["url", "contact", "address"]),
+      );
+      expect(failed.fields).toHaveLength(3);
+
+      // PII rule: submitted values never reach the logs
+      expect(logSpy.mock.calls.flat().join(" ")).not.toContain("not-valid");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  test("logs attempt + success with ids for a valid submit", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      const url = `http://twitter.com/logging/status/${Date.now()}`;
+      const address = "5335 S Kimbark Ave Chicago IL 60615";
+
+      const body = await controller.create(
+        http_mocks.createRequest({
+          method: "POST",
+          body: {
+            url,
+            contact: "555-234-2345",
+            address,
+            waitTime: "5",
+            canDistribute: true,
+          },
+        }),
+        http_mocks.createResponse(),
+        () => undefined,
+      );
+
+      expect(body).toEqual({
+        address,
+        hasTruck: false,
+        willReceive: true,
+        alreadyOrdered: false,
+      });
+
+      const events = eventsFrom(logSpy);
+      expect(
+        events.find((e) => e?.event === "report.submit.attempt"),
+      ).toMatchObject({
+        authed: false,
+        hasAddress: true,
+        hasUrl: true,
+        hasContact: true,
+        waitTime: "5",
+      });
+
+      const success = events.find((e) => e?.event === "report.submit.success");
+      expect(success).toMatchObject({
+        uploadId: null,
+        hasTruck: false,
+        willReceive: true,
+        alreadyOrdered: false,
+      });
+      expect(success.reportId).toEqual(expect.any(Number));
+      expect(success.locationId).toEqual(expect.any(Number));
+
+      // PII rule: contact info never reaches the logs
+      expect(logSpy.mock.calls.flat().join(" ")).not.toContain("555-234-2345");
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});

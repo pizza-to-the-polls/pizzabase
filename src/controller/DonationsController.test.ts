@@ -586,3 +586,81 @@ describe("#webhook", () => {
     expect(donation.cancelledAt).toBeTruthy();
   });
 });
+
+describe("checkout funnel logging", () => {
+  const eventsFrom = (spy: jest.SpyInstance) =>
+    spy.mock.calls.map(([line]) => {
+      try {
+        return JSON.parse(String(line));
+      } catch {
+        return null;
+      }
+    });
+
+  it("logs attempt + success for a checkout session", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      await controller.create(
+        http_mocks.createRequest({
+          body: { amountUsd: 10, referrer: "http://google.com" },
+        }),
+        http_mocks.createResponse(),
+        () => undefined,
+      );
+
+      const events = eventsFrom(logSpy);
+      expect(
+        events.find((e) => e?.event === "donation.checkout.attempt"),
+      ).toMatchObject({
+        type: "donation",
+        amountUsd: 10,
+        hasReferrer: true,
+        hasUrl: false,
+      });
+
+      expect(
+        events.find((e) => e?.event === "donation.checkout.success"),
+      ).toMatchObject({
+        type: "donation",
+        amountUsd: 10,
+        checkoutSessionId: "returned_id",
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+
+  it("defaults the type and logs attempt + failed when Stripe rejects", async () => {
+    const logSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+    try {
+      mockStripeClient.checkout.sessions.create.mockRejectedValueOnce(
+        new Error("No active monthly price for $10"),
+      );
+
+      const body = await controller.create(
+        http_mocks.createRequest({
+          body: { amountUsd: 10 },
+        }),
+        http_mocks.createResponse(),
+        () => undefined,
+      );
+
+      expect(body.success).toEqual(false);
+
+      const events = eventsFrom(logSpy);
+      expect(
+        events.find((e) => e?.event === "donation.checkout.attempt"),
+      ).toMatchObject({ type: "donation", amountUsd: 10 });
+
+      expect(
+        events.find((e) => e?.event === "donation.checkout.failed"),
+      ).toMatchObject({
+        type: "donation",
+        amountUsd: 10,
+        message: "No active monthly price for $10",
+      });
+    } finally {
+      logSpy.mockRestore();
+    }
+  });
+});

@@ -5,6 +5,7 @@ import { Upload } from "../entity/Upload";
 import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
 import { isValidPhone } from "../lib/validator/normalizeContact";
+import { logEvent } from "../lib/logger";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 import { cdnUrlFromStoredUrl } from "../lib/media-cdn";
@@ -154,16 +155,42 @@ export class ReportsController {
   async create(request: Request, response: Response, _next: NextFunction) {
     const authed = await checkAuthorization(request);
 
+    // Front door of the submit funnel: every attempt logs, whatever happens
+    // next. This is what lets an investigation tell "never hit submit"
+    // apart from "hit submit and was rejected" — an orphaned upload with no
+    // attempt event in its window means the form was abandoned, not failed.
+    // Presence booleans + identifiers only; contact info never logged.
+    logEvent("report.submit.attempt", {
+      authed,
+      uploadId: request.body?.uploadId ?? null,
+      hasAddress: Boolean(request.body?.address),
+      hasUrl: Boolean(request.body?.url),
+      hasContact: Boolean(request.body?.contact),
+      waitTime: request.body?.waitTime ?? null,
+    });
+
     const { errors, normalizedAddress, reportURL, contactInfo, ...extra } =
       await validateReport(request.body || {}, authed);
 
     if (Object.keys(errors).length > 0) {
+      // Field names only — the canned validator messages go back in the
+      // response body; values (contact info, URLs) stay out of the logs.
+      logEvent("report.submit.validation_failed", {
+        authed,
+        uploadId: request.body?.uploadId ?? null,
+        fields: Object.keys(errors),
+      });
       response.status(422);
       return { errors };
     }
 
     if (isValidPhone(contactInfo)) {
       if (await BannedPhoneNumber.isBanned(contactInfo)) {
+        // Same response shape as a success — log so banned submits stay
+        // distinguishable from real inserts in the funnel.
+        logEvent("report.submit.banned", {
+          uploadId: extra.upload?.id ?? request.body?.uploadId ?? null,
+        });
         return {
           address: normalizedAddress.fullAddress,
           hasTruck: false,
@@ -193,6 +220,18 @@ export class ReportsController {
         await zapNewLocation(report);
       }
     }
+
+    // Non-failed submits (attempts that produced a report row), with the
+    // linkage back to the upload so photo-without-report drop-offs can be
+    // quantified.
+    logEvent("report.submit.success", {
+      reportId: report.id,
+      locationId: report.location?.id ?? null,
+      uploadId: report.upload?.id ?? null,
+      hasTruck,
+      willReceive,
+      alreadyOrdered,
+    });
 
     return {
       address: report.location.fullAddress,
