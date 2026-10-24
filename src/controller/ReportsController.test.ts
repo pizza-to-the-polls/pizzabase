@@ -20,6 +20,16 @@ jest.mock("../lib/validator/geocode");
 const controller = new ReportsController();
 
 describe("#create", () => {
+  let consoleLogSpy: jest.SpyInstance;
+
+  beforeEach(() => {
+    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
+  });
+
   test("Sends 422 and errors on empty response", async () => {
     const request = http_mocks.createRequest({
       method: "POST",
@@ -38,6 +48,20 @@ describe("#create", () => {
     });
 
     expect(response.statusCode).toEqual(422);
+
+    // FEAT-004: validation failure emits a structured log line with field
+    // NAMES only — never values.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "report_validation_failed",
+        fields: ["url", "contact", "address"],
+        authed: false,
+      }),
+    );
+    const loggedLine = consoleLogSpy.mock.calls
+      .map((call) => call[0])
+      .find((arg: string) => arg?.includes("report_validation_failed"));
+    expect(loggedLine).not.toContain("not-valid");
   });
 
   test("Sends 422 and errors on invalid response", async () => {
@@ -63,6 +87,15 @@ describe("#create", () => {
     });
 
     expect(response.statusCode).toEqual(422);
+
+    // FEAT-004: same structured log line on the invalid-body path.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "report_validation_failed",
+        fields: ["url", "contact", "address"],
+        authed: false,
+      }),
+    );
   });
 
   test("Trusted reporters can override valdiation", async () => {
@@ -638,6 +671,15 @@ describe("#create", () => {
     expect(body).toEqual({
       errors: { upload: "URL does not match uploaded file" },
     });
+
+    // FEAT-004: upload-mismatch validation failures are logged too.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "report_validation_failed",
+        fields: ["upload"],
+        authed: false,
+      }),
+    );
   });
 
   test("does not link upload when no uploadId provided", async () => {
@@ -807,6 +849,7 @@ describe("#media", () => {
     zip: "60615",
   };
 
+  let consoleLogSpy: jest.SpyInstance;
   let report: Report;
 
   const createMmsUpload = async (n: number): Promise<Upload> => {
@@ -845,11 +888,16 @@ describe("#media", () => {
     });
 
   beforeEach(async () => {
+    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     [report] = await Report.createNewReport(
       "555-555-0001",
       `http://twitter.com/status/media-${Date.now()}`,
       TEST_ADDRESS,
     );
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
   });
 
   it("returns 401 without auth", async () => {
@@ -865,6 +913,11 @@ describe("#media", () => {
 
     expect(response.statusCode).toEqual(401);
     expect(body).toEqual({ errors: ["Not authorized"] });
+
+    // FEAT-004: unauthorized media requests are logged.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({ event: "report_not_authorized" }),
+    );
   });
 
   it("returns 401 with a bad API key", async () => {
@@ -881,6 +934,11 @@ describe("#media", () => {
 
     expect(response.statusCode).toEqual(401);
     expect(body).toEqual({ errors: ["Not authorized"] });
+
+    // FEAT-004: same log line for bad credentials.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({ event: "report_not_authorized" }),
+    );
   });
 
   it("returns 404 for a nonexistent report", async () => {

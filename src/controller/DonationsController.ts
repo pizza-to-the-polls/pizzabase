@@ -27,23 +27,64 @@ export class DonationsController {
           break;
         default:
           console.log(`Unhandled event type ${type}`);
+          // Structured webhook logging (FEAT-004) — event type only, never
+          // the payload.
+          console.log(
+            JSON.stringify({
+              event: "stripe_webhook",
+              type,
+              outcome: "unhandled",
+            }),
+          );
+          return { success: true };
       }
+
+      console.log(
+        JSON.stringify({ event: "stripe_webhook", type, outcome: "handled" }),
+      );
 
       return { success: true };
     } catch (err) {
       response.status(400);
+      // Signature/parse failure — no event type available, never log the
+      // payload.
+      console.log(
+        JSON.stringify({ event: "stripe_webhook", outcome: "signature_error" }),
+      );
       return { errors: [`Webhook Error: ${err.message}`] };
     }
   }
 
   async create(request: Request, _response: Response, _next: NextFunction) {
+    const type = request.body?.type || "donation";
+
     try {
       const id = await sessionForCheckout({
-        type: request.body?.type || "donation",
+        type,
         ...request.body,
       });
+
+      // Structured checkout logging (FEAT-004) — no body contents in the log.
+      console.log(
+        JSON.stringify({
+          event: "donation_checkout",
+          outcome: "session_created",
+          type,
+        }),
+      );
+
       return { success: true, checkoutSessionId: id };
     } catch (e) {
+      // Outcome only — the raw error message may embed the checkout payload,
+      // so it must NOT appear in the structured line.
+      console.log(
+        JSON.stringify({
+          event: "donation_checkout",
+          outcome: "failed",
+          type,
+        }),
+      );
+
       if (process.env.BUGSNAG_KEY) {
         Bugsnag.notify(e, (event) => {
           event.severity = "warning";

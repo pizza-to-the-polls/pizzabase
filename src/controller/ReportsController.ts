@@ -41,6 +41,7 @@ export class ReportsController {
   async media(request: Request, response: Response, next: NextFunction) {
     if (!(await checkAuthorization(request))) {
       response.status(401);
+      console.log(JSON.stringify({ event: "report_not_authorized" }));
       return { errors: ["Not authorized"] };
     }
 
@@ -159,6 +160,15 @@ export class ReportsController {
 
     if (Object.keys(errors).length > 0) {
       response.status(422);
+      // Structured validation logging (FEAT-004) — field NAMES only, never
+      // values, so no PII reaches the logs.
+      console.log(
+        JSON.stringify({
+          event: "report_validation_failed",
+          fields: Object.keys(errors),
+          authed,
+        }),
+      );
       return { errors };
     }
 

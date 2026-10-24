@@ -5,6 +5,7 @@ import cors from "cors";
 import { Request, Response, NextFunction } from "express";
 import { Routes } from "./routes";
 import { initBugSnagMiddleware } from "./lib/middleware/bugsnag";
+import { requestLogging } from "./lib/middleware/requestLogging";
 
 const ALLOWED_ORIGINS = process.env.ALLOWED_ORIGINS?.split(",");
 
@@ -37,10 +38,17 @@ app.use(bodyParser.urlencoded({ extended: false }));
 
 app.set("trust proxy", true);
 
+// Structured per-request logging (FEAT-004) — mounted before route
+// registration so it wraps every controller action.
+app.use(requestLogging);
+
 Routes.forEach(({ method, route, controller, action }) => {
   (app as any)[method](
     route,
     (req: Request, res: Response, next: NextFunction) => {
+      // Capture the registered route pattern for request logging so log
+      // lines stay low-cardinality (no raw URLs, no query strings).
+      (req as any).routePattern = route;
       const result = new (controller as any)()[action](req, res, next);
       if (result instanceof Promise) {
         result
