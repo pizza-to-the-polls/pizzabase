@@ -10,8 +10,10 @@ const controller = new DonationsController();
 
 describe("#create", () => {
   let mockStripeClient;
+  let consoleLogSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     mockStripeClient = {
       checkout: {
         sessions: {
@@ -42,6 +44,10 @@ describe("#create", () => {
     process.env.STRIPE_SECRET_KEY = "STRIPE SECRET KEY";
     process.env.STRIPE_PRODUCT_ID = "stripe_product_12345";
     process.env.STATIC_SITE = "http://polls.pizza";
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
   });
 
   it("constructs a Stripe client using our secret key", async () => {
@@ -306,19 +312,108 @@ describe("#create", () => {
       message: "No active monthly price for $20",
     });
     expect(mockStripeClient.checkout.sessions.create).not.toHaveBeenCalled();
+
+    // FEAT-004: even this failure path logs a checkout outcome with type.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "donation_checkout",
+        outcome: "failed",
+        type: "subscription",
+      }),
+    );
+  });
+
+  it("logs donation_checkout session_created on success", async () => {
+    await controller.create(
+      http_mocks.createRequest({ body: { amountUsd: 10, type: "donation" } }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    // FEAT-004: structured checkout log — no body contents (amount is fine,
+    // but never giftName/giftEmail/referrer).
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "donation_checkout",
+        outcome: "session_created",
+        type: "donation",
+      }),
+    );
+
+    const loggedLine = consoleLogSpy.mock.calls
+      .map((call) => call[0])
+      .find((arg: string) => arg?.includes("donation_checkout"));
+    expect(loggedLine).not.toContain("giftName");
+    expect(loggedLine).not.toContain("bob");
+  });
+
+  it("logs donation_checkout session_created for subscriptions", async () => {
+    await controller.create(
+      http_mocks.createRequest({
+        body: { amountUsd: 20, type: "subscription" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "donation_checkout",
+        outcome: "session_created",
+        type: "subscription",
+      }),
+    );
+  });
+
+  it("logs failed checkout without the raw error message", async () => {
+    mockStripeClient.checkout.sessions.create.mockRejectedValueOnce(
+      new Error("Stripe API error: payload contains bob smith"),
+    );
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        body: { amountUsd: 10, type: "donation" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(body.success).toEqual(false);
+
+    // FEAT-004: failed checkouts log the outcome — never the raw error
+    // message, which may embed the checkout payload.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "donation_checkout",
+        outcome: "failed",
+        type: "donation",
+      }),
+    );
+
+    const loggedLine = consoleLogSpy.mock.calls
+      .map((call) => call[0])
+      .find((arg: string) => arg?.includes("donation_checkout"));
+    expect(loggedLine).not.toContain("Stripe API error");
+    expect(loggedLine).not.toContain("bob smith");
   });
 });
 
 describe("#webhook", () => {
   let mockStripeClient;
+  let consoleLogSpy: jest.SpyInstance;
 
   beforeEach(() => {
+    consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     mockStripeClient = {
       webhooks: {
         constructEvent: jest.fn((body) => body),
       },
     };
     (Stripe as any).mockImplementation(() => mockStripeClient);
+  });
+
+  afterEach(() => {
+    consoleLogSpy.mockRestore();
   });
 
   it("constructs a Stripe client using our secret key and valdiates the webhook", async () => {
@@ -399,6 +494,21 @@ describe("#webhook", () => {
     expect(donation.referrer).toEqual(referrer);
     expect(donation.gift).toEqual(`${giftName} <${giftEmail}>`);
     expect(donation.url).toEqual(url);
+
+    // FEAT-004: handled webhook types log the event type + outcome — never
+    // the payload (email/postalCode must not appear).
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "stripe_webhook",
+        type: "charge.succeeded",
+        outcome: "handled",
+      }),
+    );
+    const loggedLine = consoleLogSpy.mock.calls
+      .map((call) => call[0])
+      .find((arg: string) => arg?.includes("stripe_webhook"));
+    expect(loggedLine).not.toContain(email);
+    expect(loggedLine).not.toContain(postalCode);
   });
 
   it("handles a sparse charge with missing optional fields", async () => {
@@ -522,6 +632,15 @@ describe("#webhook", () => {
     await donation.reload();
     expect(donation.cancelNote).toEqual("failed");
     expect(donation.cancelledAt).toBeTruthy();
+
+    // FEAT-004
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "stripe_webhook",
+        type: "charge.failed",
+        outcome: "handled",
+      }),
+    );
   });
 
   it("deducts a refunded", async () => {
@@ -553,6 +672,15 @@ describe("#webhook", () => {
     await donation.reload();
     expect(donation.cancelNote).toEqual("refunded");
     expect(donation.cancelledAt).toBeTruthy();
+
+    // FEAT-004
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "stripe_webhook",
+        type: "charge.refunded",
+        outcome: "handled",
+      }),
+    );
   });
 
   it("deducts a dispute.funds_withdrawn", async () => {
@@ -584,5 +712,81 @@ describe("#webhook", () => {
     await donation.reload();
     expect(donation.cancelNote).toEqual("dispute.funds_withdrawn");
     expect(donation.cancelledAt).toBeTruthy();
+
+    // FEAT-004
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "stripe_webhook",
+        type: "charge.dispute.funds_withdrawn",
+        outcome: "handled",
+      }),
+    );
+  });
+
+  it("logs unhandled webhook event types", async () => {
+    const body = {
+      type: "payment_intent.succeeded",
+      data: { object: { id: "pi_123" } },
+    };
+
+    const response = await controller.webhook(
+      http_mocks.createRequest({
+        body,
+        headers: { "stripe-signature": "yip" },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect(response).toEqual({ success: true });
+
+    // FEAT-004: default branch logs outcome "unhandled" with the event type.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "stripe_webhook",
+        type: "payment_intent.succeeded",
+        outcome: "unhandled",
+      }),
+    );
+    // The payload must never be logged.
+    const loggedLine = consoleLogSpy.mock.calls
+      .map((call) => call[0])
+      .find((arg: string) => arg?.includes("stripe_webhook"));
+    expect(loggedLine).not.toContain("pi_123");
+  });
+
+  it("logs signature_error when webhook verification fails", async () => {
+    mockStripeClient.webhooks.constructEvent.mockImplementation(() => {
+      throw new Error("Stripe signature verification failed");
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.webhook(
+      http_mocks.createRequest({
+        body: { type: "charge.succeeded", data: { object: {} } },
+        headers: { "stripe-signature": "bad-sig" },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(400);
+    expect(body).toEqual({
+      errors: ["Webhook Error: Stripe signature verification failed"],
+    });
+
+    // FEAT-004: signature failures log a dedicated outcome — no event type
+    // (it never parsed) and no error message in the structured line.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "stripe_webhook",
+        outcome: "signature_error",
+      }),
+    );
+    const loggedLine = consoleLogSpy.mock.calls
+      .map((call) => call[0])
+      .find((arg: string) => arg?.includes("stripe_webhook"));
+    expect(loggedLine).not.toContain("Stripe signature verification failed");
+    expect(loggedLine).not.toContain("charge.succeeded");
   });
 });
