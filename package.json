@@ -32,7 +32,7 @@
     "@aws-sdk/s3-request-presigner": "^3.1110.0",
     "@bugsnag/js": "^8.2.0",
     "@bugsnag/plugin-express": "^8.2.0",
-    "body-parser": "^2.3.0",
+    "body-parser": "^2.4.0",
     "cors": "^2.8.5",
     "csv-parser": "^3.2.0",
     "exif-reader": "^2.0.3",
