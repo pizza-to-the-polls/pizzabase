@@ -185,6 +185,10 @@ jobs:
           TWITTER_ACCESS_SECRET: ${{ secrets.TWITTER_ACCESS_SECRET }}
           THREADS_USER_ID: ${{ secrets.THREADS_USER_ID }}
 
+          # Prod posts to the real platforms (default anyway); the Slack
+          # staging shim is staging-only (#213).
+          SOCIAL_POST_TARGET: "live"
+
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
       - name: run migrations

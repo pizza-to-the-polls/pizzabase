@@ -97,6 +97,15 @@ provider:
 
     THREADS_USER_ID: ${env:THREADS_USER_ID, ''}
 
+    # Social posting delivery target (#213): 'live' posts to the real
+    # platforms; 'slack' posts the rendered preview to a Slack incoming
+    # webhook instead (staging shim). Anything else falls back to 'live'.
+    SOCIAL_POST_TARGET: ${env:SOCIAL_POST_TARGET, 'live'}
+    # Slack incoming webhook URL — required when SOCIAL_POST_TARGET=slack.
+    # Unset = slack delivery is skipped with a logged error (never blocks
+    # the order response).
+    SLACK_WEBHOOK_URL: ${env:SLACK_WEBHOOK_URL, ''}
+
   iamRoleStatements:
     - Effect: "Allow"
       Action:

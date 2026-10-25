@@ -233,6 +233,10 @@ jobs:
 
           # Social posting is prod-only — staging deploys without social
           # credentials; social-config treats empty creds as a clean no-op.
+          # Instead of going blind, staging routes the rendered social post
+          # to Slack via the staging shim (#213) — no live platform calls.
+          SOCIAL_POST_TARGET: "slack"
+          SLACK_WEBHOOK_URL: ${{ secrets.STAGING_SLACK_WEBHOOK_URL }}
 
           SERVERLESS_ACCESS_KEY: ${{ secrets.SERVERLESS_ACCESS_KEY }}
 
