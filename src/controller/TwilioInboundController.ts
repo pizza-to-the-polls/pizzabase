@@ -19,7 +19,9 @@ import { seedClipForUpload } from "../lib/clip-auto";
  *      / Authorization: Bearer) used by the Zapier catch-hook Zap that
  *      forwards non-Twilio multimedia messages in the same Twilio shape.
  *   2. Handle bans / STOP opt-out keywords.
- *   3. Match the sender to a recent fulfilled report (MMS-001).
+ *   3. Match the sender to a recent fulfilled report (MMS-001) — media is
+ *      ingested whether or not a report matches; unmatched (orphan) media
+ *      is stored without a report/location link (issue #341).
  *   4. Download attached media (short-lived signed Twilio S3 redirects) and
  *      PutObject the raw bytes into the raw uploads bucket — the existing
  *      EXIF → format → transcode pipeline (onMediaFormat) runs from the S3
@@ -393,33 +395,33 @@ export class TwilioInboundController {
       // --- Report matching -------------------------------------------------
       const report = await Report.findRecentFulfilledByPhone(from);
 
-      if (!report) {
-        // Never store orphan media — nothing here is attached to a report.
-        respond(
-          200,
-          mediaItems.length > 0 ? NO_MATCH_MEDIA_REPLY : THANKS_REPLY,
-        );
-        return null;
+      if (report) {
+        details.matched = true;
+        details.matchedReport = {
+          id: report.id,
+          reportURL: report.reportURL,
+          location: {
+            fullAddress: report.location.fullAddress,
+            city: report.location.city,
+            state: report.location.state,
+          },
+          order: report.order
+            ? {
+                restaurant: report.order.restaurant ?? null,
+                orderType: report.order.orderType,
+                quantity: report.order.quantity,
+              }
+            : null,
+        };
       }
-      details.matched = true;
-      details.matchedReport = {
-        id: report.id,
-        reportURL: report.reportURL,
-        location: {
-          fullAddress: report.location.fullAddress,
-          city: report.location.city,
-          state: report.location.state,
-        },
-        order: report.order
-          ? {
-              restaurant: report.order.restaurant ?? null,
-              orderType: report.order.orderType,
-              quantity: report.order.quantity,
-            }
-          : null,
-      };
+      // No early return on !report (issue #341): orphan senders' media is
+      // ingested below too — it just isn't tied to a report/location. The
+      // no-match reply text is kept for unmatched senders.
 
       // --- Media ingestion --------------------------------------------------
+      // Runs whether or not a report matched (issue #341): orphan senders'
+      // media is stored too, so it reaches Slack #feed-sms replies, Help
+      // Scout media notes, and Retool — it just isn't tied to a delivery.
       const s3Client = new S3Client({
         region: process.env.AWS_REGION || "us-west-2",
       });
@@ -431,8 +433,9 @@ export class TwilioInboundController {
 
       // Resolve media by MessageSid when the caller sent no MediaUrl fields
       // (the Zapier relay forwards only the SID). Direct URLs always win —
-      // they are already-signed. Done after the report match on purpose:
-      // orphan senders (no report) never trigger a Twilio API round trip.
+      // they are already-signed. Runs for orphan senders too: their media
+      // must still be downloaded and stored, and the SID may be the only
+      // way to reach it.
       if (
         mediaItems.length === 0 &&
         TWILIO_MESSAGE_SID_REGEX.test(messageSid) &&
@@ -563,7 +566,11 @@ export class TwilioInboundController {
             );
             // Seed the clip immediately for fresh MMS media rather than
             // waiting for the 3-hourly backstop. Idempotent and never throws.
-            await seedClipForUpload(report, upload);
+            // Only for matched senders — orphan media has no report to
+            // associate with a clip.
+            if (report) {
+              await seedClipForUpload(report, upload);
+            }
           }
           savedCount++;
           details.savedCount = savedCount;
@@ -579,7 +586,11 @@ export class TwilioInboundController {
       // --- Reply -------------------------------------------------------------
       track();
       let message: string;
-      if (savedCount > 0) {
+      if (savedCount > 0 && !details.matched) {
+        // Orphan media was saved, but no delivery matched — keep the
+        // accurate no-match text (media saved, not tied to a report).
+        message = NO_MATCH_MEDIA_REPLY;
+      } else if (savedCount > 0) {
         message = SHARED_REPLY;
       } else if (failedCount > 0) {
         message =

@@ -30,6 +30,19 @@ export async function photoEntryForUpload(
   upload: Upload,
 ): Promise<ClipPhotoEntry> {
   const location = upload.location;
+  if (!location) {
+    // Orphan uploads (no matched report) never reach here — clip seeding is
+    // gated on report presence — but guard defensively now that
+    // Upload.location is nullable (issue #341).
+    return {
+      url: uploadPermalink(upload),
+      address: "",
+      city: "",
+      state: "",
+      pizzas: null,
+      restaurant: null,
+    };
+  }
   const since = new Date(new Date(upload.createdAt).getTime() - 2 * 86400000);
   const until = new Date(new Date(upload.createdAt).getTime() + 2 * 86400000);
   const orders = await Order.find({

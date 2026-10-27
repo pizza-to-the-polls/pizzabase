@@ -33,13 +33,16 @@ export class Upload extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
+  // Nullable for orphan MMS media (issue #341): senders with no matched
+  // recent report still get their media stored — just without a location.
+  // Web uploads and matched MMS replies always carry a location.
   @ManyToOne((_type) => Location, (location) => location.reports, {
     eager: true,
-    nullable: false,
+    nullable: true,
   })
   @JoinColumn([{ name: "location_id", referencedColumnName: "id" }])
   @Index()
-  location: Location;
+  location: Location | null;
 
   @Column({ name: "ip_address" })
   @Index()
@@ -174,7 +177,7 @@ export class Upload extends BaseEntity {
   }
 
   static async createFromMms(
-    report: Report,
+    report: Report | null,
     {
       fileExt,
       fileHash,
@@ -209,20 +212,33 @@ export class Upload extends BaseEntity {
     }
     const upload = new this();
 
-    upload.location = report.location;
-    const { city, state } = report.location;
+    if (report) {
+      // Matched path: link the report's location and keep the city/state
+      // file-path scheme.
+      upload.location = report.location;
+      const { city, state } = report.location;
+      const generatedPath = `uploads/${city}-${state}-${
+        uuidv4().split("-")[0]
+      }.${fileExt}`
+        .toLowerCase()
+        .replace(/\s/g, "-");
+      upload.filePath = generatedPath;
+      upload.rawFilePath = generatedPath;
+    } else {
+      // Orphan path (issue #341): no matched report → no location. The file
+      // path can't carry city/state, so use a city/state-free scheme.
+      upload.location = null;
+      const generatedPath = `uploads/mms-${uuidv4().split("-")[0]}.${fileExt}`
+        .toLowerCase()
+        .replace(/\s/g, "-");
+      upload.filePath = generatedPath;
+      upload.rawFilePath = generatedPath;
+    }
 
     upload.ipAddress = "mms";
     upload.sourcePhone = sourcePhone;
     upload.fileHash = fileHash;
     upload.sightengineScore = null;
-    const generatedPath = `uploads/${city}-${state}-${
-      uuidv4().split("-")[0]
-    }.${fileExt}`
-      .toLowerCase()
-      .replace(/\s/g, "-");
-    upload.filePath = generatedPath;
-    upload.rawFilePath = generatedPath;
     upload.rawBucket = process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza";
     upload.mediaStatus = "processing";
     upload.source = "mms";

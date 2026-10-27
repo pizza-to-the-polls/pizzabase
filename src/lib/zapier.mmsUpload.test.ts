@@ -226,6 +226,43 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     expect(fetchBody().get("pizzas")).toBe("");
   });
 
+  it("sends empty location_* fields when the upload has no location (orphan)", async () => {
+    // Orphan MMS media (issue #341): no matched report → no location and no
+    // report. The Zapier workflow gates the public #feed-success post on
+    // report_id, so this only reaches #feed-sms + Help Scout — but the
+    // location fields must be stable empty strings, not a crash.
+    const upload = new Upload();
+    Object.assign(upload, {
+      location: null,
+      report: null,
+      ipAddress: "mms",
+      filePath: `uploads/mms-orphan-${Math.random().toString(36).slice(2)}.jpg`,
+      rawFilePath: `uploads/mms-orphan-${Math.random()
+        .toString(36)
+        .slice(2)}.jpg`,
+      fileHash: `orphan-${Math.random().toString(36).slice(2)}`,
+      mediaStatus: "ready",
+      moderationStatus: "clean",
+      source: "mms",
+      processedFilePath: { webp: WEBP_URL },
+    });
+    await upload.save();
+
+    await zapNewMmsUpload(upload);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const body = fetchBody();
+    expect(body.get("report_id")).toBe("");
+    expect(body.get("report_url")).toBe("");
+    expect(body.get("pizzas")).toBe("");
+    expect(body.get("location_full_address")).toBe("");
+    expect(body.get("location_city")).toBe("");
+    expect(body.get("location_state")).toBe("");
+    expect(body.get("source_phone")).toBe("");
+    // Media links still flow — the media itself is the point.
+    expect(body.get("media_links")).toContain("photo.webp");
+  });
+
   it("does not leak the transcode jobId from processedFilePath", async () => {
     const upload = await createMmsUpload({
       processedFilePath: { jobId: "1234-abcd" },

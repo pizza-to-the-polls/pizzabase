@@ -262,14 +262,65 @@ describe("TwilioInboundController #inbound", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it("replies with the no-match message and stores no orphan media when media is present", async () => {
+  it("stores orphan media for unmatched senders (location null, report null)", async () => {
+    // Sender has no recent report — but their media is still stored now
+    // (issue #341): it surfaces in Slack #feed-sms, Help Scout and Retool.
+    const bytes = Buffer.from("orphan-media-bytes");
+    mockFetchBody(bytes, String(bytes.length));
+
+    const orphanUpload = {
+      id: 9999,
+      filePath: "uploads/mms-a1b2c3d4.jpg",
+      rawBucket: "raw.polls.pizza",
+      location: null,
+      report: null,
+    } as unknown as Upload;
+    createFromMmsSpy.mockResolvedValue([orphanUpload, false]);
+
     const { response } = await callInbound(mediaBody("image/jpeg"));
 
     expect(response.statusCode).toEqual(200);
+    // Reply text unchanged: media saved but not tied to a delivery.
     expect(response._getData()).toContain(NO_MATCH_FRAGMENT);
-    // No downloads, no upload rows, no S3 writes.
-    expect(global.fetch).not.toHaveBeenCalled();
+
+    // Media IS downloaded, stored, and S3-written.
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+    expect(createFromMmsSpy).toHaveBeenCalledWith(null, {
+      fileExt: "jpg",
+      fileHash: expect.any(String),
+      sourcePhone: PHONE,
+    });
+    expect(putObjectMock).toHaveBeenCalledTimes(1);
+    expect(putObjectMock.mock.calls[0][0]).toEqual({
+      Bucket: "raw.polls.pizza",
+      Key: "uploads/mms-a1b2c3d4.jpg",
+      Body: bytes,
+    });
+    expect(send).toHaveBeenCalledTimes(1);
+
+    // No clip seeding for orphan media (no report to associate with).
+    expect(mockSeedClipForUpload).not.toHaveBeenCalled();
+  });
+
+  it("replies with the trouble-saving text to unmatched senders whose media fails to save", async () => {
+    (global.fetch as jest.Mock).mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+      arrayBuffer: async () => Buffer.alloc(0),
+    });
+
+    const { response } = await callInbound(mediaBody("image/jpeg"));
+
+    expect(response.statusCode).toEqual(200);
+    expect(bugsnagMock).toHaveBeenCalled();
+    expect(response._getData()).toContain(
+      "We had trouble saving the files you sent.",
+    );
     expect(createFromMmsSpy).not.toHaveBeenCalled();
+    // The failure happened at download time — nothing was stored, so the
+    // S3 pipeline trigger (PutObject via S3Client.send) never fired.
     expect(send).not.toHaveBeenCalled();
   });
 
@@ -813,15 +864,38 @@ describe("TwilioInboundController #inbound", () => {
         expect(body.savedCount).toBe(0);
       });
 
-      it("orphan senders (no matched report) never trigger the Media API", async () => {
+      it("resolves and stores media by MessageSid even for orphan senders", async () => {
         findReportSpy.mockResolvedValue(null);
+        const orphanUpload = {
+          id: 8888,
+          filePath: "uploads/mms-orphan.jpg",
+          rawBucket: "raw.polls.pizza",
+          location: null,
+          report: null,
+        } as unknown as Upload;
+        createFromMmsSpy.mockResolvedValue([orphanUpload, false]);
+        mockMediaApi(1);
 
         const { response } = await callInbound(
           { From: PHONE, Body: "orphan with sid", MessageSid: SID },
           RELAY_HEADERS,
         );
-        expect(global.fetch).not.toHaveBeenCalled();
-        expect(JSON.parse(response._getData()).matched).toBe(false);
+
+        // Media API IS called for orphans now — the SID may be the only
+        // way to reach their media, which gets stored either way.
+        expect(global.fetch).toHaveBeenCalledTimes(3);
+        expect(createFromMmsSpy).toHaveBeenCalledWith(
+          null,
+          expect.objectContaining({ sourcePhone: PHONE, messageSid: SID }),
+        );
+        const body = relayJson(response);
+        expect(body.matched).toBe(false);
+        expect(body.savedCount).toBe(1);
+        expect(body.uploadIds).toEqual([8888]);
+        // Reply text still reflects the no-match reality.
+        expect(body.reply).toContain(
+          "couldn't match this to a recent pizza delivery",
+        );
       });
     });
 
@@ -1435,14 +1509,17 @@ describe("TwilioInboundController #inbound", () => {
       expect(mockSeedClipForUpload).not.toHaveBeenCalled();
     });
 
-    it("never seeds a clip when no report matches the sender", async () => {
+    it("does not seed a clip when no report matches the sender (orphan media stored, no clip)", async () => {
       findReportSpy.mockResolvedValue(null);
 
       const { response } = await callInbound(mediaBody("image/jpeg"));
 
       expect(response.statusCode).toEqual(200);
       expect(findReportSpy).toHaveBeenCalledTimes(1);
-      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      // Orphan media is stored (issue #341)...
+      expect(createFromMmsSpy).toHaveBeenCalledWith(null, expect.anything());
+      // ...but never seeded as a clip — there is no report to associate it
+      // with, and clip kits need the report's location.
       expect(mockSeedClipForUpload).not.toHaveBeenCalled();
     });
 
