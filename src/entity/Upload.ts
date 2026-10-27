@@ -119,6 +119,11 @@ export class Upload extends BaseEntity {
   @Column({ name: "source_phone", type: "varchar", nullable: true })
   sourcePhone: string | null;
 
+  // Twilio message SID for MMS-origin uploads — join key for Retool.
+  @Column({ name: "message_sid", type: "varchar", length: 64, nullable: true })
+  @Index()
+  messageSid: string | null;
+
   static async createOrReject(
     ipAddress: string,
     {
@@ -174,7 +179,13 @@ export class Upload extends BaseEntity {
       fileExt,
       fileHash,
       sourcePhone,
-    }: { fileExt: string; fileHash: string; sourcePhone: string },
+      messageSid, // new optional param
+    }: {
+      fileExt: string;
+      fileHash: string;
+      sourcePhone: string;
+      messageSid?: string;
+    },
   ): Promise<[Upload, boolean]> {
     const exists = await this.findOne({
       where: { fileHash },
@@ -216,6 +227,7 @@ export class Upload extends BaseEntity {
     upload.mediaStatus = "processing";
     upload.source = "mms";
     upload.report = report;
+    upload.messageSid = messageSid ?? null;
 
     await upload.save();
 

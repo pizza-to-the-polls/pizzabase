@@ -311,6 +311,55 @@ describe("TwilioInboundController #inbound", () => {
     expect(send).toHaveBeenCalledTimes(1);
   });
 
+  it("passes messageSid to createFromMms when MessageSid is present and valid", async () => {
+    findReportSpy.mockResolvedValue(fakeReport);
+    const bytes = Buffer.from("sid-media-test");
+    mockFetchBody(bytes);
+
+    const sid = "SM" + "b".repeat(32);
+
+    await callInbound({
+      From: PHONE,
+      Body: "with sid",
+      MessageSid: sid,
+      MediaUrl0: "https://media.twilio.com/f1/0",
+      MediaContentType0: "image/jpeg",
+    });
+
+    expect(createFromMmsSpy).toHaveBeenCalledWith(fakeReport, {
+      fileExt: "jpg",
+      fileHash: expect.any(String),
+      sourcePhone: PHONE,
+      messageSid: sid,
+    });
+  });
+
+  it("does not pass messageSid when body has no MessageSid/Ssid key", async () => {
+    findReportSpy.mockResolvedValue(fakeReport);
+    mockFetchBody(Buffer.from("no-sid"));
+
+    await callInbound(mediaBody("image/jpeg"));
+
+    const callArg = createFromMmsSpy.mock.calls[0][1];
+    expect(callArg.messageSid).toBeUndefined();
+  });
+
+  it("does not pass an empty messageSid to createFromMms", async () => {
+    findReportSpy.mockResolvedValue(fakeReport);
+    mockFetchBody(Buffer.from("empty-sid"));
+
+    await callInbound({
+      From: PHONE,
+      Body: "empty sid",
+      MessageSid: "",
+      MediaUrl0: "https://media.twilio.com/f1/0",
+      MediaContentType0: "image/jpeg",
+    });
+
+    const callArg = createFromMmsSpy.mock.calls[0][1];
+    expect(callArg.messageSid).toBeUndefined();
+  });
+
   it("does not write to S3 for a duplicate fileHash", async () => {
     findReportSpy.mockResolvedValue(fakeReport);
     createFromMmsSpy.mockResolvedValue([fakeUpload, true]);
@@ -678,6 +727,23 @@ describe("TwilioInboundController #inbound", () => {
         expect(calls[0][0]).toBe("https://relay.example.test/m/photo.jpg");
       });
 
+      it("passes messageSid to createFromMms for SID-resolved media", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        mockMediaApi(1);
+
+        const sid = "SM" + "c".repeat(32);
+
+        await callInbound(
+          { From: PHONE, Body: "sid resolved", MessageSid: sid },
+          RELAY_HEADERS,
+        );
+
+        expect(createFromMmsSpy).toHaveBeenCalledWith(
+          fakeReport,
+          expect.objectContaining({ messageSid: sid }),
+        );
+      });
+
       it("never interpolates a malformed SID into the API URL (injection guard)", async () => {
         findReportSpy.mockResolvedValue(fakeReport);
 
@@ -694,6 +760,29 @@ describe("TwilioInboundController #inbound", () => {
         expect(JSON.parse(response._getData()).reply).toContain(
           THANKS_FRAGMENT,
         );
+      });
+
+      it("does not pass a malformed messageSid to createFromMms (injection guard)", async () => {
+        findReportSpy.mockResolvedValue(fakeReport);
+        mockFetchBody(Buffer.from("malformed-sid"));
+
+        await callInbound(
+          {
+            From: PHONE,
+            Body: "evil sid with media",
+            MessageSid: "SM../../evil",
+            MediaUrl0: "https://media.twilio.com/f1/0",
+            MediaContentType0: "image/jpeg",
+          },
+          RELAY_HEADERS,
+        );
+
+        // SID path not taken (malformed → no Media API call), only the
+        // MediaUrl0 fetch happened.
+        expect(global.fetch).toHaveBeenCalledTimes(1);
+
+        const callArg = createFromMmsSpy.mock.calls[0][1];
+        expect(callArg.messageSid).toBeUndefined();
       });
 
       it("does not call the Media API without TWILIO_ACCOUNT_SID", async () => {
