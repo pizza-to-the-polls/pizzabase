@@ -94,7 +94,12 @@ const zapOrder = async (order: Order, hook: ZapHooks): Promise<void> =>
 const zapUpload = async (upload: Upload, hook: ZapHooks): Promise<void> =>
   zapAny(
     {
-      location: await upload.location.asJSONPrivate(),
+      // Web uploads always carry a location (createOrReject resolves one);
+      // the guard is only for type-safety now that Upload.location is
+      // nullable (orphan MMS media never goes through zapNewUpload).
+      location: upload.location
+        ? await upload.location.asJSONPrivate()
+        : undefined,
       upload: {
         filePath: upload.filePath,
         ipAddress: upload.ipAddress,
@@ -269,9 +274,9 @@ export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
               order_created_at: "",
               order_cancelled_at: "",
             }),
-        location_full_address: location.fullAddress,
-        location_city: location.city,
-        location_state: location.state,
+        location_full_address: location?.fullAddress ?? "",
+        location_city: location?.city ?? "",
+        location_state: location?.state ?? "",
         media_links: mediaLinks.join(","),
       },
       ZapHooks.ZAP_NEW_MMS_UPLOAD,

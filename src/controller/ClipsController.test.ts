@@ -77,14 +77,14 @@ const makeReportWithOrder = async (upload: Upload): Promise<Report> => {
   order.orderType = OrderTypes.pizzas;
   order.quantity = 10;
   order.restaurant = "Test Pizzeria";
-  order.location = upload.location;
+  order.location = upload.location!;
   await order.save();
 
   const report = new Report();
   report.contactInfo = "555-867-5309";
   report.reportURL = `https://example.com/reports/clip-test-${reportCounter}`;
   report.canDistribute = 1;
-  report.location = upload.location;
+  report.location = upload.location!;
   report.order = order;
   report.upload = upload;
   await report.save();
@@ -230,7 +230,7 @@ describe("#create", () => {
     report.contactInfo = "555-867-5309";
     report.reportURL = `https://example.com/reports/clip-test-${reportCounter}`;
     report.canDistribute = 1;
-    report.location = upload.location;
+    report.location = upload.location!;
     report.upload = upload; // linked, but no order
     await report.save();
 
@@ -279,9 +279,9 @@ describe("#create", () => {
     expect(body.kit.photos).toEqual([
       {
         url: `https://base.polls.pizza/uploads/${upload.filePath.split("/").pop()}`,
-        address: upload.location.address,
-        city: upload.location.city,
-        state: upload.location.state,
+        address: upload.location!.address,
+        city: upload.location!.city,
+        state: upload.location!.state,
         // The strict-gate fixture order (10 from Test Pizzeria) is within
         // the ±2-day window, so the photo entry carries it.
         pizzas: 10,

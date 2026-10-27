@@ -52,6 +52,20 @@ describe("Upload entity", () => {
     expect(relation!.joinColumns.map((jc) => jc.databaseName)).toEqual([
       "report_id",
     ]);
+
+    // location is a nullable (orphan MMS media, issue #341) eager ManyToOne
+    // joined on location_id, still indexed
+    const locationRelation = metadata.findRelationWithPropertyPath("location");
+    expect(locationRelation).toBeDefined();
+    expect(locationRelation!.isNullable).toBe(true);
+    expect(locationRelation!.isEager).toBe(true);
+    expect(locationRelation!.joinColumns.map((jc) => jc.databaseName)).toEqual([
+      "location_id",
+    ]);
+    const locationIndex = metadata.indices.find((idx) =>
+      idx.columns.some((column) => column.propertyName === "location"),
+    );
+    expect(locationIndex).toBeDefined();
   });
 
   describe("#createFromMms", () => {
@@ -79,7 +93,7 @@ describe("Upload entity", () => {
       expect(upload.ipAddress).toEqual("mms");
       expect(upload.sourcePhone).toEqual("+14255551234");
       expect(upload.mediaStatus).toEqual("processing");
-      expect(upload.location.id).toEqual(report.location.id);
+      expect(upload.location!.id).toEqual(report.location.id);
       expect(upload.report!.id).toEqual(report.id);
       expect(upload.rawBucket).toEqual(
         process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza",
@@ -94,6 +108,80 @@ describe("Upload entity", () => {
       expect(loaded!.source).toEqual("mms");
       expect(loaded!.sourcePhone).toEqual("+14255551234");
       expect(loaded!.report!.id).toEqual(report.id);
+    });
+
+    it("creates an mms upload with null location and null report for orphan senders", async () => {
+      const sid = "MM" + "a".repeat(32);
+      const [upload, isDuplicate] = await Upload.createFromMms(null, {
+        fileExt: "jpg",
+        fileHash: "mms-orphan-hash-1",
+        sourcePhone: "+15038938626",
+        messageSid: sid,
+      });
+
+      expect(isDuplicate).toBe(false);
+      expect(upload.source).toEqual<UploadSource>("mms");
+      expect(upload.ipAddress).toEqual("mms");
+      expect(upload.sourcePhone).toEqual("+15038938626");
+      expect(upload.mediaStatus).toEqual("processing");
+      expect(upload.location).toBeNull();
+      expect(upload.report).toBeNull();
+      expect(upload.messageSid).toEqual(sid);
+      expect(upload.rawBucket).toEqual(
+        process.env.RAW_UPLOADS_BUCKET || "raw.polls.pizza",
+      );
+
+      // File path uses the city/state-free orphan scheme.
+      expect(upload.filePath.startsWith("uploads/mms-")).toBe(true);
+      expect(upload.filePath.endsWith(".jpg")).toBe(true);
+      expect(upload.filePath).toEqual(upload.filePath.toLowerCase());
+      expect(upload.filePath).not.toContain("chicago");
+      expect(upload.filePath).toEqual(upload.rawFilePath);
+
+      // Reload with the report relation to verify what actually persisted.
+      const loaded = await AppDataSource.getRepository(Upload).findOne({
+        where: { id: upload.id },
+        relations: ["report"],
+      });
+      expect(loaded!.location).toBeNull();
+      expect(loaded!.report).toBeNull();
+      expect(loaded!.sourcePhone).toEqual("+15038938626");
+      expect(loaded!.messageSid).toEqual(sid);
+    });
+
+    it("keeps the orphan rate limit and dedupe behavior per source phone", async () => {
+      const [first, firstDuplicate] = await Upload.createFromMms(null, {
+        fileExt: "jpg",
+        fileHash: "orphan-dedupe-hash",
+        sourcePhone: "+15038938626",
+      });
+      const [second, secondDuplicate] = await Upload.createFromMms(null, {
+        fileExt: "jpg",
+        fileHash: "orphan-dedupe-hash",
+        sourcePhone: "+15038938626",
+      });
+
+      expect(firstDuplicate).toBe(false);
+      expect(secondDuplicate).toBe(true);
+      expect(second.id).toEqual(first.id);
+
+      // Rate limit counts orphan uploads against the same mms budget.
+      for (let i = 0; i < 6; ++i) {
+        await Upload.createFromMms(null, {
+          fileExt: "jpg",
+          fileHash: `orphan-rate-${i}`,
+          sourcePhone: "+15038938627",
+        });
+      }
+      await expect(
+        Upload.createFromMms(null, {
+          fileExt: "jpg",
+          fileHash: "orphan-rate-6",
+          sourcePhone: "+15038938627",
+        }),
+      ).rejects.toThrow(
+        "Whoops! You've had too many uploads recently - slow your roll",
+      );
     });
 
     it("stores filePath under the uploads/ prefix with a lowercased dashed name", async () => {
@@ -120,7 +208,7 @@ describe("Upload entity", () => {
 
       const locations = await AppDataSource.getRepository(Location).find();
       expect(locations).toHaveLength(1);
-      expect(upload.location.id).toEqual(locations[0].id);
+      expect(upload.location!.id).toEqual(locations[0].id);
     });
 
     it("stores messageSid when provided", async () => {

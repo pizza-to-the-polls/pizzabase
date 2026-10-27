@@ -198,7 +198,7 @@ describe("#create", () => {
     expect((body as any).filePath).toEqual(upload.filePath);
     expect(upload.fileHash).toEqual("same-loc");
     expect(upload.filePath).toContain(".png");
-    expect(upload.location.id).toEqual(location.id);
+    expect(upload.location!.id).toEqual(location.id);
   });
 
   it("can create an upload on a new location", async () => {
@@ -221,7 +221,7 @@ describe("#create", () => {
     });
 
     expect(upload.fileHash).toEqual("new-loc");
-    expect(upload.location.fullAddress).toEqual(
+    expect(upload.location!.fullAddress).toEqual(
       "550 Different Address City OR 12345",
     );
   });
