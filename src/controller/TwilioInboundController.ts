@@ -537,10 +537,16 @@ export class TwilioInboundController {
             .update(bytes)
             .digest("hex");
 
+          // Validate SID shape before storing — relay junk must not hit the column.
+          const validSid = TWILIO_MESSAGE_SID_REGEX.test(messageSid)
+            ? messageSid
+            : undefined;
+
           const [upload, isDuplicate] = await Upload.createFromMms(report, {
             fileExt,
             fileHash,
             sourcePhone: normalizedPhone,
+            messageSid: validSid,
           });
 
           if (!isDuplicate) {

@@ -31,6 +31,19 @@ describe("Upload entity", () => {
     const phoneColumn = metadata.findColumnWithPropertyName("sourcePhone");
     expect(phoneColumn?.isNullable).toBe(true);
 
+    // message_sid is a nullable varchar(64) with an index
+    const sidColumn = metadata.findColumnWithPropertyName("messageSid");
+    expect(sidColumn).toBeDefined();
+    expect(sidColumn!.isNullable).toBe(true);
+    expect(sidColumn!.length).toEqual("64");
+    expect(String(sidColumn!.type).toLowerCase()).toMatch(
+      /varchar|character varying/,
+    );
+    const sidIndex = metadata.indices.find((idx) =>
+      idx.columns.some((column) => column.propertyName === "messageSid"),
+    );
+    expect(sidIndex).toBeDefined();
+
     // report is a nullable ManyToOne joined on report_id
     const relation = metadata.findRelationWithPropertyPath("report");
     expect(relation).toBeDefined();
@@ -108,6 +121,57 @@ describe("Upload entity", () => {
       const locations = await AppDataSource.getRepository(Location).find();
       expect(locations).toHaveLength(1);
       expect(upload.location.id).toEqual(locations[0].id);
+    });
+
+    it("stores messageSid when provided", async () => {
+      const sid = "SM" + "a".repeat(32);
+      const [upload, isDuplicate] = await Upload.createFromMms(report, {
+        fileExt: "jpg",
+        fileHash: "mms-hash-msg-sid",
+        sourcePhone: "+14255551234",
+        messageSid: sid,
+      });
+
+      expect(isDuplicate).toBe(false);
+      expect(upload.messageSid).toEqual(sid);
+
+      const loaded = await AppDataSource.getRepository(Upload).findOne({
+        where: { id: upload.id },
+      });
+      expect(loaded!.messageSid).toEqual(sid);
+    });
+
+    it("stores null messageSid when not provided (backward compat)", async () => {
+      const [upload, isDuplicate] = await Upload.createFromMms(report, {
+        fileExt: "jpg",
+        fileHash: "mms-hash-no-sid",
+        sourcePhone: "+14255551234",
+      });
+
+      expect(isDuplicate).toBe(false);
+      expect(upload.messageSid).toBeNull();
+
+      const loaded = await AppDataSource.getRepository(Upload).findOne({
+        where: { id: upload.id },
+      });
+      expect(loaded!.messageSid).toBeNull();
+    });
+
+    it("stores null messageSid when undefined is explicitly passed", async () => {
+      const [upload, isDuplicate] = await Upload.createFromMms(report, {
+        fileExt: "jpg",
+        fileHash: "mms-hash-undefined-sid",
+        sourcePhone: "+14255551234",
+        messageSid: undefined,
+      });
+
+      expect(isDuplicate).toBe(false);
+      expect(upload.messageSid).toBeNull();
+
+      const loaded = await AppDataSource.getRepository(Upload).findOne({
+        where: { id: upload.id },
+      });
+      expect(loaded!.messageSid).toBeNull();
     });
 
     it("dedupes by fileHash and returns the existing upload", async () => {
