@@ -86,6 +86,7 @@ jobs:
   deploy-staging:
     if: >-
       github.base_ref == 'master' &&
+      github.event.pull_request.draft == false &&
       github.event.pull_request.head.repo.full_name == github.repository &&
       github.actor != 'dependabot[bot]'
     runs-on: ubuntu-latest
