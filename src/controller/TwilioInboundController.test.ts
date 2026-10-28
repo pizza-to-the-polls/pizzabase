@@ -1033,6 +1033,8 @@ describe("TwilioInboundController #inbound", () => {
       ["video/mp4", "mp4"],
       ["video/quicktime", "mov"],
       ["video/webm", "webm"],
+      ["video/3gpp", "3gp"],
+      ["video/3gpp2", "3g2"],
     ];
 
     for (const [mime, ext] of cases) {
@@ -1047,6 +1049,44 @@ describe("TwilioInboundController #inbound", () => {
         sourcePhone: PHONE,
       });
     }
+  });
+
+  it("routes video/3gpp to storage, not unsupportedCount", async () => {
+    // Regression test for issue #343: video/3gpp is the default MMS video
+    // format on Android phones and US carrier MMS pipelines — it must not be
+    // silently dropped like unknown content types.
+    findReportSpy.mockResolvedValue(fakeReport);
+    const bytes = Buffer.from("3gpp-test-bytes");
+    mockFetchBody(bytes, String(bytes.length));
+
+    const { response } = await callInbound(mediaBody("video/3gpp"));
+
+    expect(response.statusCode).toEqual(200);
+    expect(createFromMmsSpy).toHaveBeenCalledWith(
+      fakeReport,
+      expect.objectContaining({ fileExt: "3gp", sourcePhone: PHONE }),
+    );
+    expect(putObjectMock).toHaveBeenCalledTimes(1);
+    expect(response._getData()).toContain(SHARED_FRAGMENT);
+    expect(response._getData()).not.toContain("couldn&apos;t process");
+  });
+
+  it("routes video/3gpp2 to storage, not unsupportedCount", async () => {
+    // 3gpp2 covers CDMA-originated MMS (same ISOBMFF container, different brand).
+    findReportSpy.mockResolvedValue(fakeReport);
+    const bytes = Buffer.from("3g2-test-bytes");
+    mockFetchBody(bytes, String(bytes.length));
+
+    const { response } = await callInbound(mediaBody("video/3gpp2"));
+
+    expect(response.statusCode).toEqual(200);
+    expect(createFromMmsSpy).toHaveBeenCalledWith(
+      fakeReport,
+      expect.objectContaining({ fileExt: "3g2", sourcePhone: PHONE }),
+    );
+    expect(putObjectMock).toHaveBeenCalledTimes(1);
+    expect(response._getData()).toContain(SHARED_FRAGMENT);
+    expect(response._getData()).not.toContain("couldn&apos;t process");
   });
 
   it("isolates per-media failures so one failed download doesn't abort the others", async () => {

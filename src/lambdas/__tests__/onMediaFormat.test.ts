@@ -588,4 +588,33 @@ describe("video uploads", () => {
     ).toBe(3);
     expect(upload.id).toBeDefined();
   });
+
+  it.each(["3gp", "3g2"])(
+    "routes .%s uploads to the video transcode branch",
+    async (fileExt) => {
+      // Regression test for issue #343: 3gp/3g2 are the default MMS video
+      // formats on Android phones and CDMA carrier pipelines. They are
+      // ISOBMFF containers (same box structure as mp4), so they must hit the
+      // video branch — not the unknown-extension failure path.
+      const filename = `clip.${fileExt}`;
+      const upload = await createUpload(`uploads/${filename}`);
+      s3ServesRaw(mp4Buffer({ duration: 18000, timescale: 600 }));
+      mediaConvertServesJob();
+
+      await handler(s3Event(`uploads/${filename}`));
+
+      const job = createdJobInput();
+      expect(job.Settings.Inputs[0].FileInput).toContain(filename);
+      expect(job.Settings.OutputGroups).toHaveLength(2);
+      expect(
+        job.Settings.OutputGroups[0].Outputs[0].ContainerSettings.Container,
+      ).toBe("MP4");
+      expect(job.UserMetadata.uploadId).toBe(String(upload.id));
+
+      const updated = (await Upload.findOne({
+        where: { id: upload.id },
+      }))!;
+      expect(updated.mediaStatus).toBe("processing");
+    },
+  );
 });
