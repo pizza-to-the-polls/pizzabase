@@ -127,6 +127,19 @@ export class Upload extends BaseEntity {
   @Index()
   messageSid: string | null;
 
+  // Announce-once claim for the Zapier media hooks (issue #349): NULL = the
+  // notify slot is unclaimed, set = some invocation already consumed it.
+  // zapNewUpload / zapNewMmsUpload compare-and-set this column so duplicate
+  // S3 events and client PUT retries can never double-post the feed/internal
+  // channels. Shared by both hooks — they are mutually exclusive per upload
+  // (web vs mms source), so one column enforces "at most once per row".
+  @Column({
+    name: "zap_notified_at",
+    type: "timestamp with time zone",
+    nullable: true,
+  })
+  zapNotifiedAt: Date | null;
+
   static async createOrReject(
     ipAddress: string,
     {

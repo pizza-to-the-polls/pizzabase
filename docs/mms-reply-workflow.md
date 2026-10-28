@@ -60,6 +60,14 @@ TwiML reply ("Thanks for sharing! 🍕")   Retool: GET /reports/:id/media
   and the Zap on the other end posts to the internal channel. There is no
   separate Slack webhook — staging reuses the existing `STAGING_ZAP_ALL`
   catch-all, and Retool consumes `GET /reports/:idOrAddress/media`.
+- **Announce-once (issue #349).** S3 delivers `ObjectCreated` at-least-once
+  and browsers can retry the same upload PUT, so several pipeline
+  invocations can finish one upload within milliseconds. Both zap helpers
+  claim `uploads.zap_notified_at` with a DB compare-and-set
+  (`UPDATE … WHERE zap_notified_at IS NULL`) BEFORE posting the webhook —
+  exactly one invocation wins per upload row, so the feed/internal channels
+  never see duplicate pictures. A claim consumed by a failed post is not
+  retried (at-most-once), and a claim failure never flips `media_status`.
 
 ---
 

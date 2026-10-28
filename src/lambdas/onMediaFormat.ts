@@ -180,8 +180,19 @@ export async function handler(event: S3Event): Promise<void> {
           JSON.stringify(result),
         );
         // Feed zap fires HERE, not at upload creation: media exists, and the
-        // payload's permalink resolves to the processed output.
-        await zapNewUpload(upload);
+        // payload's permalink resolves to the processed output. Fire-and-
+        // forget in its own try/catch: a Zapier failure must never mark
+        // media failed. The announce-once claim inside zapNewUpload
+        // (issue #349) dedupes the S3 fan-out / client PUT retries that
+        // reach this branch concurrently — the webhook posts at most once.
+        try {
+          await zapNewUpload(upload);
+        } catch (notifyErr) {
+          console.error(
+            "[on-media-format] Zapier notify failed (swallowed):",
+            notifyErr,
+          );
+        }
       } else if (VIDEO_EXTENSIONS.has(fileExt)) {
         await transcodeVideo(key, upload.id);
         // Transcoded MP4 carries no source metadata.

@@ -44,6 +44,15 @@ describe("Upload entity", () => {
     );
     expect(sidIndex).toBeDefined();
 
+    // zap_notified_at is a nullable timestamptz — the announce-once claim
+    // for the Zapier media hooks (issue #349); NULL = slot unclaimed.
+    const zapColumn = metadata.findColumnWithPropertyName("zapNotifiedAt");
+    expect(zapColumn).toBeDefined();
+    expect(zapColumn!.isNullable).toBe(true);
+    expect(String(zapColumn!.type).toLowerCase()).toContain(
+      "timestamp with time zone",
+    );
+
     // report is a nullable ManyToOne joined on report_id
     const relation = metadata.findRelationWithPropertyPath("report");
     expect(relation).toBeDefined();
@@ -108,6 +117,8 @@ describe("Upload entity", () => {
       expect(loaded!.source).toEqual("mms");
       expect(loaded!.sourcePhone).toEqual("+14255551234");
       expect(loaded!.report!.id).toEqual(report.id);
+      // Announce-once claim starts unclaimed (issue #349).
+      expect(loaded!.zapNotifiedAt).toBeNull();
     });
 
     it("creates an mms upload with null location and null report for orphan senders", async () => {
