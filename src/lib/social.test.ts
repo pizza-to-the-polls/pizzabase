@@ -241,3 +241,207 @@ describe("socialPost", () => {
     );
   });
 });
+
+describe("socialPost with Slack target (#213 staging shim)", () => {
+  const mockOrder = { id: 123, location: { address: "123 Main St" } } as any;
+  const WEBHOOK_URL = "https://hooks.slack.com/services/T000/B000/XYZ";
+
+  const envBackup: Record<string, string | undefined> = {};
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.spyOn(console, "error").mockImplementation(() => {});
+    // Re-establish the module-level mock implementations: jest.clearAllMocks()
+    // clears call history but not implementations, and the error-path tests in
+    // the describe above leave a persistent mockRejectedValue on collectMedia
+    // (and platform posts) that would otherwise leak into this block.
+    (renderMessage as jest.Mock).mockReturnValue("Shared post text");
+    (collectMedia as jest.Mock).mockResolvedValue({
+      images: ["https://polls.pizza/uploads/test.jpg"],
+      videos: [],
+      alt: "Long line at 123 Main St",
+    });
+    envBackup.SOCIAL_POST_TARGET = process.env.SOCIAL_POST_TARGET;
+    envBackup.SLACK_WEBHOOK_URL = process.env.SLACK_WEBHOOK_URL;
+    (global.fetch as jest.Mock).mockResolvedValue({ ok: true });
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+    if (envBackup.SOCIAL_POST_TARGET === undefined) {
+      delete process.env.SOCIAL_POST_TARGET;
+    } else {
+      process.env.SOCIAL_POST_TARGET = envBackup.SOCIAL_POST_TARGET;
+    }
+    if (envBackup.SLACK_WEBHOOK_URL === undefined) {
+      delete process.env.SLACK_WEBHOOK_URL;
+    } else {
+      process.env.SLACK_WEBHOOK_URL = envBackup.SLACK_WEBHOOK_URL;
+    }
+  });
+
+  /** Configure the slack target for a test. */
+  function setSlackTarget(webhookUrl: string | null) {
+    process.env.SOCIAL_POST_TARGET = "slack";
+    if (webhookUrl === null) {
+      delete process.env.SLACK_WEBHOOK_URL;
+    } else {
+      process.env.SLACK_WEBHOOK_URL = webhookUrl;
+    }
+  }
+
+  it("posts the preview to the Slack webhook and does not call platform modules", async () => {
+    setSlackTarget(WEBHOOK_URL);
+
+    await socialPost(mockOrder);
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = (global.fetch as jest.Mock).mock.calls[0];
+    expect(url).toBe(WEBHOOK_URL);
+    expect(init.method).toBe("POST");
+    expect(init.headers["Content-Type"]).toBe("application/json");
+    const body = JSON.parse(init.body);
+    expect(body.text).toContain("🍕 *Social post preview* (staging)");
+    expect(body.text).toContain("Shared post text");
+
+    // Zero calls to the live platform modules
+    expect(blueskyPost).not.toHaveBeenCalled();
+    expect(twitterPost).not.toHaveBeenCalled();
+    expect(threadsPost).not.toHaveBeenCalled();
+  });
+
+  it("includes media URLs and the would-be platform list in the Slack message", async () => {
+    setSlackTarget(WEBHOOK_URL);
+
+    await socialPost(mockOrder);
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.text).toContain(
+      "*Images:* https://polls.pizza/uploads/test.jpg",
+    );
+    // No videos in the mocked collectMedia result — no Videos line
+    expect(body.text).not.toContain("*Videos:*");
+    expect(body.text).toContain("*Would post to:* BlueSky, Twitter, Threads");
+  });
+
+  it("includes a Videos line when collectMedia returns videos", async () => {
+    setSlackTarget(WEBHOOK_URL);
+    (collectMedia as jest.Mock).mockResolvedValueOnce({
+      images: ["https://polls.pizza/uploads/test.jpg"],
+      videos: ["https://polls.pizza/uploads/test.mp4"],
+      alt: "Long line at 123 Main St",
+    });
+
+    await socialPost(mockOrder);
+
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.text).toContain(
+      "*Videos:* https://polls.pizza/uploads/test.mp4",
+    );
+  });
+
+  it("falls through to live behavior when SOCIAL_POST_TARGET is live", async () => {
+    process.env.SOCIAL_POST_TARGET = "live";
+    process.env.SLACK_WEBHOOK_URL = WEBHOOK_URL;
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder);
+
+    expect(blueskyPost).toHaveBeenCalledWith(mockOrder, "Shared post text", {
+      images: ["https://polls.pizza/uploads/test.jpg"],
+      videos: [],
+      alt: "Long line at 123 Main St",
+    });
+    expect(twitterPost).toHaveBeenCalled();
+    expect(threadsPost).toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("falls through to live behavior when SOCIAL_POST_TARGET is unset", async () => {
+    delete process.env.SOCIAL_POST_TARGET;
+    delete process.env.SLACK_WEBHOOK_URL;
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder);
+
+    expect(blueskyPost).toHaveBeenCalled();
+    expect(twitterPost).toHaveBeenCalled();
+    expect(threadsPost).toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("still posts to platforms for unknown target values (live fallback)", async () => {
+    process.env.SOCIAL_POST_TARGET = "slak"; // typo → live behavior
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder);
+
+    expect(blueskyPost).toHaveBeenCalled();
+    expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  it("logs an error and skips platforms when SLACK_WEBHOOK_URL is not set", async () => {
+    setSlackTarget(null);
+
+    await socialPost(mockOrder);
+
+    expect(global.fetch).not.toHaveBeenCalled();
+    expect(console.error).toHaveBeenCalledWith(
+      "socialPost: slack → SLACK_WEBHOOK_URL is not set; skipping Slack preview",
+    );
+    expect(blueskyPost).not.toHaveBeenCalled();
+    expect(twitterPost).not.toHaveBeenCalled();
+    expect(threadsPost).not.toHaveBeenCalled();
+  });
+
+  it("does not throw and logs when the Slack webhook request fails", async () => {
+    setSlackTarget(WEBHOOK_URL);
+    (global.fetch as jest.Mock).mockRejectedValue(new Error("network down"));
+
+    await expect(socialPost(mockOrder)).resolves.toBeUndefined();
+
+    await new Promise(setImmediate);
+    expect(console.error).toHaveBeenCalledWith(
+      "socialPost: slack → FAILED (Error: network down)",
+    );
+  });
+
+  it("does not throw when the Slack webhook returns a non-OK response", async () => {
+    setSlackTarget(WEBHOOK_URL);
+    (global.fetch as jest.Mock).mockResolvedValue({
+      ok: false,
+      status: 500,
+      statusText: "Internal Server Error",
+    });
+
+    await expect(socialPost(mockOrder)).resolves.toBeUndefined();
+
+    await new Promise(setImmediate);
+    expect(console.error).toHaveBeenCalledWith(
+      "socialPost: slack → FAILED (500 Internal Server Error)",
+    );
+  });
+
+  it("still posts to Slack with empty media when collectMedia rejects in slack mode", async () => {
+    setSlackTarget(WEBHOOK_URL);
+    (collectMedia as jest.Mock).mockRejectedValueOnce(new Error("Media error"));
+
+    await socialPost(mockOrder);
+
+    // Slack still gets the preview, with empty media
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (global.fetch as jest.Mock).mock.calls[0];
+    const body = JSON.parse(init.body);
+    expect(body.text).toContain("Shared post text");
+    expect(body.text).not.toContain("*Images:*");
+    expect(blueskyPost).not.toHaveBeenCalled();
+  });
+});
