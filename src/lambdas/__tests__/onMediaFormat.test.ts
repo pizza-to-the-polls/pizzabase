@@ -457,6 +457,38 @@ describe("image uploads", () => {
     await handler(s3Event("uploads/ghost.jpg"));
     expect(mockS3Send).not.toHaveBeenCalled();
   });
+
+  // Regression test for issue #349 (BUG-021): duplicate S3 events fan out
+  // into concurrent handler invocations that all read media_status=
+  // 'processing' (so the re-encode skip never fires) — the announce-once
+  // claim inside zapNewUpload must still post exactly one webhook.
+  it("posts exactly one feed webhook when duplicate S3 events race", async () => {
+    const zapHook = "https://hooks.zapier.com/hooks/catch/123456/feed/";
+    process.env.ZAP_NEW_UPLOAD = zapHook;
+
+    try {
+      const upload = await createUpload("uploads/race.jpg");
+      s3ServesRaw(Buffer.from("raw-image-bytes"));
+      const event = s3Event("uploads/race.jpg");
+
+      // Two concurrent invocations for the SAME raw key, as observed live
+      // on 2026-10-28 (five concurrent invocations for one browser PUT).
+      await Promise.all([handler(event), handler(event)]);
+
+      const zapCalls = (global.fetch as jest.Mock).mock.calls.filter(
+        ([url]) => url === zapHook,
+      );
+      expect(zapCalls).toHaveLength(1);
+
+      const stored = (await Upload.findOne({
+        where: { id: upload.id },
+      }))!;
+      expect(stored.mediaStatus).toBe("ready");
+      expect(stored.zapNotifiedAt).not.toBeNull();
+    } finally {
+      delete process.env.ZAP_NEW_UPLOAD;
+    }
+  });
 });
 
 // ---------------------------------------------------------------------------

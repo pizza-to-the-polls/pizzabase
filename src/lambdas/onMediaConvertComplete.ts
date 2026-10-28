@@ -138,9 +138,21 @@ export async function handler(event: EventBridgeEvent): Promise<void> {
           (posterKey ? ` (poster: ${posterKey})` : ""),
       );
       // Feed zap fires HERE, not at upload creation: media exists, and the
-      // payload's permalink resolves to the transcoded output.
+      // payload's permalink resolves to the transcoded output. firstCompletion
+      // is only a cheap pre-filter — the real announce-once guard is the DB
+      // compare-and-set inside zapNewUpload (issue #349), since concurrent
+      // event redeliveries can all read media_status !== 'ready'. Fire-and-
+      // forget in its own try/catch: a Zapier failure must never fail this
+      // lambda or trigger EventBridge retries.
       if (firstCompletion) {
-        await zapNewUpload(upload);
+        try {
+          await zapNewUpload(upload);
+        } catch (notifyErr) {
+          console.error(
+            "[on-mediaconvert-complete] Zapier notify failed (swallowed):",
+            notifyErr,
+          );
+        }
       }
     } else {
       console.warn(

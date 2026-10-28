@@ -2,6 +2,7 @@ import { Report } from "../entity/Report";
 import { Order } from "../entity/Order";
 import { Upload } from "../entity/Upload";
 import { Truck } from "../entity/Truck";
+import { AppDataSource } from "../data-source";
 import { cdnUrlFromStoredUrl } from "./media-cdn";
 
 enum ZapHooks {
@@ -182,8 +183,73 @@ export const zapNewTruck = async (truck: Truck) => {
     await zapTruckReport(report);
   }
 };
-export const zapNewUpload = async (upload: Upload) =>
-  zapUpload(upload, ZapHooks.ZAP_NEW_UPLOAD);
+/**
+ * Announce-once claim (issue #349): a DB compare-and-set that hands the
+ * notify slot for an upload to exactly one concurrent caller. S3 delivers
+ * ObjectCreated at-least-once and browsers retry PUTs, so several pipeline
+ * lambda invocations can finish the same upload within milliseconds — a
+ * read-check cannot arbitrate between them. Postgres row-lock semantics
+ * make the second concurrent UPDATE re-evaluate `zap_notified_at IS NULL`
+ * against the committed row and match 0 rows, so only the winner proceeds
+ * to fire the webhook.
+ *
+ * Fails closed: on DB error the claim is denied (logged, returns false) —
+ * a transient failure may drop a notification but can never double-post.
+ * Uses raw SQL + RETURNING row count (the pattern already proven against
+ * the Aurora Data API in FeedObservationsController) rather than relying
+ * on UpdateResult.affected.
+ *
+ * Return-shape note: TypeORM's postgres driver wraps UPDATE results as the
+ * tuple [raw.rows, raw.rowCount] (PostgresQueryRunner sets
+ * result.raw = [raw.rows, raw.rowCount] for UPDATE/DELETE commands), while
+ * the Aurora Data API driver returns the rows array directly — so the
+ * affected-row count is extracted from whichever shape comes back.
+ */
+const claimZapNotify = async (uploadId: number): Promise<boolean> => {
+  try {
+    const result: unknown = await AppDataSource.manager.query(
+      `UPDATE "uploads" SET "zap_notified_at" = now()
+       WHERE "id" = $1 AND "zap_notified_at" IS NULL
+       RETURNING "id"`,
+      [uploadId],
+    );
+    // Postgres driver: [rowsArray, rowCount]. Aurora Data API: rowsArray.
+    const returnedRows =
+      Array.isArray(result) && Array.isArray(result[0]) ? result[0] : result;
+    return (
+      Array.isArray(returnedRows) && (returnedRows as unknown[]).length === 1
+    );
+  } catch (err) {
+    console.error(
+      "[zapier] zap announce-once claim failed (swallowed; notification skipped):",
+      err,
+    );
+    return false;
+  }
+};
+
+/**
+ * ZAP_NEW_UPLOAD — notify the public feed channel when a web upload
+ * finishes the media pipeline. MMS-origin uploads never fire this hook:
+ * they notify the internal channel via zapNewMmsUpload
+ * (docs/mms-reply-workflow.md §1), which keeps the announce-once claim
+ * routing deterministic (the two hooks are mutually exclusive per row).
+ *
+ * Announce-once (issue #349): the notify slot is claimed with a DB
+ * compare-and-set BEFORE the webhook post, so duplicate S3 events, client
+ * PUT retries and concurrent pipeline invocations post at most once per
+ * upload row. The claim is not consumed when the hook is unset (env-
+ * optional zapAny) or the webhook post fails (at-most-once beats
+ * at-least-once for this bug class — callers treat the zap as
+ * fire-and-forget and never flip media_status on its failure).
+ */
+export const zapNewUpload = async (upload: Upload): Promise<void> => {
+  if (upload.source === "mms") return;
+  if (upload.id == null) return;
+  if (!process.env[ZapHooks.ZAP_NEW_UPLOAD]) return;
+  if (!(await claimZapNotify(upload.id))) return;
+  await zapUpload(upload, ZapHooks.ZAP_NEW_UPLOAD);
+};
 
 // Only these processedFilePath keys are CDN-served processed outputs.
 // `jobId` (mid-transcode bookkeeping) and anything unknown are excluded.
@@ -197,6 +263,10 @@ const PROCESSED_MEDIA_KEYS = new Set(["webp", "jpeg", "jpg", "mp4", "gif"]);
  * Safety properties:
  *   - No-op unless ZAP_NEW_MMS_UPLOAD is configured (env-optional zapAny).
  *   - Only MMS-origin uploads notify; web uploads keep using zapNewUpload.
+ *   - Announce-once (issue #349): the notify slot is claimed with a DB
+ *     compare-and-set before the webhook post — duplicate pipeline events
+ *     post at most once per upload row. Claim is skipped when the hook is
+ *     unset or the upload has no id.
  *   - Flagged/rejected uploads never notify — a human reviews those in Retool.
  *   - Only processed (EXIF-scrubbed) CDN URLs are shared, never raw paths.
  *   - Failures are swallowed: a Zapier outage must never break the media
@@ -212,6 +282,11 @@ export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
   ) {
     return;
   }
+
+  if (upload.id == null) return;
+  // Env-optional: don't consume the announce-once claim when unset.
+  if (!process.env[ZapHooks.ZAP_NEW_MMS_UPLOAD]) return;
+  if (!(await claimZapNotify(upload.id))) return;
 
   try {
     // The report relation is not eager — lambda call sites load uploads
