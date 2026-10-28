@@ -133,6 +133,8 @@ const MIME_TO_EXT: Record<string, string> = {
   "video/mp4": "mp4",
   "video/quicktime": "mov",
   "video/webm": "webm",
+  "video/3gpp": "3gp",
+  "video/3gpp2": "3g2",
 };
 
 const OPTED_OUT_REPLY =

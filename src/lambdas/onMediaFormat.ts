@@ -61,7 +61,11 @@ const IMAGE_EXTENSIONS = new Set([
   "heic",
   "heif",
 ]);
-const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm"]);
+// Keep aligned with MIME_TO_EXT video entries in TwilioInboundController.ts.
+// 3gp/3g2 are ISOBMFF containers (same box structure as mp4), so rotation /
+// duration detection and MediaConvert's ffmpeg-based input read handle them
+// without changes.
+const VIDEO_EXTENSIONS = new Set(["mp4", "mov", "webm", "3gp", "3g2"]);
 
 const POSTER_MAX_DIMENSION = 1080;
 const POSTER_JPEG_QUALITY = 80;
