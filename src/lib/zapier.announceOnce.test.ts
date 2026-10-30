@@ -48,7 +48,6 @@ async function createWebUpload(
       .slice(2)}.jpg`,
     fileHash: `announce-${Math.random().toString(36).slice(2)}`,
     mediaStatus: "ready",
-    moderationStatus: "clean",
     source: "web",
     processedFilePath: {
       webp: WEBP_URL,

@@ -139,7 +139,7 @@ There is no dedicated Slack webhook. MMS media notifications ride the same
    `ZAP_NEW_MMS_UPLOAD` hook with a **form-encoded (flat) body** — not JSON,
    unlike the other ZAP_* hooks. Fields: `hook` (first pair, for routing),
    `upload_id`, `source`, `source_phone`, `media_status`,
-   `moderation_status`, `sightengine_score`, `report_id`, `report_url`,
+   `sightengine_score`, `report_id`, `report_url`,
    order details when the matched report has one (`pizzas` = pizzas sent,
    `restaurant`, `order_type`, `order_created_at`, `order_cancelled_at`),
    `location_full_address`, `location_city`, `location_state`, and
@@ -153,8 +153,9 @@ There is no dedicated Slack webhook. MMS media notifications ride the same
 3. **Prod**: create (or extend) a Zapier catch-hook Zap, add the same
    filter + post, and put its URL in the `ZAP_NEW_MMS_UPLOAD` secret.
 4. The integration is optional by design: with the env var unset, the notify
-   step is a silent no-op. Only pending/clean MMS uploads notify —
-   flagged/rejected media is reviewed by a human in Retool and never posted.
+   step is a silent no-op. Every MMS upload that finishes the pipeline
+   notifies — there is no moderation gate (the dead `moderation_status`
+   column was removed; see issue #357).
 
 ## 4b. Trusted relay: non-Twilio multimedia via Zapier
 

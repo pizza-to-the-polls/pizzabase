@@ -54,9 +54,8 @@ export class ClipsController {
       return { errors: ["Upload not found"] };
     }
 
-    // Note: upload moderation no longer gates clips — any sent order is
-    // clip worthy. The report-with-order gate below is the only
-    // clip-worthiness rule.
+    // Clip-worthiness: only media tied to a pizza delivery can clip. The
+    // report-with-order gate below is the only rule.
 
     if (upload.mediaStatus !== "ready") {
       response.status(400);

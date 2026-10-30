@@ -77,6 +77,25 @@ describe("Upload entity", () => {
     expect(locationIndex).toBeDefined();
   });
 
+  it("does not expose the dead moderation columns (issue #357)", () => {
+    const metadata = AppDataSource.getMetadata(Upload);
+    const columnNames = metadata.columns.map((column) => column.propertyName);
+
+    // The moderation_status enum column (pending/clean/flagged/rejected) and
+    // its never-written moderation_score companion were removed in issue
+    // #357: nothing ever wrote a non-`pending` value, `pending` gated
+    // nothing, and the perpetual default falsely read as a moderation queue
+    // that does not exist. They must never come back.
+    expect(columnNames).not.toContain("moderationStatus");
+    expect(columnNames).not.toContain("moderationScore");
+    expect(
+      metadata.findColumnWithPropertyName("moderationStatus"),
+    ).toBeUndefined();
+    expect(
+      metadata.findColumnWithPropertyName("moderationScore"),
+    ).toBeUndefined();
+  });
+
   describe("#createFromMms", () => {
     let report: Report;
 
