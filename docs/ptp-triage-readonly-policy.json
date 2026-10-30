@@ -54,6 +54,12 @@
       "Resource": "*"
     },
     {
+      "Sid": "TwilioDeliveryStatusRead",
+      "Effect": "Allow",
+      "Action": ["secretsmanager:GetSecretValue"],
+      "Resource": "arn:aws:secretsmanager:us-west-2:*:secret:PizzaBase/twilio/*"
+    },
+    {
       "Sid": "S3MediaRead",
       "Effect": "Allow",
       "Action": ["s3:ListBucket", "s3:GetObject"],
