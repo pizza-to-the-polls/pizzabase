@@ -15,6 +15,7 @@ import { LinksController } from "./controller/LinksController";
 import { TwilioInboundController } from "./controller/TwilioInboundController";
 import { FeedObservationsController } from "./controller/FeedObservationsController";
 import { WaitTimeSourcesController } from "./controller/WaitTimeSourcesController";
+import { PartnerReportsController } from "./controller/PartnerReportsController";
 
 export const Routes = [
   {
@@ -105,6 +106,18 @@ export const Routes = [
     method: "post",
     route: "/report",
     controller: ReportsController,
+    action: "create",
+  },
+  {
+    method: "post",
+    route: "/partner/session",
+    controller: PartnerReportsController,
+    action: "session",
+  },
+  {
+    method: "post",
+    route: "/partner/report",
+    controller: PartnerReportsController,
     action: "create",
   },
   {

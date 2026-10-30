@@ -11,6 +11,7 @@ interface ValidationError {
   url?: string;
   address?: string;
   upload?: string;
+  waitTime?: string;
 }
 
 export const validateReport = async (
