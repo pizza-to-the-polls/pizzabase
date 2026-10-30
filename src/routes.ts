@@ -11,6 +11,7 @@ import { SessionController } from "./controller/SessionController";
 import { DonationsController } from "./controller/DonationsController";
 import { ThreadsTokenController } from "./controller/ThreadsTokenController";
 import { BannedPhoneNumbersController } from "./controller/BannedPhoneNumbersController";
+import { BlockedIpsController } from "./controller/BlockedIpsController";
 import { LinksController } from "./controller/LinksController";
 import { TwilioInboundController } from "./controller/TwilioInboundController";
 import { FeedObservationsController } from "./controller/FeedObservationsController";
@@ -255,6 +256,31 @@ export const Routes = [
     method: "delete",
     route: "/banned-phone-numbers/:id",
     controller: BannedPhoneNumbersController,
+    action: "delete",
+  },
+  // ── IP blocklist (issue #352) ──────────────────────────────
+  {
+    method: "get",
+    route: "/blocked-ips",
+    controller: BlockedIpsController,
+    action: "index",
+  },
+  {
+    method: "get",
+    route: "/blocked-ips/:idOrIpHash",
+    controller: BlockedIpsController,
+    action: "show",
+  },
+  {
+    method: "post",
+    route: "/blocked-ips",
+    controller: BlockedIpsController,
+    action: "create",
+  },
+  {
+    method: "delete",
+    route: "/blocked-ips/:id",
+    controller: BlockedIpsController,
     action: "delete",
   },
   {
