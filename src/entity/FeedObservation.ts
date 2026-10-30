@@ -29,13 +29,17 @@ import {
  */
 // The unique index on (source_ref, observed_at) — the idempotency key — is
 // declared here so `synchronize` (test DB) creates it, and created identically
-// by migration 1862600000000-AddFeedObservations in dev/prod.
+// by migration 1862600000000-AddFeedObservations in dev/prod. The plain index
+// on observed_at serves GET /feed-observations/summary's window predicate
+// (migration 1863500000000; plain CREATE INDEX — small table, and the repo's
+// global "all" migrations-transaction mode forbids a CONCURRENTLY override).
 @Entity({ name: "feed_observations" })
 @Index(
   "IDX_feed_observations_source_ref_observed_at",
   ["sourceRef", "observedAt"],
   { unique: true },
 )
+@Index("IDX_feed_observations_observed_at", ["observedAt"])
 export class FeedObservation extends BaseEntity {
   @PrimaryGeneratedColumn()
   id: number;

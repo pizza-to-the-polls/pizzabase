@@ -340,6 +340,12 @@ export const Routes = [
   },
   {
     method: "get",
+    route: "/feed-observations/summary",
+    controller: FeedObservationsController,
+    action: "summary",
+  },
+  {
+    method: "get",
     route: "/health",
     controller: RootController,
     action: "health",
