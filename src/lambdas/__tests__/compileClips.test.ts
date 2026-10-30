@@ -72,7 +72,6 @@ const makeUpload = async (): Promise<Upload> => {
   upload.filePath = `uploads/compile-test-${uploadCounter}.mp4`;
   upload.fileHash = `compile-test-hash-${uploadCounter}`;
   upload.location = location;
-  upload.moderationStatus = "clean";
   upload.mediaStatus = "ready";
   await upload.save();
   return upload;

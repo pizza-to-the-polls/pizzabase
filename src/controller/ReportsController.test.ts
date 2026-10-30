@@ -998,7 +998,6 @@ describe("#media", () => {
   it("returns correct response shape for a ready MMS upload", async () => {
     const upload = await createMmsUpload(4);
     upload.mediaStatus = "ready";
-    upload.moderationStatus = "pending";
     upload.sightengineScore = 0.04;
     upload.processedFilePath = {
       webp: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,
@@ -1018,7 +1017,6 @@ describe("#media", () => {
         id: upload.id,
         source: "mms",
         mediaStatus: "ready",
-        moderationStatus: "pending",
         sightengineScore: 0.04,
         createdAt: upload.createdAt,
         cdnUrl: `https://s3.us-west-2.amazonaws.com/reports.polls.pizza/uploads/${upload.id}/test.webp`,

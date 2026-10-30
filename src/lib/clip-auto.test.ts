@@ -71,7 +71,6 @@ const makeUpload = async (
   upload.filePath = `uploads/seed-test-${counter}.jpg`;
   upload.fileHash = `seed-hash-${counter}`;
   upload.location = location;
-  upload.moderationStatus = "pending"; // moderation never gates seeding
   upload.mediaStatus = "ready";
   Object.assign(upload, overrides);
   await upload.save();

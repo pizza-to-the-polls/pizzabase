@@ -37,8 +37,7 @@ export class ReportsController {
    *
    * URLs are rewritten against the media CDN via cdnUrlFromStoredUrl;
    * raw storage paths are never exposed. Media that is still processing
-   * (or failed) is included with cdnUrl: null so the moderation queue can
-   * show in-flight items.
+   * (or failed) is included with cdnUrl: null so in-flight items are visible.
    */
   async media(request: Request, response: Response, next: NextFunction) {
     if (!(await checkAuthorization(request))) {
@@ -108,7 +107,6 @@ export class ReportsController {
       id: upload.id,
       source: upload.source,
       mediaStatus: upload.mediaStatus,
-      moderationStatus: upload.moderationStatus,
       sightengineScore: upload.sightengineScore,
       createdAt: upload.createdAt,
       cdnUrl,

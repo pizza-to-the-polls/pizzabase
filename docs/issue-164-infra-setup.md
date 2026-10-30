@@ -325,8 +325,9 @@ curl -H 'Authorization: Basic <api-key>' \
 ```bash
 # Connect to DB and verify new columns exist on uploads table
 # Expected columns: raw_file_path, media_status, processed_file_path,
-# exif_extracted, exif_scrubbed, exif_data, moderation_status,
-# moderation_score, raw_bucket
+# exif_extracted, exif_scrubbed, exif_data, raw_bucket
+# (moderation_status/moderation_score were added by this migration but
+# removed again by 1863400000000 — nothing ever wrote a non-pending value.)
 ```
 
 ---

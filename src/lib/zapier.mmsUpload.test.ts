@@ -60,7 +60,6 @@ async function createMmsUpload(
 
   Object.assign(upload, {
     mediaStatus: "ready",
-    moderationStatus: "clean",
     exifScrubbed: true,
     processedFilePath: {
       webp: WEBP_URL,
@@ -117,31 +116,23 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
     expect(global.fetch).not.toHaveBeenCalled();
   });
 
-  it.each(["flagged", "rejected"] as const)(
-    "does not notify for %s uploads (human reviews in Retool)",
-    async (moderationStatus) => {
-      const upload = await createMmsUpload({ moderationStatus });
-      await zapNewMmsUpload(upload);
+  it("notifies for an MMS upload", async () => {
+    const upload = await createMmsUpload();
+    await zapNewMmsUpload(upload);
 
-      expect(global.fetch).not.toHaveBeenCalled();
-    },
-  );
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledWith(ZAP_HOOK_URL, {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: expect.any(URLSearchParams),
+    });
+    expect(fetchBody().get("hook")).toBe("ZAP_NEW_MMS_UPLOAD");
 
-  it.each(["pending", "clean"] as const)(
-    "notifies for %s uploads",
-    async (moderationStatus) => {
-      const upload = await createMmsUpload({ moderationStatus });
-      await zapNewMmsUpload(upload);
-
-      expect(global.fetch).toHaveBeenCalledTimes(1);
-      expect(global.fetch).toHaveBeenCalledWith(ZAP_HOOK_URL, {
-        method: "POST",
-        headers: { "Content-Type": "application/x-www-form-urlencoded" },
-        body: expect.any(URLSearchParams),
-      });
-      expect(fetchBody().get("hook")).toBe("ZAP_NEW_MMS_UPLOAD");
-    },
-  );
+    // The dead moderation_status column was removed (issue #357) — it must
+    // never reappear in the payload (the 'pending' default looked like a
+    // moderation queue that does not exist).
+    expect(bodyString()).not.toContain("moderation_status");
+  });
 
   it("shares only processed CDN URLs — never the raw file path", async () => {
     process.env.MEDIA_CDN_DOMAIN = "media.polls.pizza";
@@ -212,7 +203,6 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
       rawFilePath: "uploads/chicago-il-noreport.jpg",
       fileHash: `noreport-${Math.random().toString(36).slice(2)}`,
       mediaStatus: "ready",
-      moderationStatus: "clean",
       source: "mms",
       processedFilePath: { webp: WEBP_URL },
     });
@@ -242,7 +232,6 @@ describe("zapNewMmsUpload (ZAP_NEW_MMS_UPLOAD)", () => {
         .slice(2)}.jpg`,
       fileHash: `orphan-${Math.random().toString(36).slice(2)}`,
       mediaStatus: "ready",
-      moderationStatus: "clean",
       source: "mms",
       processedFilePath: { webp: WEBP_URL },
     });

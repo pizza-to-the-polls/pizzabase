@@ -19,7 +19,6 @@ import { UPLOAD_DECAY, UPLOAD_MAX } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
 export type MediaStatus = "none" | "processing" | "ready" | "failed";
-export type ModerationStatus = "pending" | "clean" | "flagged" | "rejected";
 export type UploadSource = "web" | "mms";
 
 @Entity({ name: "uploads" })
@@ -77,18 +76,6 @@ export class Upload extends BaseEntity {
 
   @Column({ name: "exif_data", type: "jsonb", nullable: true })
   exifData: Record<string, unknown> | null;
-
-  @Column({
-    name: "moderation_status",
-    type: "enum",
-    enum: ["pending", "clean", "flagged", "rejected"],
-    enumName: "moderation_status",
-    default: "pending",
-  })
-  moderationStatus: ModerationStatus;
-
-  @Column({ name: "moderation_score", type: "float", nullable: true })
-  moderationScore: number | null;
 
   @Column({ name: "raw_bucket", type: "varchar", nullable: true })
   rawBucket: string | null;
