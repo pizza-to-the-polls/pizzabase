@@ -1,14 +1,19 @@
 import * as jwt from "jsonwebtoken";
 
 const secret = process.env.JWT_SECRET || "shhhh";
-const expiresIn = 60 * 15;
+const DEFAULT_EXPIRES_IN = 60 * 15;
 
 // JWTs include two periods (.) which don't encode to URLs well - replace with a pipe (|)
 
-export const pack = async (data): Promise<string> =>
-  (await packRaw(data)).replace(/\./g, "|");
+export const pack = async (
+  data,
+  expiresIn: number = DEFAULT_EXPIRES_IN,
+): Promise<string> => (await packRaw(data, expiresIn)).replace(/\./g, "|");
 
-const packRaw = async (data: { [id: string]: any }): Promise<string> =>
+const packRaw = async (
+  data: { [id: string]: any },
+  expiresIn: number,
+): Promise<string> =>
   await new Promise((succeed, fail) => {
     jwt.sign(data, secret, { expiresIn }, (err, token) =>
       err ? fail(err) : succeed(token),
