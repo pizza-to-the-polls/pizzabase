@@ -83,6 +83,12 @@ describe("PartnerReportsController", () => {
         new RegExp(`^${process.env.STATIC_SITE}/partners/report\\?token=`),
       );
       const token = link.split("?token=")[1];
+      // The emailed URL percent-encodes the token — raw `|` separators
+      // break auto-linking in some email clients (link truncates at the
+      // first pipe => dead link).
+      expect(token).not.toContain("|");
+      expect(token).toMatch(/%7C/i);
+      // Round-trip: the endpoint's own verifier accepts the encoded form
       expect(await unpackPartnerSession(token)).toEqual("nina@polls.pizza");
     });
 

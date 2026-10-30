@@ -37,12 +37,22 @@ export const packPartnerSession = async (email: string): Promise<string> =>
  * Verify a partner session token. Returns the partner email, or null when
  * the token is missing/expired/wrong-scope or the email is no longer
  * allowlisted (removal from the list revokes live sessions immediately).
+ *
+ * Tolerates URL-encoded tokens (`%7C` where a `|` belongs): links pass
+ * through email clients and query parsers that encode the pipe, and a
+ * double-encoded or undecoded token must still verify.
  */
 export const unpackPartnerSession = async (
   token?: string,
 ): Promise<string | null> => {
   try {
-    const payload = await unpack(token);
+    let candidate = `${token || ""}`;
+    try {
+      candidate = decodeURIComponent(candidate);
+    } catch (_e) {
+      // Stray `%` — keep the raw string; unpack will reject it if invalid.
+    }
+    const payload = await unpack(candidate.replace(/%7C/gi, "|"));
     if (payload?.scope !== PARTNER_SESSION_SCOPE) return null;
     const email = normalizeEmail(payload?.partner);
     return isPartnerEmail(email) ? email : null;
