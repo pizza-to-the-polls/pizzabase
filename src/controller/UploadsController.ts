@@ -4,12 +4,36 @@ import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
+import { BlockedIp } from "../entity/BlockedIp";
+import { ipHash } from "../lib/ip-blocklist";
 import { isAuthorized, findOr404 } from "./helper";
 import { cdnUrlForKey, cdnUrlFromStoredUrl } from "../lib/media-cdn";
 import { extractExifAndReview } from "../lib/exif/service";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {
+    // IP blocklist check (issue #352) — before validation so a blocked
+    // submission never geocodes, never creates rows, and never hits the
+    // rate-limit path. req.ip comes from Express under the existing
+    // trust-proxy handling; client-supplied headers are not read directly.
+    if (await BlockedIp.isBlocked(request.ip)) {
+      console.log(
+        JSON.stringify({
+          event: "blocked_ip_rejected",
+          route: "/upload",
+          // Hash only — the raw IP never reaches the logs (FEAT-004).
+          ipHash: ipHash(request.ip),
+        }),
+      );
+      response.status(403);
+      return {
+        errors: {
+          _general:
+            "Your submission was not accepted. If you believe this is in error, please contact us.",
+        },
+      };
+    }
+
     let validated;
     try {
       validated = await validateUpload(request.body || {});
