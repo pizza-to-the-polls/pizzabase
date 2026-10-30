@@ -451,6 +451,44 @@ describe("#getExif", () => {
     expect(body.review.assessment).toBe("no-metadata");
   });
 
+  it("gracefully returns null exif when the raw S3 object is missing (no 500)", async () => {
+    // Regression (2026-10-30, Bugsnag 6ae4ccd30f9ccb2e94b9f4ae): upload 13404
+    // never landed in the raw bucket (client upload aborted), so the S3
+    // fallback GetObject rejects with NoSuchKey. `return await` is required
+    // for the catch to see the rejection — a bare `return <promise>` escapes
+    // the try/catch and 500s. This mock reproduces that rejection.
+    (S3Client as jest.Mock).mockReset();
+    (S3Client as jest.Mock).mockImplementation(() => ({
+      send: jest.fn().mockRejectedValue(
+        Object.assign(new Error("The specified key does not exist."), {
+          name: "NoSuchKey",
+          $metadata: { httpStatusCode: 404 },
+        }),
+      ),
+    }));
+
+    const response = http_mocks.createResponse();
+    const body = (await controller.getExif(
+      authRequest(fileName, true),
+      response,
+      () => undefined,
+    )) as any;
+
+    expect(response.statusCode).toEqual(200);
+    expect(body).toEqual({ exif: null, review: { assessment: "error" } });
+
+    // Without review evidence requested, the same failure yields null exif.
+    const bareResponse = http_mocks.createResponse();
+    const bareBody = (await controller.getExif(
+      authRequest(fileName, false),
+      bareResponse,
+      () => undefined,
+    )) as any;
+
+    expect(bareResponse.statusCode).toEqual(200);
+    expect(bareBody).toEqual({ exif: null });
+  });
+
   it("performs one bounded S3 follow-up when the initial range cuts off before the EXIF signature", async () => {
     const initial = brooklynJpeg.slice(0, 7);
     const send = jest

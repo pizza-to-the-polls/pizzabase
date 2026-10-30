@@ -140,7 +140,12 @@ export class UploadsController {
       // recorded raw bucket. Null rawBucket ⇒ pre-pipeline row.
       const bucket = upload.rawBucket || process.env.UPLOAD_S3_BUCKET!;
 
-      return extractExifAndReview(
+      // `await` is load-bearing: an async method's bare `return <promise>`
+      // resolves *outside* this try/catch, so a rejection (e.g. S3 NoSuchKey
+      // when the raw object never landed / is mid-pipeline) skips the catch
+      // below, 500s, and pages Bugsnag. Seen live 2026-10-30 on upload 13404
+      // (Bugsnag 6ae4ccd30f9ccb2e94b9f4ae).
+      return await extractExifAndReview(
         { s3Client: s3Client as any, bucket },
         { filePath: upload.rawFilePath || upload.filePath, includeReview },
       );
