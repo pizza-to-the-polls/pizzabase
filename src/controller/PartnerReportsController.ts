@@ -48,7 +48,10 @@ export class PartnerReportsController {
       const token = await packPartnerSession(email);
       try {
         await sendPartnerLoginEmail(email, {
-          link: `${process.env.STATIC_SITE}/partners/report?token=${token}`,
+          // encodeURIComponent so the emailed URL carries only URL-safe
+          // characters — raw `|` separators break auto-linking in some
+          // email clients (link truncates at the first pipe => dead link).
+          link: `${process.env.STATIC_SITE}/partners/report?token=${encodeURIComponent(token)}`,
         });
       } catch (e) {
         notifyBugsnag(e as Error);
