@@ -2,6 +2,7 @@ import { AppDataSource } from "../data-source";
 import { Report } from "./Report";
 import { Location } from "./Location";
 import { Order } from "./Order";
+import { Upload } from "./Upload";
 import { NormalAddress } from "../lib/validator";
 
 const ADDRESS: NormalAddress = {
@@ -213,6 +214,37 @@ describe("Report entity", () => {
       expect(found!.location).toBeInstanceOf(Location);
       expect(found!.location.id).toEqual(report.location.id);
       expect(found!.location.fullAddress).toEqual(ADDRESS.fullAddress);
+    });
+
+    it("loads the linked web upload relation (BUG-029 blocked-IP linkage check)", async () => {
+      const report = await makeReport(PHONE, "http://twitter.com/r/upload");
+      const [upload] = await Upload.createOrReject("192.0.2.128", {
+        fileExt: "jpg",
+        normalizedAddress: ADDRESS,
+        fileHash: "bug029-upload-relation-test-hash",
+      });
+      report.upload = upload;
+      await report.save();
+      await Order.placeOrder({ quantity: 1, cost: 5 }, report.location);
+
+      const found = await Report.findRecentFulfilledByPhone(PHONE);
+
+      expect(found).not.toBeNull();
+      expect(found!.upload).not.toBeNull();
+      expect(found!.upload!.id).toEqual(upload.id);
+      // The controller hashes this against the blocklist — it must be the
+      // real client IP, never the "mms" marker.
+      expect(found!.upload!.ipAddress).toEqual("192.0.2.128");
+    });
+
+    it("leaves upload null for reports without a web upload (no false blocklist hits)", async () => {
+      const report = await makeReport(PHONE, "http://twitter.com/r/noupload");
+      await Order.placeOrder({ quantity: 1, cost: 5 }, report.location);
+
+      const found = await Report.findRecentFulfilledByPhone(PHONE);
+
+      expect(found).not.toBeNull();
+      expect(found!.upload).toBeNull();
     });
   });
 
