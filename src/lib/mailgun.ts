@@ -51,3 +51,49 @@ export const sendNoMembershipFoundEmail = async (
     to,
     data,
   });
+
+const sendPlainText = async ({
+  from,
+  subject,
+  text,
+  to,
+}: {
+  from: string;
+  subject: string;
+  text: string;
+  to: string;
+}) => {
+  const mailgun = new Mailgun(FormData);
+  const client = mailgun.client({
+    username: "api",
+    key: process.env.MAILGUN_API_KEY,
+  });
+
+  await client.messages.create("polls.pizza", {
+    from,
+    to,
+    subject,
+    text,
+  });
+};
+
+export const sendPartnerLoginEmail = async (
+  to: string,
+  { link }: { link: string },
+) =>
+  await sendPlainText({
+    from: "Pizza to the Polls <partners@polls.pizza>",
+    subject: "Your partner report sign-in link",
+    to,
+    text: [
+      "Hello!",
+      "",
+      "Click the link below to open the trusted partner report form. The link is valid for 24 hours — you can always request a fresh one from the page.",
+      "",
+      link,
+      "",
+      "If you didn't request this link, you can ignore this email.",
+      "",
+      "— Pizza to the Polls",
+    ].join("\n"),
+  });
