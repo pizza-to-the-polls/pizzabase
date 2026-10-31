@@ -1,6 +1,9 @@
 import * as http_mocks from "node-mocks-http";
 
-import { FeedObservationsController } from "./FeedObservationsController";
+import {
+  FeedObservationsController,
+  jsonColumn,
+} from "./FeedObservationsController";
 import { FeedObservation } from "../entity/FeedObservation";
 
 type JsonResponse = Record<string, any>;
@@ -783,5 +786,32 @@ describe("#summary", () => {
         "url",
       ].sort(),
     );
+  });
+});
+
+// ── jsonColumn: the Aurora Data API returns json_agg columns as STRINGS ────
+// Driver divergence the integration tests cannot catch: the `postgres`
+// driver parses json_agg into JS arrays, so the suite above always sees the
+// array shape. Prod runs aurora-postgres, whose Data API returns the same
+// column as a JSON string — observed live 2026-10-30 (by_signal_kind and
+// flagged_recent silently degraded to []). These pin the normalization.
+describe("jsonColumn (Aurora Data API shape)", () => {
+  it("passes arrays through", () => {
+    const arr = [{ kind: "poll_line_report", count: 6 }];
+    expect(jsonColumn(arr)).toBe(arr);
+  });
+
+  it("parses the Data API's JSON-string shape", () => {
+    expect(jsonColumn('[{"kind":"poll_line_report","count":6}]')).toEqual([
+      { kind: "poll_line_report", count: 6 },
+    ]);
+    expect(jsonColumn("[]")).toEqual([]);
+  });
+
+  it("degrades null / unparseable / wrong-type to [] instead of throwing", () => {
+    expect(jsonColumn(null)).toEqual([]);
+    expect(jsonColumn('{"not":"an array"}')).toEqual([]);
+    expect(jsonColumn("{unparseable")).toEqual([]);
+    expect(jsonColumn(42)).toEqual([]);
   });
 });

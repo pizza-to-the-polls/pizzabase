@@ -50,6 +50,27 @@ export function toIsoTimestamp(v: unknown): string | null {
 }
 
 /**
+ * Normalize a json_agg column across drivers: the `postgres` driver parses
+ * it into a JS array (what the jest suite sees), but the Aurora Data API
+ * returns it as a JSON STRING — observed in prod 2026-10-30, where an
+ * Array.isArray() check silently degraded it to [] and the digest would
+ * have posted counts with an empty flagged table. Anything else (null,
+ * unparseable) degrades to an empty array rather than throwing.
+ */
+export function jsonColumn(v: unknown): unknown[] {
+  if (Array.isArray(v)) return v;
+  if (typeof v === "string") {
+    try {
+      const parsed = JSON.parse(v) as unknown;
+      return Array.isArray(parsed) ? parsed : [];
+    } catch {
+      return [];
+    }
+  }
+  return [];
+}
+
+/**
  * feedflag machine-token observation intake (FEAT-002d).
  *
  * POST /feed-observations — bulk insert of feedflag/observation@1 records,
@@ -389,8 +410,8 @@ export class FeedObservationsController {
       hot_govt_count: toInt(r.hot_govt_count),
       govt_source_count: toInt(r.govt_source_count),
       crowd_relevant_count: toInt(r.crowd_relevant_count),
-      by_signal_kind: Array.isArray(r.by_signal_kind) ? r.by_signal_kind : [],
-      flagged_recent: Array.isArray(r.flagged_recent) ? r.flagged_recent : [],
+      by_signal_kind: jsonColumn(r.by_signal_kind),
+      flagged_recent: jsonColumn(r.flagged_recent),
     };
   }
 }
