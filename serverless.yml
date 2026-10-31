@@ -287,6 +287,25 @@ functions:
     events:
       - schedule: rate(3 hours)
 
+  prune-feed-observations:
+    # Selective retention for feed_observations (#360): daily prune of
+    # govt + irrelevant-social rows older than RETENTION_DAYS (default 30;
+    # override via the RETENTION_DAYS env var, but never below 2 — the
+    # handler refuses to run and the digest's ~26h summary window must
+    # never be starved). crowd rows and relevant social rows are kept
+    # forever (the calibration corpus). Pure Data API — no S3/ffmpeg
+    # layers needed.
+    handler: build/lambdas/pruneFeedObservations.handler
+    timeout: 300
+    memorySize: 512
+    environment:
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+      RETENTION_DAYS: ${env:RETENTION_DAYS, '30'}
+    events:
+      - schedule: rate(1 day)
+
 custom:
   customDomain:
     domainName: base.polls.pizza
