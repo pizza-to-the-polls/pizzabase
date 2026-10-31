@@ -287,6 +287,21 @@ functions:
     events:
       - schedule: rate(3 hours)
 
+  sweepStaleUploads:
+    # Stale-upload sweep (BUG-028 / issue #369). Every hour, checks
+    # uploads stuck in media_status='processing' for more than 2 hours
+    # against the raw bucket: rows whose raw object never arrived (or
+    # arrived empty) are marked failed so reporting stays truthful.
+    handler: build/lambdas/sweepStaleUploads.handler
+    timeout: 60
+    memorySize: 256
+    environment:
+      AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
+      AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
+      DB_NAME: ${env:DB_NAME}
+    events:
+      - schedule: rate(1 hour)
+
 custom:
   customDomain:
     domainName: base.polls.pizza
