@@ -1,4 +1,4 @@
-export { validateReport } from "./validateReport";
+export { validateReport, isGeorgiaAddress } from "./validateReport";
 export { validateOrder } from "./validateOrder";
 export { validateTruck } from "./validateTruck";
 export { validateUpload } from "./validateUpload";

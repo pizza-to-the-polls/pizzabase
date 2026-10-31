@@ -11,6 +11,7 @@ import {
   ADDRESS_ERROR,
   URL_ERROR,
   CONTACT_ERROR,
+  GEORGIA_ERROR,
 } from "../lib/validator/constants";
 
 import { buildTestData } from "../tests/factories";
@@ -96,6 +97,44 @@ describe("#create", () => {
         authed: false,
       }),
     );
+  });
+
+  test("Rejects Georgia line reports with 422, citing SB 22", async () => {
+    const url = "http://twitter.com/something/status/123";
+    const address = "206 Washington St SW Atlanta GA 30334";
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url,
+        contact: "555-234-2345",
+        address,
+        waitTime: "1-2 hours",
+        canDistribute: true,
+      },
+    });
+
+    const response = http_mocks.createResponse();
+
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(body).toEqual({ errors: { address: GEORGIA_ERROR } });
+    expect(response.statusCode).toEqual(422);
+
+    // FEAT-004: the structured log carries field NAMES only, never values.
+    expect(consoleLogSpy).toHaveBeenCalledWith(
+      JSON.stringify({
+        event: "report_validation_failed",
+        fields: ["address"],
+        authed: false,
+      }),
+    );
+
+    // Nothing was created: no report, no location.
+    expect(await Report.findOne({ where: { reportURL: url } })).toBeNull();
+    expect(
+      await Location.findOne({ where: { fullAddress: address } }),
+    ).toBeNull();
   });
 
   test("Trusted reporters can override valdiation", async () => {
