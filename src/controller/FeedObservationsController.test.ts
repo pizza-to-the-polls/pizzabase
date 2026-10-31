@@ -1,6 +1,9 @@
 import * as http_mocks from "node-mocks-http";
 
-import { FeedObservationsController } from "./FeedObservationsController";
+import {
+  FeedObservationsController,
+  jsonColumn,
+} from "./FeedObservationsController";
 import { FeedObservation } from "../entity/FeedObservation";
 
 type JsonResponse = Record<string, any>;
@@ -499,5 +502,316 @@ describe("#index", () => {
       () => undefined,
     )) as JsonResponse;
     expect(lastBody.results[0].id).toEqual(oldest.id);
+  });
+});
+
+// ── GET /feed-observations/summary (feedflag #69: the digest reads the DB) ──
+//
+// The summary is what the daily findings digest consumes instead of
+// data/observations.jsonl (which the feedflag runner empties after every
+// successful emit). These tests pin the contract the digest depends on:
+// distinct (domain, source_ref) counting, the flag rule, the hot-govt
+// latest-reading semantics, window boundaries, and — because the digest is
+// the durable daily surface — that the endpoint never emits PII.
+
+describe("#summary", () => {
+  const getSummary = async (
+    query: Record<string, string> = {},
+    headers?: Record<string, string>,
+  ) => {
+    const request = http_mocks.createRequest({
+      method: "GET",
+      url: "/feed-observations/summary",
+      query,
+      headers: headers ?? authHeaders(),
+    });
+    const response = http_mocks.createResponse();
+    const body = await controller.summary(request, response, () => undefined);
+    return { body: body as JsonResponse, response };
+  };
+
+  const isoAgo = (hours: number) =>
+    new Date(Date.now() - hours * 3600 * 1000).toISOString();
+
+  it("returns 401 without auth", async () => {
+    const { body, response } = await getSummary({}, {});
+    expect(response.statusCode).toEqual(401);
+    expect(body).toEqual({ errors: ["Not authorized"] });
+  });
+
+  it("rejects a future or unparseable since, a bad min_confidence, and a negative hot_wait_minutes", async () => {
+    const future = await getSummary({
+      since: new Date(Date.now() + 3600 * 1000).toISOString(),
+    });
+    expect(future.response.statusCode).toEqual(400);
+    expect(future.body.errors[0]).toMatch(/since must be an ISO timestamp/);
+
+    const junk = await getSummary({ since: "not a date" });
+    expect(junk.response.statusCode).toEqual(400);
+
+    const badConf = await getSummary({ min_confidence: "1.5" });
+    expect(badConf.response.statusCode).toEqual(400);
+    expect(badConf.body.errors[0]).toMatch(/min_confidence/);
+
+    const badHot = await getSummary({ hot_wait_minutes: "-5" });
+    expect(badHot.response.statusCode).toEqual(400);
+  });
+
+  it("counts distinct (domain, source_ref) pairs — three rows for one source are one observation, and the domain counts sum to the total", async () => {
+    await postObservations(
+      [
+        // One social source with three readings in-window → ONE observation.
+        sampleObservation({ observed_at: isoAgo(1) }),
+        sampleObservation({ observed_at: isoAgo(2) }),
+        sampleObservation({ observed_at: isoAgo(3) }),
+        // One govt source with two readings.
+        sampleObservation({
+          domain: "govt",
+          source_ref: "govt:clark-nv#P-2",
+          signal_kind: "wait_time_reading",
+          author: "Clark NV Wait Times",
+          wait_minutes: 45,
+          wait_category: "45min",
+          observed_at: isoAgo(1),
+        }),
+        sampleObservation({
+          domain: "govt",
+          source_ref: "govt:clark-nv#P-2",
+          signal_kind: "wait_time_reading",
+          author: "Clark NV Wait Times",
+          wait_minutes: 50,
+          wait_category: "50min",
+          observed_at: isoAgo(2),
+        }),
+        // One crowd report.
+        sampleObservation({
+          domain: "crowd",
+          source_ref: "pizzabase:reports/9",
+          signal_kind: "user_report",
+          observed_at: isoAgo(1),
+        }),
+      ],
+      authHeaders(),
+    );
+
+    const since = isoAgo(26);
+    const { body } = await getSummary({ since });
+    expect(body.total_observations).toEqual(3);
+    expect(body.social_rows).toEqual(1);
+    expect(body.govt_rows).toEqual(1);
+    expect(body.crowd_rows).toEqual(1);
+    expect(
+      (body.social_rows as number) +
+        (body.govt_rows as number) +
+        (body.crowd_rows as number),
+    ).toEqual(body.total_observations);
+    // by_signal_kind counts pairs too: 3 readings of the sample's kind are 1.
+    const kinds = Object.fromEntries(
+      (body.by_signal_kind as { kind: string; count: number }[]).map(
+        (k) => [k.kind, k.count] as [string, number],
+      ),
+    );
+    expect(kinds["poll_line_report"]).toEqual(1);
+    expect(kinds["wait_time_reading"]).toEqual(1);
+    expect(kinds["user_report"]).toEqual(1);
+  });
+
+  it("flags mirror shouldFlag: relevant + confidence >= threshold + category filter, and flag_categories omitted means all categories", async () => {
+    await postObservations(
+      [
+        // Flagged: social, relevant, 0.92, in-category.
+        sampleObservation({
+          source_ref: "apify:flagged#1",
+          observed_at: isoAgo(1),
+        }),
+        // Not flagged: below threshold.
+        sampleObservation({
+          source_ref: "apify:below#2",
+          confidence: 0.4,
+          observed_at: isoAgo(1),
+        }),
+        // Not flagged: relevant=false at high confidence.
+        sampleObservation({
+          source_ref: "apify:irrelevant#3",
+          relevant: false,
+          signal_kind: "irrelevant",
+          observed_at: isoAgo(1),
+        }),
+        // Not flagged: in-flagCategories terms, wrong category for the filter.
+        sampleObservation({
+          source_ref: "apify:wrongcat#4",
+          signal_kind: "press_mention",
+          observed_at: isoAgo(1),
+        }),
+      ],
+      authHeaders(),
+    );
+
+    // No flag_categories → every category is eligible: 2 flagged
+    // (the 0.92 poll_line_report + the 0.99-category press_mention).
+    const all = await getSummary({
+      since: isoAgo(26),
+      min_confidence: "0.7",
+    });
+    expect(all.body.flagged_count).toEqual(2);
+    expect(
+      (all.body.flagged_recent as { source_ref: string }[]).map(
+        (f) => f.source_ref,
+      ),
+    ).toEqual(expect.arrayContaining(["apify:flagged#1", "apify:wrongcat#4"]));
+
+    // With the digest's category filter, press_mention is archive-only → 1.
+    const filtered = await getSummary({
+      since: isoAgo(26),
+      min_confidence: "0.7",
+      flag_categories: "poll_line_report",
+    });
+    expect(filtered.body.flagged_count).toEqual(1);
+    expect(
+      (filtered.body.flagged_recent as { source_ref: string }[]).map(
+        (f) => f.source_ref,
+      ),
+    ).toEqual(["apify:flagged#1"]);
+
+    // An explicitly EMPTY flag_categories means "no filter", not "no flags".
+    const emptyList = await getSummary({
+      since: isoAgo(26),
+      min_confidence: "0.7",
+      flag_categories: "",
+    });
+    expect(emptyList.body.flagged_count).toEqual(2);
+  });
+
+  it("hot_govt counts sources whose LATEST in-window reading is hot — an earlier hot reading that has since cooled does not count", async () => {
+    await postObservations(
+      [
+        // Hot and still hot: latest reading 75.
+        sampleObservation({
+          domain: "govt",
+          source_ref: "govt:still-hot#1",
+          signal_kind: "wait_time_reading",
+          author: "Still Hot County",
+          wait_minutes: 75,
+          observed_at: isoAgo(1),
+        }),
+        // Was hot, has cooled: latest reading 10 (the 90 is older).
+        sampleObservation({
+          domain: "govt",
+          source_ref: "govt:cooled#2",
+          signal_kind: "wait_time_reading",
+          author: "Cooled County",
+          wait_minutes: 90,
+          observed_at: isoAgo(4),
+        }),
+        sampleObservation({
+          domain: "govt",
+          source_ref: "govt:cooled#2",
+          signal_kind: "wait_time_reading",
+          author: "Cooled County",
+          wait_minutes: 10,
+          observed_at: isoAgo(1),
+        }),
+        // Never hot.
+        sampleObservation({
+          domain: "govt",
+          source_ref: "govt:cool#3",
+          signal_kind: "wait_time_reading",
+          author: "Cool County",
+          wait_minutes: 5,
+          observed_at: isoAgo(1),
+        }),
+      ],
+      authHeaders(),
+    );
+
+    const { body } = await getSummary({
+      since: isoAgo(26),
+      hot_wait_minutes: "60",
+    });
+    expect(body.govt_source_count).toEqual(3);
+    expect(body.hot_govt_count).toEqual(1);
+  });
+
+  it("honours the window boundary: observations older than since are excluded entirely", async () => {
+    await postObservations(
+      [
+        sampleObservation({
+          source_ref: "apify:old#1",
+          observed_at: isoAgo(48),
+        }),
+        sampleObservation({
+          source_ref: "apify:new#1",
+          observed_at: isoAgo(1),
+        }),
+      ],
+      authHeaders(),
+    );
+
+    const { body } = await getSummary({ since: isoAgo(26) });
+    expect(body.total_observations).toEqual(1);
+  });
+
+  it("returns no PII: flagged_recent carries no caption, author, or description text", async () => {
+    await postObservations(
+      [
+        sampleObservation({
+          source_ref: "apify:pii#1",
+          author: "@someone",
+          observed_at: isoAgo(1),
+          description: {
+            caption: "call me at 555-0100 to coordinate",
+            imageDescriptions: ["a photo of a line"],
+          },
+        }),
+      ],
+      authHeaders(),
+    );
+
+    const { body } = await getSummary({ since: isoAgo(26) });
+    const flat = JSON.stringify(body.flagged_recent);
+    expect(flat).not.toMatch(/555-0100/);
+    expect(flat).not.toMatch(/@someone/);
+    expect(flat).not.toMatch(/caption|description/i);
+    // The flagged row carries identity-free fields only.
+    expect(body.flagged_recent[0]).toEqual(
+      expect.objectContaining({ source_ref: "apify:pii#1" }),
+    );
+    expect(Object.keys(body.flagged_recent[0]).sort()).toEqual(
+      [
+        "confidence",
+        "observed_at",
+        "platform",
+        "signal_kind",
+        "source_ref",
+        "url",
+      ].sort(),
+    );
+  });
+});
+
+// ── jsonColumn: the Aurora Data API returns json_agg columns as STRINGS ────
+// Driver divergence the integration tests cannot catch: the `postgres`
+// driver parses json_agg into JS arrays, so the suite above always sees the
+// array shape. Prod runs aurora-postgres, whose Data API returns the same
+// column as a JSON string — observed live 2026-10-30 (by_signal_kind and
+// flagged_recent silently degraded to []). These pin the normalization.
+describe("jsonColumn (Aurora Data API shape)", () => {
+  it("passes arrays through", () => {
+    const arr = [{ kind: "poll_line_report", count: 6 }];
+    expect(jsonColumn(arr)).toBe(arr);
+  });
+
+  it("parses the Data API's JSON-string shape", () => {
+    expect(jsonColumn('[{"kind":"poll_line_report","count":6}]')).toEqual([
+      { kind: "poll_line_report", count: 6 },
+    ]);
+    expect(jsonColumn("[]")).toEqual([]);
+  });
+
+  it("degrades null / unparseable / wrong-type to [] instead of throwing", () => {
+    expect(jsonColumn(null)).toEqual([]);
+    expect(jsonColumn('{"not":"an array"}')).toEqual([]);
+    expect(jsonColumn("{unparseable")).toEqual([]);
+    expect(jsonColumn(42)).toEqual([]);
   });
 });

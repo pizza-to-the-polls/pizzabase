@@ -6,6 +6,8 @@ import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
 import { isValidPhone } from "../lib/validator/normalizeContact";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
+import { BlockedIp } from "../entity/BlockedIp";
+import { ipHash } from "../lib/ip-blocklist";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 import { cdnUrlFromStoredUrl } from "../lib/media-cdn";
 
@@ -35,8 +37,7 @@ export class ReportsController {
    *
    * URLs are rewritten against the media CDN via cdnUrlFromStoredUrl;
    * raw storage paths are never exposed. Media that is still processing
-   * (or failed) is included with cdnUrl: null so the moderation queue can
-   * show in-flight items.
+   * (or failed) is included with cdnUrl: null so in-flight items are visible.
    */
   async media(request: Request, response: Response, next: NextFunction) {
     if (!(await checkAuthorization(request))) {
@@ -106,7 +107,6 @@ export class ReportsController {
       id: upload.id,
       source: upload.source,
       mediaStatus: upload.mediaStatus,
-      moderationStatus: upload.moderationStatus,
       sightengineScore: upload.sightengineScore,
       createdAt: upload.createdAt,
       cdnUrl,
@@ -153,6 +153,29 @@ export class ReportsController {
   }
 
   async create(request: Request, response: Response, _next: NextFunction) {
+    // IP blocklist check (issue #352) — before authorization and validation
+    // so a blocked submission never geocodes, never creates rows, and never
+    // runs the rest of the pipeline. req.ip comes from Express under the
+    // existing trust-proxy handling; client-supplied headers are not read
+    // directly.
+    if (await BlockedIp.isBlocked(request.ip)) {
+      console.log(
+        JSON.stringify({
+          event: "blocked_ip_rejected",
+          route: "/report",
+          // Hash only — the raw IP never reaches the logs (FEAT-004).
+          ipHash: ipHash(request.ip),
+        }),
+      );
+      response.status(403);
+      return {
+        errors: {
+          _general:
+            "Your submission was not accepted. If you believe this is in error, please contact us.",
+        },
+      };
+    }
+
     const authed = await checkAuthorization(request);
 
     const { errors, normalizedAddress, reportURL, contactInfo, ...extra } =

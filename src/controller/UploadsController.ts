@@ -4,12 +4,36 @@ import { Upload } from "../entity/Upload";
 import { validateUpload } from "../lib/validator";
 import { presignUpload } from "../lib/aws";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
+import { BlockedIp } from "../entity/BlockedIp";
+import { ipHash } from "../lib/ip-blocklist";
 import { isAuthorized, findOr404 } from "./helper";
 import { cdnUrlForKey, cdnUrlFromStoredUrl } from "../lib/media-cdn";
 import { extractExifAndReview } from "../lib/exif/service";
 
 export class UploadsController {
   async create(request: Request, response: Response, _next: NextFunction) {
+    // IP blocklist check (issue #352) — before validation so a blocked
+    // submission never geocodes, never creates rows, and never hits the
+    // rate-limit path. req.ip comes from Express under the existing
+    // trust-proxy handling; client-supplied headers are not read directly.
+    if (await BlockedIp.isBlocked(request.ip)) {
+      console.log(
+        JSON.stringify({
+          event: "blocked_ip_rejected",
+          route: "/upload",
+          // Hash only — the raw IP never reaches the logs (FEAT-004).
+          ipHash: ipHash(request.ip),
+        }),
+      );
+      response.status(403);
+      return {
+        errors: {
+          _general:
+            "Your submission was not accepted. If you believe this is in error, please contact us.",
+        },
+      };
+    }
+
     let validated;
     try {
       validated = await validateUpload(request.body || {});
@@ -116,7 +140,12 @@ export class UploadsController {
       // recorded raw bucket. Null rawBucket ⇒ pre-pipeline row.
       const bucket = upload.rawBucket || process.env.UPLOAD_S3_BUCKET!;
 
-      return extractExifAndReview(
+      // `await` is load-bearing: an async method's bare `return <promise>`
+      // resolves *outside* this try/catch, so a rejection (e.g. S3 NoSuchKey
+      // when the raw object never landed / is mid-pipeline) skips the catch
+      // below, 500s, and pages Bugsnag. Seen live 2026-10-30 on upload 13404
+      // (Bugsnag 6ae4ccd30f9ccb2e94b9f4ae).
+      return await extractExifAndReview(
         { s3Client: s3Client as any, bucket },
         { filePath: upload.rawFilePath || upload.filePath, includeReview },
       );

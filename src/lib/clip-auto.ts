@@ -5,8 +5,7 @@
  * seeded as queued clips automatically (the render fires immediately), and
  * the 3-hourly compileClips run folds every rendered clip into the reel
  * it posts to #feed-clips via the ZAP_NEW_CLIP hook. The report→order
- * gate is the only clip-worthiness rule — upload moderation no longer
- * gates clips.
+ * gate is the only clip-worthiness rule.
  *
  * Two entry points:
  *   - seedClipsForOrder(order): called at order placement, so clips start

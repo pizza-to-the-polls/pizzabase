@@ -57,7 +57,6 @@ const makeUpload = async (overrides: Partial<Upload> = {}): Promise<Upload> => {
   upload.filePath = `uploads/clip-test-${uploadCounter}.jpg`;
   upload.fileHash = `clip-test-hash-${uploadCounter}`;
   upload.location = location;
-  upload.moderationStatus = "clean";
   upload.mediaStatus = "ready";
   Object.assign(upload, overrides);
   await upload.save();
@@ -165,8 +164,8 @@ describe("#create", () => {
     expect(body).toEqual({ errors: ["Upload not found"] });
   });
 
-  it("creates a queued clip even while moderation is still pending", async () => {
-    const upload = await makeUpload({ moderationStatus: "pending" });
+  it("creates a queued clip for a ready upload", async () => {
+    const upload = await makeUpload();
     await makeReportWithOrder(upload);
     const request = http_mocks.createRequest({
       method: "POST",
@@ -181,7 +180,8 @@ describe("#create", () => {
       () => undefined,
     )) as JsonResponse;
 
-    // Moderation no longer gates clips — any sent order is clip worthy.
+    // The report→order gate is the only clip-worthiness rule — any sent
+    // order is clip worthy.
     expect(response.statusCode).toEqual(200);
     expect(body.status).toEqual("queued");
     expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);

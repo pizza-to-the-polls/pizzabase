@@ -47,6 +47,7 @@ const makeEvent = (
   path: string,
   body?: object,
   headers?: Record<string, string>,
+  sourceIp?: string,
 ): any => ({
   httpMethod: method,
   path,
@@ -59,7 +60,10 @@ const makeEvent = (
   stageVariables: null,
   requestContext: {
     requestId: `test-${Date.now()}-${Math.random()}`,
-    identity: { sourceIp: "127.0.0.1" },
+    // serverless-http maps this onto the mock socket's remote address,
+    // which Express surfaces as req.ip (no X-Forwarded-For header on test
+    // events, so Express falls back to the socket address).
+    identity: { sourceIp: sourceIp ?? "127.0.0.1" },
   } as any,
   resource: "",
   multiValueHeaders: {},
@@ -86,25 +90,37 @@ export const lambdaRequest = async (
   path: string,
   body?: object,
   headers?: Record<string, string>,
+  sourceIp?: string,
 ): Promise<any> => {
   const handler = await getHandler();
-  return handler(makeEvent(method, path, body, headers), makeContext());
+  return handler(
+    makeEvent(method, path, body, headers, sourceIp),
+    makeContext(),
+  );
 };
 
-export const lambdaGet = (path: string, headers?: Record<string, string>) =>
-  lambdaRequest("GET", path, undefined, headers);
+export const lambdaGet = (
+  path: string,
+  headers?: Record<string, string>,
+  sourceIp?: string,
+) => lambdaRequest("GET", path, undefined, headers, sourceIp);
 
 export const lambdaPost = (
   path: string,
   body: object,
   headers?: Record<string, string>,
-) => lambdaRequest("POST", path, body, headers);
+  sourceIp?: string,
+) => lambdaRequest("POST", path, body, headers, sourceIp);
 
 export const lambdaPut = (
   path: string,
   body: object,
   headers?: Record<string, string>,
-) => lambdaRequest("PUT", path, body, headers);
+  sourceIp?: string,
+) => lambdaRequest("PUT", path, body, headers, sourceIp);
 
-export const lambdaDelete = (path: string, headers?: Record<string, string>) =>
-  lambdaRequest("DELETE", path, undefined, headers);
+export const lambdaDelete = (
+  path: string,
+  headers?: Record<string, string>,
+  sourceIp?: string,
+) => lambdaRequest("DELETE", path, undefined, headers, sourceIp);

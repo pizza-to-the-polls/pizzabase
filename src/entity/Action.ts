@@ -7,6 +7,10 @@ import {
   Column,
 } from "typeorm";
 
+@Index("IDX_actions_entity_type_entity_id", ["entityType", "entityId"])
+@Index("IDX_actions_action_type_created_at", ["actionType", "createdAt"])
+// NB: the migration also INCLUDEs user_id in the (action_type, created_at)
+// index — TypeORM decorators can't express INCLUDE payloads.
 @Entity({ name: "actions" })
 export class Action extends BaseEntity {
   @PrimaryGeneratedColumn()

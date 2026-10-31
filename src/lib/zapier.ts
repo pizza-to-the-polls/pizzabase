@@ -39,8 +39,8 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
 
 /**
  * Primary CDN URLs for all media associated with a report — inbound MMS
- * replies plus the original web upload — newest first. Only ready media
- * that passed moderation is included (mirrors ReportsController.media).
+ * replies plus the original web upload — newest first. Only ready media is
+ * included (mirrors ReportsController.media).
  */
 const reportMediaUrls = async (report: Report): Promise<string[]> => {
   const uploads = await Upload.find({
@@ -52,12 +52,6 @@ const reportMediaUrls = async (report: Report): Promise<string[]> => {
   const urls: string[] = [];
   for (const upload of uploads) {
     if (upload.mediaStatus !== "ready") continue;
-    if (
-      upload.moderationStatus === "flagged" ||
-      upload.moderationStatus === "rejected"
-    ) {
-      continue;
-    }
     const processed = upload.processedFilePath;
     const cdn =
       cdnUrlFromStoredUrl(processed?.mp4) ||
@@ -267,21 +261,12 @@ const PROCESSED_MEDIA_KEYS = new Set(["webp", "jpeg", "jpg", "mp4", "gif"]);
  *     compare-and-set before the webhook post — duplicate pipeline events
  *     post at most once per upload row. Claim is skipped when the hook is
  *     unset or the upload has no id.
- *   - Flagged/rejected uploads never notify — a human reviews those in Retool.
  *   - Only processed (EXIF-scrubbed) CDN URLs are shared, never raw paths.
  *   - Failures are swallowed: a Zapier outage must never break the media
  *     pipeline lambdas (logged only, no Bugsnag — non-critical).
  */
 export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
   if (upload.source !== "mms") return;
-
-  // Flagged/rejected media is reviewed by a human in Retool — never notify.
-  if (
-    upload.moderationStatus === "flagged" ||
-    upload.moderationStatus === "rejected"
-  ) {
-    return;
-  }
 
   if (upload.id == null) return;
   // Env-optional: don't consume the announce-once claim when unset.
@@ -325,7 +310,6 @@ export const zapNewMmsUpload = async (upload: Upload): Promise<void> => {
         source: upload.source,
         source_phone: upload.sourcePhone ?? "",
         media_status: upload.mediaStatus ?? "",
-        moderation_status: upload.moderationStatus ?? "",
         sightengine_score:
           upload.sightengineScore != null
             ? String(upload.sightengineScore)

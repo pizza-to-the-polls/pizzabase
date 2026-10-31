@@ -16,6 +16,7 @@ import { Report } from "./entity/Report";
 import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
 import { BannedPhoneNumber } from "./entity/BannedPhoneNumber";
+import { BlockedIp } from "./entity/BlockedIp";
 import { Clip } from "./entity/Clip";
 import { FeedObservation } from "./entity/FeedObservation";
 import { WaitTimeSource } from "./entity/WaitTimeSource";
@@ -24,6 +25,7 @@ const entities = [
   Action,
   APIKey,
   BannedPhoneNumber,
+  BlockedIp,
   Clip,
   Donation,
   FeedObservation,

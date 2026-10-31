@@ -100,7 +100,6 @@ const makeUpload = async (overrides: Partial<Upload> = {}): Promise<Upload> => {
   upload.filePath = `uploads/render-test-${uploadCounter}.mp4`;
   upload.fileHash = `render-test-hash-${uploadCounter}`;
   upload.location = location;
-  upload.moderationStatus = "clean";
   upload.mediaStatus = "ready";
   upload.processedFilePath = {
     mp4: `https://media.polls.pizza/uploads/render-${uploadCounter}-transcoded.mp4`,
