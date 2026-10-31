@@ -32,6 +32,13 @@ app.use(
   }),
 );
 app.use("/webhook", bodyParser.raw({ type: "*/*" }));
+// feedflag's bulk intake carries description JSONB blobs; a single
+// fat-but-valid observation near the default 100kb would be rejected at the
+// door (feedflag #76 — senders now batch by bytes and stay polite, but one
+// oversized row must still LAND, not 413 at the middleware before the
+// controller can even log it). Scoped to the route prefix so every other
+// route keeps the default limit.
+app.use("/feed-observations", bodyParser.json({ limit: "512kb" }));
 app.use(bodyParser.json());
 // Twilio inbound webhooks POST application/x-www-form-urlencoded (MMS-003).
 app.use(bodyParser.urlencoded({ extended: false }));
