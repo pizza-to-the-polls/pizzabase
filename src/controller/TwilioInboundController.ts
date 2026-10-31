@@ -7,6 +7,8 @@ import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
+import { BlockedIp } from "../entity/BlockedIp";
+import { ipHash } from "../lib/ip-blocklist";
 import { normalizePhone } from "../lib/validator/normalizeContact";
 import { seedClipForUpload } from "../lib/clip-auto";
 
@@ -398,6 +400,30 @@ export class TwilioInboundController {
       const report = await Report.findRecentFulfilledByPhone(from);
 
       if (report) {
+        // Blocked-IP linkage check (BUG-029): if this report's original web
+        // upload came from a blocked IP, the phone↔IP link is trustworthy
+        // (Twilio verified the sender, and reports.upload_id is server-set)
+        // — so the web blocklist boundary extends here. Treat the sender
+        // exactly like a banned phone: opt-out reply, no media ingestion,
+        // no clip seeding, no zap. MMS-sourced uploads always carry the
+        // "mms" marker (never a real IP) and are never checked.
+        if (
+          report.upload &&
+          report.upload.ipAddress !== "mms" &&
+          (await BlockedIp.isBlocked(report.upload.ipAddress))
+        ) {
+          console.log(
+            JSON.stringify({
+              event: "mms_blocked_ip_match",
+              reportId: report.id,
+              // Hash only — the raw IP never reaches the logs (FEAT-004).
+              ipHash: ipHash(report.upload.ipAddress),
+            }),
+          );
+          respond(200, OPTED_OUT_REPLY);
+          return null;
+        }
+
         details.matched = true;
         details.matchedReport = {
           id: report.id,

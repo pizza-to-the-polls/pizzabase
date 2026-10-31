@@ -177,6 +177,11 @@ export class Report extends BaseEntity {
         },
       ],
       order: { createdAt: "DESC" },
+      // Load the linked web upload so the MMS inbound controller can check
+      // its source IP against the blocklist (BUG-029). LEFT JOIN on the
+      // indexed upload_id column — negligible next to the eager location
+      // and order joins. Sole caller is TwilioInboundController.inbound().
+      relations: ["upload"],
     });
 
     return report ?? null;

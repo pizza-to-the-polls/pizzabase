@@ -26,6 +26,8 @@ import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { APIKey } from "../entity/APIKey";
 import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
+import { BlockedIp } from "../entity/BlockedIp";
+import { ipHash } from "../lib/ip-blocklist";
 import { Order } from "../entity/Order";
 import { seedClipForUpload } from "../lib/clip-auto";
 import { verifyTwilioSignature } from "../lib/twilio/verifySignature";
@@ -245,6 +247,192 @@ describe("TwilioInboundController #inbound", () => {
     expect(createFromMmsSpy).not.toHaveBeenCalled();
     expect(send).not.toHaveBeenCalled();
     expect(global.fetch).not.toHaveBeenCalled();
+  });
+
+  // ---------------------------------------------------------------------
+  // Blocked-IP linkage on the matched-report path (BUG-029)
+  // ---------------------------------------------------------------------
+  describe("blocked-IP linkage (BUG-029)", () => {
+    it("rejects MMS with OPTED_OUT_REPLY when the matched report's upload came from a blocked IP", async () => {
+      const consoleLogSpy = jest
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      const blockedIpSpy = jest
+        .spyOn(BlockedIp, "isBlocked")
+        .mockResolvedValue(true);
+
+      // The matched report's original web upload was submitted from an IP
+      // now in the blocklist (e.g. the report was created via /upload
+      // before the IP was blocked).
+      const blockedIpUpload = {
+        id: 999,
+        ipAddress: "192.0.2.128",
+        source: "web",
+        filePath: "uploads/chicago-il-blocked.jpg",
+      } as unknown as Upload;
+      findReportSpy.mockResolvedValue({
+        ...fakeReport,
+        upload: blockedIpUpload,
+      });
+
+      const bytes = Buffer.from("blocked-media-bytes");
+      mockFetchBody(bytes, String(bytes.length));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getData()).toContain(OPTED_OUT_FRAGMENT);
+
+      // No media ingestion, no clip seeding, no S3 write, no reply send.
+      expect(createFromMmsSpy).not.toHaveBeenCalled();
+      expect(mockSeedClipForUpload).not.toHaveBeenCalled();
+      expect(putObjectMock).not.toHaveBeenCalled();
+      expect(send).not.toHaveBeenCalled();
+      expect(global.fetch).not.toHaveBeenCalled();
+
+      // Structured log carries only the hash — the raw IP never reaches logs.
+      expect(consoleLogSpy).toHaveBeenCalledWith(
+        JSON.stringify({
+          event: "mms_blocked_ip_match",
+          reportId: 42,
+          ipHash: ipHash("192.0.2.128"),
+        }),
+      );
+
+      blockedIpSpy.mockRestore();
+      consoleLogSpy.mockRestore();
+    });
+
+    it("does not block MMS when the matched report has no primary upload (MMS-only or none)", async () => {
+      const blockedIpSpy = jest
+        .spyOn(BlockedIp, "isBlocked")
+        .mockResolvedValue(true);
+
+      // No web upload linked — nothing to check the blocklist against.
+      findReportSpy.mockResolvedValue({ ...fakeReport, upload: null });
+
+      const bytes = Buffer.from("clean-mms-media");
+      mockFetchBody(bytes, String(bytes.length));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      // Media IS ingested as normal — existing behavior unchanged.
+      expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+      expect(putObjectMock).toHaveBeenCalledTimes(1);
+      expect(mockSeedClipForUpload).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      // The blocklist was never consulted — no upload IP to check.
+      expect(blockedIpSpy).not.toHaveBeenCalled();
+
+      blockedIpSpy.mockRestore();
+    });
+
+    it("never checks the blocklist for the mms marker on matched-report uploads", async () => {
+      const blockedIpSpy = jest
+        .spyOn(BlockedIp, "isBlocked")
+        .mockResolvedValue(true);
+
+      // An upload whose ipAddress is the fixed "mms" marker (MMS-sourced
+      // upload linked by a prior ingest) — never a blocklist candidate.
+      const mmsUpload = {
+        id: 777,
+        ipAddress: "mms",
+        source: "mms",
+        filePath: "uploads/mms-a1b2c3d4.jpg",
+      } as unknown as Upload;
+      findReportSpy.mockResolvedValue({ ...fakeReport, upload: mmsUpload });
+
+      const bytes = Buffer.from("mms-sourced-upload-media");
+      mockFetchBody(bytes, String(bytes.length));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(blockedIpSpy).not.toHaveBeenCalled();
+
+      blockedIpSpy.mockRestore();
+    });
+
+    it("does not block MMS when the matched report's upload IP is not in the blocklist", async () => {
+      const blockedIpSpy = jest
+        .spyOn(BlockedIp, "isBlocked")
+        .mockResolvedValue(false);
+
+      const cleanIpUpload = {
+        id: 555,
+        ipAddress: "203.0.113.9",
+        source: "web",
+        filePath: "uploads/chicago-il-clean.jpg",
+      } as unknown as Upload;
+      findReportSpy.mockResolvedValue({ ...fakeReport, upload: cleanIpUpload });
+
+      const bytes = Buffer.from("clean-media");
+      mockFetchBody(bytes, String(bytes.length));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getData()).toContain(SHARED_FRAGMENT);
+      expect(createFromMmsSpy).toHaveBeenCalledTimes(1);
+      expect(mockSeedClipForUpload).toHaveBeenCalledTimes(1);
+      expect(send).toHaveBeenCalledTimes(1);
+
+      blockedIpSpy.mockRestore();
+    });
+
+    it("only consults the blocklist on the matched-report path (orphan senders unchanged)", async () => {
+      const blockedIpSpy = jest
+        .spyOn(BlockedIp, "isBlocked")
+        .mockResolvedValue(true);
+
+      // No report matches — there is no trustworthy phone↔IP link, so the
+      // orphan path must be untouched.
+      findReportSpy.mockResolvedValue(null);
+
+      const bytes = Buffer.from("orphan-media-bytes");
+      mockFetchBody(bytes, String(bytes.length));
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getData()).toContain(NO_MATCH_FRAGMENT);
+      expect(createFromMmsSpy).toHaveBeenCalledWith(null, expect.anything());
+      expect(send).toHaveBeenCalledTimes(1);
+      expect(blockedIpSpy).not.toHaveBeenCalled();
+
+      blockedIpSpy.mockRestore();
+    });
+
+    it("banned-phone short-circuit still runs before any blocked-IP work (no regression)", async () => {
+      const consoleLogSpy = jest
+        .spyOn(console, "log")
+        .mockImplementation(() => {});
+      const blockedIpSpy = jest
+        .spyOn(BlockedIp, "isBlocked")
+        .mockResolvedValue(true);
+
+      const ban = new BannedPhoneNumber();
+      ban.phoneNumber = PHONE;
+      ban.reason = "existing ban";
+      ban.bannedBy = "admin";
+      await ban.save();
+
+      const { response } = await callInbound(mediaBody("image/jpeg"));
+
+      expect(response.statusCode).toEqual(200);
+      expect(response._getData()).toContain(OPTED_OUT_FRAGMENT);
+      // Report matching never happened, so the blocklist was never checked
+      // and the structured log line never fired.
+      expect(findReportSpy).not.toHaveBeenCalled();
+      expect(blockedIpSpy).not.toHaveBeenCalled();
+      expect(consoleLogSpy).not.toHaveBeenCalled();
+
+      blockedIpSpy.mockRestore();
+      consoleLogSpy.mockRestore();
+    });
   });
 
   // ---------------------------------------------------------------------
