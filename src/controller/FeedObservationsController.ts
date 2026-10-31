@@ -334,8 +334,13 @@ export class FeedObservationsController {
     const params: unknown[] = [sinceIso];
     let categoriesClause = "";
     if (flagCategories) {
-      params.push(flagCategories);
-      categoriesClause = `AND w.signal_kind = ANY($${params.length}::TEXT[])`;
+      // NOT a JS array parameter: the Aurora Data API driver cannot bind one
+      // ("'param_2' is an invalid type" from formatParam — live in prod
+      // 2026-10-31, twice; the local `postgres` driver accepts arrays, so the
+      // jest suite is green either way and only live verification catches
+      // it). Pass a comma-joined STRING and split it inside Postgres.
+      params.push(flagCategories.join(","));
+      categoriesClause = `AND w.signal_kind = ANY(string_to_array($${params.length}::TEXT, ','))`;
     }
     params.push(minConfidence);
     const minConfParam = `$${params.length}`;
