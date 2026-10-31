@@ -1,5 +1,6 @@
 import { lambdaPost, lambdaGet } from "../testLambdaHandler";
 import dbHelper from "../dbHelper";
+import { GEORGIA_ERROR } from "../../lib/validator/constants";
 
 jest.mock("../../lib/validator/geocode");
 
@@ -28,6 +29,20 @@ describe("Reports API (via Lambda handler)", () => {
     // May be 200 or 422 depending on mock geocode; we just verify Lambda path
     expect(response.statusCode).toBeGreaterThanOrEqual(200);
     expect(response.statusCode).toBeLessThan(500);
+  });
+
+  test("POST /report with a Georgia address returns 422 citing SB 22", async () => {
+    const response = await lambdaPost("/report", {
+      url: "https://twitter.com/test/status/789",
+      address: "206 Washington St SW Atlanta GA 30334",
+      contact: "333-234-2345",
+      waitTime: "1 hour",
+      canDistribute: true,
+    });
+
+    expect(response.statusCode).toBe(422);
+    const body = JSON.parse(response.body);
+    expect(body.errors).toEqual({ address: GEORGIA_ERROR });
   });
 
   test("GET /reports lists empty reports on fresh DB", async () => {

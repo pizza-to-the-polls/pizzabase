@@ -7,6 +7,7 @@ import {
   TWITTER_ERROR,
   OUR_TWITTER_ERROR,
   FACEBOOK_ERROR,
+  GEORGIA_ERROR,
 } from "./constants";
 
 jest.mock("./geocode");
@@ -90,6 +91,35 @@ test("validates the report is valid", async () => {
     state: "IL",
     zip: "60615",
   });
+});
+
+test("rejects Georgia line reports with the SB 22 error", async () => {
+  const { errors } = await validateReport({
+    url: "http://twitter.com/something/status/123",
+    contact: "555-234-2345",
+    address: "206 Washington St SW Atlanta GA 30334",
+  });
+
+  expect(errors).toEqual({ address: GEORGIA_ERROR });
+});
+
+test("trusted reporters cannot override the Georgia block", async () => {
+  const { errors } = await validateReport(
+    {
+      address: "un-parseable",
+      addressOverride: {
+        address: "206 Washington St SW",
+        city: "Atlanta",
+        state: "GA",
+        zip: "30334",
+        latitude: "33.75",
+        longitude: "-84.39",
+      },
+    },
+    true,
+  );
+
+  expect(errors).toEqual({ address: GEORGIA_ERROR });
 });
 
 test("link to tweet without a status is invalid", async () => {

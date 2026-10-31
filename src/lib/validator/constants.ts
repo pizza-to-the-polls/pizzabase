@@ -5,6 +5,15 @@ export const ADDRESS_ERROR =
 export const URL_ERROR =
   "Whoops! That's not a valid URL. Try sending us a real one so we can verify there's a line";
 
+/**
+ * Georgia Senate Bill 22 (2025) makes it illegal to give food or beverages
+ * to voters waiting in line at or near a polling place, so Pizza to the
+ * Polls cannot accept line reports from Georgia. Mirrored in the polls.pizza
+ * report form (form-report.tsx GEORGIA_ERROR) — keep the copy in sync.
+ */
+export const GEORGIA_ERROR =
+  "Whoops! Georgia's Senate Bill 22 (SB 22) bans giving food or beverages to voters waiting in line, so we can't accept reports for polling places in Georgia.";
+
 export const TWITTER_ERROR =
   "Whoops! That's not a link to a specific tweet. Try sending us a real one so we can verify there's a line";
 export const OUR_TWITTER_ERROR =
