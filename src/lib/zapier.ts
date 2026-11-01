@@ -33,6 +33,12 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
       hasUpload: report.upload != null,
       media: await reportMediaUrls(report),
       otherReports: await otherReportsByContact(report),
+      // Duplicate-coverage signals for the Slack notification: does another
+      // report at this location still count as live, and was the location
+      // validated ("approved") within the last hour? Informational only —
+      // never gates or rejects the submission.
+      locationHasLiveReport: await report.location.hasLiveReport(report.id),
+      locationValidatedRecently: report.location.isValidatedRecently(),
     },
     hook,
   );

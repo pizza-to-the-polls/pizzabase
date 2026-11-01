@@ -1,4 +1,6 @@
+import { AppDataSource } from "../data-source";
 import { Location } from "./Location";
+import { Report } from "./Report";
 import { NormalAddress } from "../lib/validator";
 
 const ADDRESS: NormalAddress = {
@@ -80,6 +82,107 @@ describe("Location entity", () => {
         ADDRESS.fullAddress.replace(/\s/g, "%20"),
       );
       expect(pct!.id).toEqual(created.id);
+    });
+  });
+
+  describe("#hasLiveReport", () => {
+    // "Live" is the openReports definition: no order, no truck, not
+    // skipped, created within REPORT_DECAY (4h). The incoming report itself
+    // must not count when an excludeReportId is passed.
+    it("is false when there are no open reports", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+
+      expect(await location.hasLiveReport()).toBe(false);
+    });
+
+    it("is true when an open report exists and no excludeId is given", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      await Report.createNewReport(
+        "555-555-5555",
+        "http://twitter.com/live-1",
+        ADDRESS,
+      );
+
+      expect(await location.hasLiveReport()).toBe(true);
+    });
+
+    it("is false when the only open report is the excluded one", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      const [report] = await Report.createNewReport(
+        "555-555-5555",
+        "http://twitter.com/live-2",
+        ADDRESS,
+      );
+
+      expect(await location.hasLiveReport(report.id)).toBe(false);
+    });
+
+    it("is true when another report exists besides the excluded one", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      const [first] = await Report.createNewReport(
+        "555-555-5555",
+        "http://twitter.com/live-3",
+        ADDRESS,
+      );
+      await Report.createNewReport(
+        "555-555-5555",
+        "http://twitter.com/live-4",
+        ADDRESS,
+      );
+
+      expect(await location.hasLiveReport(first.id)).toBe(true);
+    });
+
+    it("is false when open reports exist only outside REPORT_DECAY", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      const [report] = await Report.createNewReport(
+        "555-555-5555",
+        "http://twitter.com/live-5",
+        ADDRESS,
+      );
+
+      // Backdate created_at past REPORT_DECAY (4h) via raw SQL because
+      // created_at is a CreateDateColumn (same pattern as Report.test.ts).
+      await AppDataSource.query(
+        `UPDATE reports SET created_at = $1 WHERE id = $2`,
+        [new Date(Date.now() - 5 * 60 * 60 * 1000), report.id],
+      );
+
+      expect(await location.hasLiveReport()).toBe(false);
+    });
+  });
+
+  describe("#isValidatedRecently", () => {
+    // "Approved" === validated (Location.validatedAt); the window is the
+    // last 60 minutes, boundary exclusive.
+    it("is false when validatedAt is null", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+
+      expect(location.isValidatedRecently()).toBe(false);
+    });
+
+    it("is true when validatedAt is 30 seconds ago", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      location.validatedAt = new Date(Date.now() - 30 * 1000);
+      await location.save();
+
+      expect(location.isValidatedRecently()).toBe(true);
+    });
+
+    it("is false when validatedAt is exactly 60 minutes ago", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      location.validatedAt = new Date(Date.now() - 60 * 60 * 1000);
+      await location.save();
+
+      expect(location.isValidatedRecently()).toBe(false);
+    });
+
+    it("is false when validatedAt is 61 minutes ago", async () => {
+      const location = await Location.createFromAddress(ADDRESS);
+      location.validatedAt = new Date(Date.now() - 61 * 60 * 1000);
+      await location.save();
+
+      expect(location.isValidatedRecently()).toBe(false);
     });
   });
 });

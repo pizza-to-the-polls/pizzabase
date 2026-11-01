@@ -250,6 +250,8 @@ describe("#create", () => {
         hasUpload: false,
         media: [],
         otherReports: 0,
+        locationHasLiveReport: false,
+        locationValidatedRecently: false,
       }),
     );
   });
@@ -311,6 +313,8 @@ describe("#create", () => {
         hasUpload: false,
         media: [],
         otherReports: 0,
+        locationHasLiveReport: false,
+        locationValidatedRecently: true,
       }),
     );
   });
@@ -411,6 +415,8 @@ describe("#create", () => {
         hasUpload: false,
         media: [],
         otherReports: 0,
+        locationHasLiveReport: false,
+        locationValidatedRecently: false,
       }),
     );
   });
