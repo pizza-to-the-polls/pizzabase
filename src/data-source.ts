@@ -15,6 +15,7 @@ import { Order } from "./entity/Order";
 import { Report } from "./entity/Report";
 import { Truck } from "./entity/Truck";
 import { Upload } from "./entity/Upload";
+import { User } from "./entity/User";
 import { BannedPhoneNumber } from "./entity/BannedPhoneNumber";
 import { BlockedIp } from "./entity/BlockedIp";
 import { Clip } from "./entity/Clip";
@@ -37,6 +38,7 @@ const entities = [
   Report,
   Truck,
   Upload,
+  User,
   WaitTimeSource,
 ];
 const migrations = [path.join(__dirname, "migration", "*.{ts,js}")];

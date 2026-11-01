@@ -195,6 +195,7 @@ jobs:
           DB_NAME: ${{ secrets.STAGING_DB_NAME }}
           AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
           AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
+          PIZZABASE_API_URL: https://base-next.polls.pizza
           GOOGLE_MAPS_KEY: ${{ secrets.GOOGLE_MAPS_KEY }}
           ALLOWED_ORIGINS: "polls.pizza,localhost"
           STATIC_SITE: https://next.polls.pizza
@@ -247,6 +248,7 @@ jobs:
           DB_NAME: ${{ secrets.STAGING_DB_NAME }}
           AURORA_RESOURCE_ARN: ${{ secrets.AURORA_RESOURCE_ARN }}
           AURORA_SECRET_ARN: ${{ secrets.AURORA_SECRET_ARN }}
+          PIZZABASE_API_URL: https://base-next.polls.pizza
           AWS_REGION: us-west-2
 
       - name: Post-deploy health check

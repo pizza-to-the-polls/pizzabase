@@ -28,6 +28,11 @@ provider:
     AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
     AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
 
+    # Public base URL of THIS deployment (stage-aware, set per deploy in
+    # CI): trusted no-photo reports persist a Street View proxy permalink
+    # against it (lib/streetview.ts) so external reportURL surfaces resolve.
+    PIZZABASE_API_URL: ${env:PIZZABASE_API_URL, ''}
+
     ZAP_NEW_REPORT: ${env:ZAP_NEW_REPORT}
     ZAP_NEW_LOCATION: ${env:ZAP_NEW_LOCATION}
     ZAP_NEW_ORDER: ${env:ZAP_NEW_ORDER}
