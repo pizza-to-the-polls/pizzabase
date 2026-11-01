@@ -6,9 +6,14 @@ import { Clip } from "../entity/Clip";
 import { Location } from "../entity/Location";
 import { Order, OrderTypes } from "../entity/Order";
 import { Report } from "../entity/Report";
+import { Truck } from "../entity/Truck";
 import { Upload } from "../entity/Upload";
 import { invokeRenderClip } from "./clip-render";
-import { seedClipsForOrder, seedUnclippedOrderMedia } from "./clip-auto";
+import {
+  seedClipsForOrder,
+  seedClipsForRecentlyFedSkip,
+  seedUnclippedOrderMedia,
+} from "./clip-auto";
 
 jest.mock("./clip-render", () => ({
   invokeRenderClip: jest.fn(),
@@ -75,6 +80,24 @@ const makeUpload = async (
   Object.assign(upload, overrides);
   await upload.save();
   return upload;
+};
+
+/** A report marked skipped — the Location.skip() outcome for a report
+ * that arrived after the location's last order. */
+const makeSkippedReport = async (
+  location: Location,
+  upload: Upload | null,
+): Promise<Report> => {
+  counter += 1;
+  const report = new Report();
+  report.contactInfo = "5125550100";
+  report.reportURL = `https://example.com/reports/skip-${counter}`;
+  report.canDistribute = 1;
+  report.location = location;
+  report.skippedAt = new Date();
+  if (upload) report.upload = upload;
+  await report.save();
+  return report;
 };
 
 beforeEach(() => {
@@ -210,5 +233,158 @@ describe("seedUnclippedOrderMedia", () => {
     const seeded = await seedUnclippedOrderMedia();
     expect(seeded).toEqual(0);
     expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+  });
+
+  it("does not backfill media on skipped reports (rescue is skip-time only)", async () => {
+    const location = await makeLocation();
+    // A report skipped at a fed location BEFORE this shipped — e.g.
+    // upload 14012, skipped as a duplicate of a fresh order. The
+    // backstop must leave it alone: only skips after deploy are rescued.
+    await makeOrder(location);
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    // ... and MMS media linked to it.
+    const mms = await makeUpload(location);
+    mms.report = report;
+    await mms.save();
+
+    const seeded = await seedUnclippedOrderMedia();
+
+    expect(seeded).toEqual(0);
+    expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+    for (const u of [upload, mms]) {
+      const clip = await Clip.findOne({
+        where: { upload: { id: u.id } },
+      });
+      expect(clip).toBeNull();
+    }
+  });
+});
+
+describe("seedClipsForRecentlyFedSkip", () => {
+  it("seeds the skipped reports' media when pizza went to the location recently", async () => {
+    const location = await makeLocation();
+    await makeOrder(location); // the order the skip is "a duplicate of"
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0].status).toEqual("queued");
+    expect(seeded[0].upload.id).toEqual(upload.id);
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
+    expect(mockInvokeRenderClip).toHaveBeenCalledWith(seeded[0].id);
+  });
+
+  it("seeds nothing when the skip is a real content rejection (never fed)", async () => {
+    const location = await makeLocation();
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(seeded).toHaveLength(0);
+    expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+  });
+
+  it("treats a recent truck assignment as recently fed", async () => {
+    const location = await makeLocation();
+    const truck = new Truck();
+    truck.location = location;
+    await truck.save();
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(seeded).toHaveLength(1);
+  });
+
+  it("rescues when pizza went within the fed window, not just now", async () => {
+    const location = await makeLocation();
+    const order = await makeOrder(location);
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    // 2 hours ago — inside the 3-hour window, so the skip is still a
+    // duplicate of a fresh delivery.
+    const recent = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    await Order.update({ id: order.id }, { createdAt: recent as never });
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0].upload.id).toEqual(upload.id);
+  });
+
+  it("does not rescue when the last delivery is older than the fed window", async () => {
+    const location = await makeLocation();
+    const order = await makeOrder(location);
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    // 4 hours ago — outside the 3-hour window: this skip is a real
+    // decision, not a duplicate of a fresh delivery, so nothing seeds.
+    const stale = new Date(Date.now() - 4 * 60 * 60 * 1000);
+    await Order.update({ id: order.id }, { createdAt: stale as never });
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(seeded).toHaveLength(0);
+    expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+    const clip = await Clip.findOne({
+      where: { upload: { id: upload.id } },
+    });
+    expect(clip).toBeNull();
+  });
+
+  it("is idempotent across repeated rescue calls", async () => {
+    const location = await makeLocation();
+    await makeOrder(location);
+    const upload = await makeUpload(location);
+    const report = await makeSkippedReport(location, upload);
+
+    const first = await seedClipsForRecentlyFedSkip(location, [report]);
+    const second = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(first).toHaveLength(1);
+    expect(second).toHaveLength(0);
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(1);
+  });
+
+  it("seeds MMS replies linked to the skipped report too", async () => {
+    const location = await makeLocation();
+    await makeOrder(location);
+    const report = await makeSkippedReport(location, null);
+
+    const mms = await makeUpload(location);
+    mms.report = report;
+    await mms.save();
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [report]);
+
+    expect(seeded).toHaveLength(1);
+    expect(seeded[0].upload.id).toEqual(mms.id);
+  });
+
+  it("seeds only the reports passed in — no scan for other skipped reports", async () => {
+    const location = await makeLocation();
+    await makeOrder(location);
+    const upload = await makeUpload(location);
+    const passed = await makeSkippedReport(location, upload);
+    // An older skipped report at the same fed location — the helper has
+    // no way to see it (and must not go looking).
+    const otherUpload = await makeUpload(location);
+    await makeSkippedReport(location, otherUpload);
+
+    const seeded = await seedClipsForRecentlyFedSkip(location, [passed]);
+
+    expect(seeded).toHaveLength(1);
+    const otherClip = await Clip.findOne({
+      where: { upload: { id: otherUpload.id } },
+    });
+    expect(otherClip).toBeNull();
   });
 });

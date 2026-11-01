@@ -6,7 +6,10 @@ import { findOr404, isAuthorized, checkAuthorization } from "./helper";
 import { zapSkipReport, zapNewOrder, zapNewTruck } from "../lib/zapier";
 import { validateOrder } from "../lib/validator";
 import { invokeSocialPost } from "../lib/invoke-social-post";
-import { seedClipsForOrder } from "../lib/clip-auto";
+import {
+  seedClipsForOrder,
+  seedClipsForRecentlyFedSkip,
+} from "../lib/clip-auto";
 
 export class LocationsController {
   private async authorizeAndFindLocation(
@@ -116,6 +119,15 @@ export class LocationsController {
     for (const report of openReports) {
       await zapSkipReport(report);
     }
+
+    // A skip at a location pizza went to within the last few hours means
+    // "we just fed this line", not "this content is bad" — the reports
+    // this skip just marked are still clip-worthy, so seed their media
+    // now instead of losing it. A no-op (and no seeding) when the
+    // location wasn't fed that recently. Only these reports — no
+    // scanning for older skips, no backfill. Never throws.
+    await seedClipsForRecentlyFedSkip(location, openReports);
+
     return { success: true };
   }
 

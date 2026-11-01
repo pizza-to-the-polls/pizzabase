@@ -3,8 +3,10 @@ import * as http_mocks from "node-mocks-http";
 import { LocationsController } from "./LocationsController";
 import { Location } from "../entity/Location";
 import { Action } from "../entity/Action";
+import { Clip } from "../entity/Clip";
 import { Order } from "../entity/Order";
 import { Report } from "../entity/Report";
+import { Upload } from "../entity/Upload";
 import { COST_ERROR } from "../lib/validator/constants";
 
 jest.mock("../lib/validator/geocode");
@@ -385,6 +387,74 @@ describe("#skip", () => {
     expect(pending.skippedAt).toBeTruthy();
     await ordered.reload();
     expect(ordered.skippedAt).toBeFalsy();
+  });
+
+  it("seeds clips for skipped media when the location was recently fed", async () => {
+    const { fullAddress } = location ? location : null;
+
+    // Pizza went to this location minutes ago.
+    const [fedReport] = await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/fed",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      },
+    );
+    await Order.placeOrder({ quantity: 1, cost: 5 }, fedReport.location);
+
+    // A fresh report with ready media arrives after the order — the
+    // dispatcher skips rather than ordering again.
+    const upload = new Upload();
+    upload.ipAddress = "127.0.0.1";
+    upload.filePath = "uploads/skip-rescue-test.jpg";
+    upload.fileHash = "skip-rescue-hash";
+    upload.location = fedReport.location;
+    upload.mediaStatus = "ready";
+    await upload.save();
+
+    await Report.createNewReport(
+      "222-234-2345",
+      "http://insta.com/dup",
+      {
+        latitude: 41.79907,
+        longitude: -87.58413,
+
+        fullAddress,
+
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      },
+      { upload },
+    );
+
+    await controller.skip(
+      http_mocks.createRequest({
+        method: "PUT",
+        body: { user: "jimmy" },
+        params: { idOrAddress: fullAddress.replace(/\s/g, "+") },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    // The skipped report's media still became a clip.
+    const clip = await Clip.findOne({
+      where: { upload: { id: upload.id } },
+    });
+    expect(clip).toBeTruthy();
+    expect(clip?.status).toEqual("queued");
+    expect(clip?.kit.city).toEqual("Chicago");
   });
 });
 
