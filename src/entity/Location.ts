@@ -166,6 +166,38 @@ export class Location extends BaseEntity {
     return await Report.openReports(this);
   }
 
+  /**
+   * Whether another report (excluding the report identified by
+   * `excludeReportId`) at this location is currently "live" — no order, no
+   * truck, not skipped, created within REPORT_DECAY.
+   *
+   * Reuses Report.openReports so the query is defined in one place (do not
+   * re-implement the OPEN_QUERY filter). Returns `false` when there are no
+   * open reports or the only open report is the excluded one.
+   */
+  async hasLiveReport(excludeReportId?: number): Promise<boolean> {
+    const reports = await Report.openReports(this);
+    if (reports.length === 0) return false;
+    if (excludeReportId === undefined) return true;
+    return reports.some((r) => r.id !== excludeReportId);
+  }
+
+  /**
+   * Whether this location's `validatedAt` is within the last 60 minutes.
+   *
+   * "Approved" === validated (see Location.validatedAt — set whenever a
+   * trusted submission auto-validates, an order is placed, or a volunteer
+   * validates/skips-with-truck). The 60-minute window is chosen to cover
+   * common volunteer shift lengths: if a location was validated within the
+   * last hour, the notification can tell volunteers "may already be
+   * covered" before anyone sends pizza.
+   */
+  isValidatedRecently(): boolean {
+    if (!this.validatedAt) return false;
+    const SIXTY_MINUTES_MS = 60 * 60 * 1000;
+    return Date.now() - this.validatedAt.getTime() < SIXTY_MINUTES_MS;
+  }
+
   async validate(validatedBy?: string): Promise<void> {
     this.validatedAt = new Date();
 

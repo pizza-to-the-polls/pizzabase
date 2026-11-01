@@ -65,6 +65,11 @@ export class LocationsController {
     return {
       ...locJSON,
       hasTruck: authorized ? locJSON.hasTruck : await location.hasTruckJSON(),
+      // Duplicate-coverage signals (issue #380) so the queue shows the same
+      // flags the ZAP_NEW_REPORT webhook carries. Computed live — "approved"
+      // means validated (Location.validatedAt).
+      locationHasLiveReport: await location.hasLiveReport(),
+      locationValidatedRecently: location.isValidatedRecently(),
       reports: await Promise.all(
         (await location.openReports()).map((report) =>
           report.asJSON(authorized),

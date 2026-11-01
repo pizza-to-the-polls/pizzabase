@@ -108,6 +108,8 @@ describe("#show", () => {
     expect(body).toEqual({
       ...(await upperLocation.asJSON()),
       hasTruck: false,
+      locationHasLiveReport: false,
+      locationValidatedRecently: false,
       reports: [],
       orders: [],
       trucks: [],
@@ -146,6 +148,8 @@ describe("#show", () => {
     expect(body).toEqual({
       ...(await location.asJSON()),
       hasTruck: false,
+      locationHasLiveReport: true,
+      locationValidatedRecently: true,
       orders: [
         {
           ...order.asJSON(),
@@ -173,6 +177,8 @@ describe("#show", () => {
     expect(body).toEqual({
       ...(await location.asJSON()),
       hasTruck: false,
+      locationHasLiveReport: false,
+      locationValidatedRecently: false,
       reports: [],
       orders: [],
       trucks: [],
@@ -193,6 +199,8 @@ describe("#show", () => {
     expect(body).toEqual({
       ...(await location.asJSON()),
       hasTruck: false,
+      locationHasLiveReport: false,
+      locationValidatedRecently: false,
       reports: [],
       orders: [],
       trucks: [],
@@ -213,6 +221,8 @@ describe("#show", () => {
     expect(body).toEqual({
       ...(await location.asJSONPrivate()),
       hasTruck: false,
+      locationHasLiveReport: false,
+      locationValidatedRecently: false,
       reports: [],
       orders: [],
       trucks: [],
