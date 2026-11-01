@@ -8,27 +8,30 @@ import { isValidPhone } from "../lib/validator/normalizeContact";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import {
-  isPartnerEmail,
+  findPartnerUser,
   normalizeEmail,
   packPartnerSession,
   unpackPartnerSession,
 } from "../lib/partners";
 import { sendPartnerLoginEmail } from "../lib/mailgun";
+import { attachStreetViewUrl } from "../lib/streetview";
 
 /**
  * Trusted partner report flow (staging rollout, 2026-10-30).
  *
- * POST /partner/session — magic-link login. Email must be on the hardcoded
- * partner allowlist (src/lib/partners.ts); response is generic either way
- * so the endpoint never reveals who is on the list.
+ * POST /partner/session — magic-link login. Email must be on the users
+ * table (managed via the API-key-protected CRUD endpoints — Pizza Eagle
+ * adds people on request); response is generic either way so the endpoint
+ * never reveals who is on the list.
  *
  * POST /partner/report — same trusted-report path as the API-key flow
  * (ReportsController.create with authed=true): address normalization,
  * banned-phone check, dedup, Action logged as "trusted report" attributed
  * to the partner, location auto-validated, normal Zapier webhooks. Two
  * partner-specific relaxations, per the partner form spec:
- *   - photo/video optional — no placeholder is attached when absent (report
- *     media feeds the social-post pipeline; see the note in #create)
+ *   - photo/video optional — nothing enters the media pipeline when absent;
+ *     the reportURL becomes the Street View proxy URL instead (see
+ *     lib/streetview.ts)
  *   - contact info optional
  * waitTime stays required — it is the signal volunteers act on.
  */
@@ -43,7 +46,10 @@ export class PartnerReportsController {
       };
     }
 
-    if (isPartnerEmail(email)) {
+    // Any user on the users table can magic-link in (that IS the partner
+    // list); unknown emails get the same generic success so membership is
+    // never revealed.
+    if (await findPartnerUser(email)) {
       const token = await packPartnerSession(email);
       try {
         await sendPartnerLoginEmail(email, {
@@ -66,9 +72,10 @@ export class PartnerReportsController {
 
   async create(request: Request, response: Response, _next: NextFunction) {
     const token = (request.headers.authorization || "").replace("Bearer ", "");
-    const partnerEmail = await unpackPartnerSession(token);
+    const partner = await unpackPartnerSession(token);
+    const partnerEmail = partner?.email || null;
 
-    if (!partnerEmail) {
+    if (!partner) {
       response.status(401);
       console.log(JSON.stringify({ event: "partner_report_not_authorized" }));
       return { errors: ["Not authorized"] };
@@ -95,13 +102,6 @@ export class PartnerReportsController {
       return { errors };
     }
 
-    // No photo from the partner: no placeholder attachment. An earlier
-    // revision attached a Google Street View image of the location here, but
-    // report media rides the same pipeline feedbot sources social posts
-    // from (collectMedia → uploads), so a dated map capture would get
-    // tweeted as if it were a line photo (Nina, #dev 2026-10-31). The
-    // report just lands media-less; feedbot posts text-only.
-
     if (isValidPhone(contactInfo)) {
       if (await BannedPhoneNumber.isBanned(contactInfo)) {
         return {
@@ -120,6 +120,17 @@ export class PartnerReportsController {
         normalizedAddress,
         extra,
       );
+
+    // Who validated what: the report row carries the FK to the partner.
+    // Set before attachStreetViewUrl's save so it persists in the same write.
+    report.trustedBy = partner;
+
+    // No photo from the partner: their reportURL becomes the Street View
+    // proxy URL (no Upload row — nothing enters the media pipeline, so
+    // feedbot's collectMedia never attaches it and social posts stay
+    // text-only). External reportURL surfaces (Help Scout, #feed-success,
+    // Retool, /deliveries) resolve to a real image of the location.
+    await attachStreetViewUrl(report);
 
     // Trusted-report extras, attributed to the logged-in partner (the
     // API-key flow uses request.body.user instead).

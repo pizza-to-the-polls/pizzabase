@@ -5,11 +5,8 @@ import { Location } from "../entity/Location";
 import { Report } from "../entity/Report";
 import { Upload } from "../entity/Upload";
 import { Action } from "../entity/Action";
-import {
-  packPartnerSession,
-  unpackPartnerSession,
-  PARTNER_EMAILS,
-} from "../lib/partners";
+import { User } from "../entity/User";
+import { packPartnerSession, unpackPartnerSession } from "../lib/partners";
 import { sendPartnerLoginEmail } from "../lib/mailgun";
 
 jest.mock("../lib/validator/geocode");
@@ -18,12 +15,25 @@ jest.mock("../lib/mailgun");
 const controller = new PartnerReportsController();
 const mockedSendPartnerLoginEmail = sendPartnerLoginEmail as jest.Mock;
 
-const validPartnerToken = async (email = PARTNER_EMAILS[0]) =>
+const PARTNER_EMAIL = "nina@polls.pizza";
+
+// The users table IS the partner allowlist now — seed a known user per test.
+const seedPartnerUser = async (email = PARTNER_EMAIL) => {
+  const user = new User();
+  user.email = email;
+  user.firstName = "Nina";
+  user.organization = "Pizza to the Polls";
+  user.admin = true;
+  await user.save();
+  return user;
+};
+
+const validPartnerToken = async (email = PARTNER_EMAIL) =>
   await packPartnerSession(email);
 
 const authorizedRequest = async (
   body: { [key: string]: unknown },
-  email = PARTNER_EMAILS[0],
+  email = PARTNER_EMAIL,
 ) =>
   http_mocks.createRequest({
     method: "POST",
@@ -57,7 +67,8 @@ describe("PartnerReportsController", () => {
       expect(mockedSendPartnerLoginEmail).not.toHaveBeenCalled();
     });
 
-    test("sends a magic link to an allowlisted partner", async () => {
+    test("sends a magic link to a user on the users table", async () => {
+      await seedPartnerUser();
       const request = http_mocks.createRequest({
         method: "POST",
         body: { email: "NINA@polls.pizza" },
@@ -85,7 +96,10 @@ describe("PartnerReportsController", () => {
       expect(token).not.toContain("|");
       expect(token).toMatch(/%7C/i);
       // Round-trip: the endpoint's own verifier accepts the encoded form
-      expect(await unpackPartnerSession(token)).toEqual("nina@polls.pizza");
+      // (and resolves the user row behind it).
+      expect((await unpackPartnerSession(token))?.email).toEqual(
+        "nina@polls.pizza",
+      );
     });
 
     test("returns generic success for a non-allowlisted email, sends nothing", async () => {
@@ -102,12 +116,13 @@ describe("PartnerReportsController", () => {
       expect(mockedSendPartnerLoginEmail).not.toHaveBeenCalled();
     });
 
-    test("surfaces a 500 when Mailgun fails for an allowlisted partner", async () => {
+    test("surfaces a 500 when Mailgun fails for a known partner", async () => {
+      await seedPartnerUser();
       mockedSendPartnerLoginEmail.mockRejectedValue(new Error("mailgun down"));
 
       const request = http_mocks.createRequest({
         method: "POST",
-        body: { email: PARTNER_EMAILS[0] },
+        body: { email: PARTNER_EMAIL },
       });
       const response = http_mocks.createResponse();
 
@@ -153,7 +168,8 @@ describe("PartnerReportsController", () => {
       expect(response.statusCode).toEqual(401);
     });
 
-    test("creates a trusted report with only address + waitTime, auto-validates, logs the partner", async () => {
+    test("creates a trusted report with only address + waitTime, auto-validates, attributes the partner", async () => {
+      const partner = await seedPartnerUser();
       const address = "5335 S Kimbark Ave Chicago IL 60615";
       const request = await authorizedRequest({
         address,
@@ -179,19 +195,29 @@ describe("PartnerReportsController", () => {
 
       const report = await Report.findOne({
         where: { location: { id: location!.id } },
+        relations: ["trustedBy"],
       });
       expect(report).toBeTruthy();
-      // No photo from the partner: validateReport's trusted placeholder URL
-      expect(report!.reportURL).toMatch(/^http:\/\/trusted\.url\//);
+      // No photo from the partner: validateReport's placeholder is swapped
+      // for the Street View proxy URL scoped to this report (no Upload row —
+      // nothing enters the media pipeline).
+      expect(report!.reportURL).toMatch(
+        new RegExp(
+          `^https://base\\.polls\\.pizza/reports/${report!.id}/streetview$`,
+        ),
+      );
       // validateReport's trusted defaults for omitted contact info
       expect(report!.contactInfo).toEqual("trusted@example.com");
       expect(report!.contactRole).toEqual("Trusted");
       expect(report!.waitTime).toEqual("1-2 hours");
+      // Who validated what: the report row carries the FK to the partner.
+      expect(report!.trustedBy!.id).toEqual(partner.id);
+      expect(report!.trustedBy!.email).toEqual(PARTNER_EMAIL);
 
       const action = await Action.findOne({
         where: { entityId: report!.id, entityType: "Report" },
       });
-      expect(action!.userId).toEqual(PARTNER_EMAILS[0]);
+      expect(action!.userId).toEqual(PARTNER_EMAIL);
 
       // No placeholder media: the report lands with no upload attached —
       // report media feeds the social-post pipeline (feedbot), so a
@@ -200,6 +226,7 @@ describe("PartnerReportsController", () => {
     });
 
     test("attaches the partner's uploaded media when provided", async () => {
+      await seedPartnerUser();
       const address = "5335 S Kimbark Ave Chicago IL 60615";
       const [upload] = await Upload.createOrReject("127.0.0.1", {
         fileExt: "jpg",
@@ -237,6 +264,7 @@ describe("PartnerReportsController", () => {
     });
 
     test("does not touch Street View when the partner provided media", async () => {
+      await seedPartnerUser();
       const address = "5335 S Kimbark Ave Chicago IL 60615";
       const request = await authorizedRequest({
         address,
@@ -256,6 +284,7 @@ describe("PartnerReportsController", () => {
     });
 
     test("returns 422 when waitTime is missing", async () => {
+      await seedPartnerUser();
       const request = await authorizedRequest({
         address: "5335 S Kimbark Ave Chicago IL 60615",
       });
@@ -277,6 +306,7 @@ describe("PartnerReportsController", () => {
     });
 
     test("returns 422 for a bad address, with field names only in logs", async () => {
+      await seedPartnerUser();
       const request = await authorizedRequest({
         address: "not-valid",
         waitTime: "1-2 hours",
@@ -298,6 +328,7 @@ describe("PartnerReportsController", () => {
     });
 
     test("accepts contact info when provided (optional fields)", async () => {
+      await seedPartnerUser();
       const address = "5335 S Kimbark Ave Chicago IL 60615";
       const request = await authorizedRequest({
         address,

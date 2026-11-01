@@ -1,9 +1,23 @@
 import { lambdaPost } from "../testLambdaHandler";
 import dbHelper from "../dbHelper";
-import { packPartnerSession, PARTNER_EMAILS } from "../../lib/partners";
+import { packPartnerSession } from "../../lib/partners";
+import { User } from "../../entity/User";
 
 jest.mock("../../lib/validator/geocode");
 jest.mock("../../lib/mailgun");
+
+const PARTNER_EMAIL = "nina@polls.pizza";
+
+// The users table is the partner allowlist — seed a user for authed paths.
+const seedPartnerUser = async (email = PARTNER_EMAIL) => {
+  const user = new User();
+  user.email = email;
+  user.firstName = "Nina";
+  user.organization = "Pizza to the Polls";
+  user.admin = true;
+  await user.save();
+  return user;
+};
 
 describe("Partner reports API (via Lambda handler)", () => {
   afterEach(async () => {
@@ -38,7 +52,8 @@ describe("Partner reports API (via Lambda handler)", () => {
   });
 
   test("POST /partner/report with a partner session creates a trusted report", async () => {
-    const token = await packPartnerSession(PARTNER_EMAILS[0]);
+    await seedPartnerUser();
+    const token = await packPartnerSession(PARTNER_EMAIL);
     const response = await lambdaPost(
       "/partner/report",
       { address: "5335 S Kimbark Ave Chicago IL 60615", waitTime: "1-2 hours" },
@@ -52,7 +67,8 @@ describe("Partner reports API (via Lambda handler)", () => {
   });
 
   test("POST /partner/report with a partner session but no waitTime is 422", async () => {
-    const token = await packPartnerSession(PARTNER_EMAILS[0]);
+    await seedPartnerUser();
+    const token = await packPartnerSession(PARTNER_EMAIL);
     const response = await lambdaPost(
       "/partner/report",
       { address: "5335 S Kimbark Ave Chicago IL 60615" },

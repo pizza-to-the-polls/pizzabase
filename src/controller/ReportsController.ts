@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { Report } from "../entity/Report";
 import { Action } from "../entity/Action";
 import { Upload } from "../entity/Upload";
+import { User } from "../entity/User";
 import { checkAuthorization, findOr404 } from "./helper";
 import { validateReport } from "../lib/validator";
 import { isValidPhone } from "../lib/validator/normalizeContact";
@@ -10,6 +11,11 @@ import { BlockedIp } from "../entity/BlockedIp";
 import { ipHash } from "../lib/ip-blocklist";
 import { zapNewReport, zapNewLocation } from "../lib/zapier";
 import { cdnUrlFromStoredUrl } from "../lib/media-cdn";
+import {
+  StreetViewImage,
+  attachStreetViewUrl,
+  fetchStreetViewImage,
+} from "../lib/streetview";
 
 export class ReportsController {
   async show(request: Request, response: Response, next: NextFunction) {
@@ -114,6 +120,40 @@ export class ReportsController {
     };
   }
 
+  /**
+   * Street View proxy. GET /reports/:id/streetview
+   *
+   * Serves a Google Street View image of the report's location, fetched
+   * server-side so GOOGLE_MAPS_KEY never reaches the client. This is the
+   * URL persisted as reports.url for trusted submissions without media
+   * (see lib/streetview.ts) — public on purpose: every external surface
+   * that links reportURL (Help Scout, #feed-success, Retool, the public
+   * /deliveries and /activity pages) must resolve without credentials.
+   */
+  async streetview(request: Request, response: Response, next: NextFunction) {
+    const report: Report = await findOr404(
+      await Report.findOne({ where: { id: Number(request.params.id || "") } }),
+      response,
+      next,
+    );
+    if (!report) return;
+
+    const { lat, lng } = report.location;
+    const image: StreetViewImage | null = await fetchStreetViewImage(lat, lng);
+
+    if (!image) {
+      response.status(404);
+      return { errors: ["No Street View imagery for this location"] };
+    }
+
+    // Imagery for a fixed address is effectively immutable — let browsers
+    // and any fronting CDN hold it for a day instead of re-fetching Google.
+    response.set("Content-Type", image.contentType);
+    response.set("Cache-Control", "public, max-age=86400");
+    response.send(image.bytes);
+    return null;
+  }
+
   async index(request: Request, _response: Response, _next: NextFunction) {
     const limit = Number(request.query.limit || 100);
     const take = limit < 100 ? limit : 100;
@@ -214,7 +254,21 @@ export class ReportsController {
         extra,
       );
 
+    // Trusted submissions without media get a Street View proxy URL as
+    // their public reportURL (placeholder swaps in lib/streetview.ts).
+    // Before the zap fires, so the Slack/HS payload carries the live link.
+    await attachStreetViewUrl(report);
+
     if (authed) {
+      // Who validated what: match body.user (an email, e.g. Retool's
+      // "validated by" column) to a users row; the FK lands on the report.
+      // No match (arbitrary string) leaves it null — Action.log still
+      // records the raw string.
+      const trustedUser = await User.findUserByEmail(request.body?.user);
+      if (trustedUser) {
+        report.trustedBy = trustedUser;
+        await report.save();
+      }
       await Action.log(report, "trusted report", request.body?.user);
       await report.location.validate(request.body?.user);
     }

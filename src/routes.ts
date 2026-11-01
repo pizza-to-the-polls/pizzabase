@@ -17,6 +17,7 @@ import { TwilioInboundController } from "./controller/TwilioInboundController";
 import { FeedObservationsController } from "./controller/FeedObservationsController";
 import { WaitTimeSourcesController } from "./controller/WaitTimeSourcesController";
 import { PartnerReportsController } from "./controller/PartnerReportsController";
+import { UsersController } from "./controller/UsersController";
 
 export const Routes = [
   {
@@ -123,6 +124,36 @@ export const Routes = [
   },
   {
     method: "get",
+    route: "/users/",
+    controller: UsersController,
+    action: "index",
+  },
+  {
+    method: "get",
+    route: "/users/:id",
+    controller: UsersController,
+    action: "show",
+  },
+  {
+    method: "post",
+    route: "/users",
+    controller: UsersController,
+    action: "create",
+  },
+  {
+    method: "put",
+    route: "/users/:id",
+    controller: UsersController,
+    action: "update",
+  },
+  {
+    method: "delete",
+    route: "/users/:id",
+    controller: UsersController,
+    action: "remove",
+  },
+  {
+    method: "get",
     route: "/reports/",
     controller: ReportsController,
     action: "index",
@@ -132,6 +163,12 @@ export const Routes = [
     route: "/reports/:idOrAddress/media",
     controller: ReportsController,
     action: "media",
+  },
+  {
+    method: "get",
+    route: "/reports/:id/streetview",
+    controller: ReportsController,
+    action: "streetview",
   },
   {
     method: "get",

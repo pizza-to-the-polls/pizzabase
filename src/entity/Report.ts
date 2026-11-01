@@ -17,6 +17,7 @@ import { Location } from "./Location";
 import { Order } from "./Order";
 import { Truck } from "./Truck";
 import { Upload } from "./Upload";
+import { User } from "./User";
 import { REPORT_DECAY } from "./constants";
 import { NormalAddress } from "../lib/validator";
 import { phoneVariants } from "../lib/validator/normalizeContact";
@@ -91,6 +92,17 @@ export class Report extends BaseEntity {
   @Index()
   upload: Upload | null;
 
+  /**
+   * Which known user submitted/validated this trusted report (JWT partner
+   * flow; API-key flow when body.user matches a users.email). Nullable:
+   * public reports and pre-attribution legacy rows carry null. Kept out of
+   * the public asJSON on purpose — attribution is internal.
+   */
+  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @JoinColumn({ name: "trusted_by" })
+  @Index()
+  trustedBy: User | null;
+
   @Column({
     name: "skipped_at",
     type: "timestamp with time zone",
@@ -128,6 +140,10 @@ export class Report extends BaseEntity {
       contactLastName,
       contactRole,
       canDistribute: canDistribute > 0,
+      // Who validated/submitted this trusted report (users table FK).
+      // Rides the zap payload so Slack/Help Scout decorations can name
+      // the person/org; null on public and pre-attribution rows.
+      trustedBy: this.trustedBy ? this.trustedBy.asJSON() : null,
     };
   }
 

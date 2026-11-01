@@ -1192,3 +1192,129 @@ describe("#media", () => {
     expect(byId.get(image.id).cdnUrl).toContain("image.webp");
   });
 });
+
+describe("#streetview", () => {
+  const ADDRESS = {
+    latitude: 41.79907,
+    longitude: -87.58413,
+    fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+    address: "5335 S Kimbark Ave",
+    city: "Chicago",
+    state: "IL",
+    zip: "60615",
+  };
+
+  let originalKey: string | undefined;
+
+  beforeAll(() => {
+    originalKey = process.env.GOOGLE_MAPS_KEY;
+    process.env.GOOGLE_MAPS_KEY = "test-streetview-key";
+  });
+
+  afterAll(() => {
+    if (originalKey === undefined) {
+      delete process.env.GOOGLE_MAPS_KEY;
+    } else {
+      process.env.GOOGLE_MAPS_KEY = originalKey;
+    }
+  });
+
+  const makeReport = async (): Promise<Report> => {
+    const [report] = await Report.createNewReport(
+      "555-234-2345",
+      "http://twitter.com/test/status/999",
+      ADDRESS,
+    );
+    return report;
+  };
+
+  const get = (id: number | string) => {
+    const request = http_mocks.createRequest({ method: "GET" });
+    request.params = { id: String(id) };
+    return { request, response: http_mocks.createResponse() };
+  };
+
+  test("404s for an unknown report id", async () => {
+    const { request, response } = get(9999999);
+    // findOr404 sends the 404 itself; the action returns undefined so
+    // app.ts skips the JSON res.send.
+    const body = await controller.streetview(
+      request,
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(404);
+    expect(body).toBeUndefined();
+  });
+
+  test("proxies the Street View image for the report's location, key stays server-side", async () => {
+    const report = await makeReport();
+
+    // Larger than the tiny-body guard in fetchStreetViewImage (error
+    // responses are < 1KB; real imagery is not).
+    const imageBytes = new Uint8Array(2048);
+    imageBytes[0] = 0xff;
+    imageBytes[1] = 0xd8;
+    const fetchMock = global.fetch as jest.Mock;
+    fetchMock.mockResolvedValueOnce({
+      ok: true,
+      status: 200,
+      headers: { get: () => "image/jpeg" },
+      arrayBuffer: () => Promise.resolve(imageBytes.buffer),
+    });
+
+    const { request, response } = get(report.id);
+    const result = await controller.streetview(
+      request,
+      response,
+      () => undefined,
+    );
+
+    // Binary responses return null (app.ts skips res.send) and write to the
+    // response directly.
+    expect(result).toBeNull();
+    expect(response.statusCode).toEqual(200);
+    expect(response.getHeader("Content-Type")).toEqual("image/jpeg");
+    expect(response.getHeader("Cache-Control")).toContain("max-age=86400");
+
+    // The Google call carries the report's own location, server-side key,
+    // and error-code semantics — and nothing else.
+    const [url] = fetchMock.mock.calls[fetchMock.mock.calls.length - 1];
+    expect(String(url)).toContain(
+      "https://maps.googleapis.com/maps/api/streetview?",
+    );
+    expect(String(url)).toContain(
+      `location=${encodeURIComponent("41.79907,-87.58413")}`,
+    );
+    expect(String(url)).toContain("key=test-streetview-key");
+    expect(String(url)).toContain("return-error-code=true");
+    expect(String(url)).not.toContain("/reports/");
+
+    // The response body carries the proxied bytes (JPEG SOI marker up front).
+    const sent = Buffer.from((response as any)._getData()).toString("hex");
+    expect(sent.startsWith("ffd8")).toBe(true);
+  });
+
+  test("404s when Street View has no imagery (Google non-200)", async () => {
+    const report = await makeReport();
+
+    const fetchMock = global.fetch as jest.Mock;
+    fetchMock.mockResolvedValueOnce({
+      ok: false,
+      status: 404,
+      headers: { get: () => null },
+      arrayBuffer: () => Promise.resolve(new ArrayBuffer(0)),
+    });
+
+    const { request, response } = get(report.id);
+    const body = (await controller.streetview(
+      request,
+      response,
+      () => undefined,
+    )) as { errors?: string[] };
+
+    expect(response.statusCode).toEqual(404);
+    expect(body?.errors).toBeDefined();
+  });
+});
