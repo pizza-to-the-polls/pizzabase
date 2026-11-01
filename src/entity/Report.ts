@@ -98,7 +98,17 @@ export class Report extends BaseEntity {
    * public reports and pre-attribution legacy rows carry null. Kept out of
    * the public asJSON on purpose — attribution is internal.
    */
-  @ManyToOne(() => User, { nullable: true, onDelete: "SET NULL" })
+  @ManyToOne(() => User, {
+    nullable: true,
+    eager: true,
+    onDelete: "SET NULL",
+    // Eager like location/order/truck: asJSONPrivate serializes trustedBy on
+    // every read path (Retool location endpoint, reports index, media
+    // viewer), not just the submit-time in-memory object that feeds the zap
+    // payload. Without eager, bare loads serialize the set FK as null
+    // (seen on staging: GET /locations/:id showed trustedBy null while the
+    // column held the right user id).
+  })
   @JoinColumn({ name: "trusted_by" })
   @Index()
   trustedBy: User | null;
