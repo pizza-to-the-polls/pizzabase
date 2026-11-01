@@ -1,8 +1,10 @@
 import { NextFunction, Request, Response } from "express";
 import { S3Client } from "@aws-sdk/client-s3";
+import { MoreThan } from "typeorm";
 import { Upload } from "../entity/Upload";
+import { UPLOAD_DECAY, UPLOAD_MAX } from "../entity/constants";
 import { validateUpload } from "../lib/validator";
-import { presignUpload } from "../lib/aws";
+import { presignUpload, rawObjectExists } from "../lib/aws";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import { BlockedIp } from "../entity/BlockedIp";
 import { ipHash } from "../lib/ip-blocklist";
@@ -74,12 +76,75 @@ export class UploadsController {
       );
 
       if (exists) {
-        return {
-          filePath: upload.filePath,
-          id: upload.id,
-          presigned: { url: null, fields: {} },
-          isDuplicate: true,
-        };
+        // BUG-032: a matching fileHash used to short-circuit the upload —
+        // but after a failed browser-to-S3 POST (flaky cellular, ~5% of web
+        // uploads) the row exists with NO bytes in the raw bucket, and the
+        // "duplicate" silently re-linked a dead object (404 photos on live
+        // reports). Before short-circuiting, verify the raw object actually
+        // exists AND the row isn't in a failed state: a `failed` row means
+        // the media pipeline saw bad bytes (truncated/0-byte body), so the
+        // only cure is re-POSTing the caller's local copy.
+        //
+        // The existence check only runs for rows the pipeline hasn't already
+        // rejected (ready/processing); a failed row re-presigns without
+        // consulting S3 at all. rawObjectExists is fail-open by design, but
+        // belt-and-braces: a rejection here must never strand the row, so it
+        // is treated the same as "object missing" → re-presign.
+        let objectPresent = false;
+        if (
+          upload.mediaStatus === "ready" ||
+          upload.mediaStatus === "processing"
+        ) {
+          try {
+            objectPresent = await rawObjectExists(upload);
+          } catch {
+            objectPresent = false;
+          }
+        }
+        const canShortCircuit = objectPresent;
+
+        if (canShortCircuit) {
+          return {
+            filePath: upload.filePath,
+            id: upload.id,
+            presigned: { url: null, fields: {} },
+            isDuplicate: true,
+          };
+        }
+
+        // Raw object missing (HeadObject 404), HeadObject errored
+        // (fail open — a redundant overwrite of identical bytes is
+        // idempotent and far better than stranding), or row previously
+        // failed: treat this as a genuine re-upload of the same file.
+        //
+        // Rate-limit the retry the same way a fresh upload is limited
+        // (product clarification on #374): a user hammering a rejected
+        // photo must not loop media pipeline + moderation + transcode.
+        const recentCount = await Upload.count({
+          where: {
+            ipAddress: request.ip,
+            createdAt: MoreThan(new Date(Number(new Date()) - UPLOAD_DECAY)),
+          },
+        });
+        if (recentCount + 1 > UPLOAD_MAX) {
+          response.status(429);
+          return {
+            errors: {
+              fileName:
+                "Whoops! You've had too many uploads recently - slow your roll",
+            },
+          };
+        }
+
+        // Reset the row for a fresh attempt, then re-issue the presigned
+        // POST for the SAME key: presignUpload works off filePath/id, which
+        // are already populated, and the client re-POSTs identical bytes.
+        // @UpdateDateColumn bumps updatedAt automatically on save().
+        upload.mediaStatus = "processing";
+        upload.failureReason = null;
+        await upload.save();
+
+        return await presignUpload(upload);
       } else {
         // The feed zap fires when the media pipeline finishes (onMediaFormat /
         // onMediaConvertComplete) — creation-time links pointed at a private

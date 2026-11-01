@@ -142,6 +142,10 @@ describe("#create", () => {
     upload.filePath = "dumb.gif";
     upload.location = location;
     upload.fileHash = "same";
+    // BUG-032: the duplicate short-circuit now additionally requires the row
+    // to be in a pipeline state and the raw S3 object to exist. The mock
+    // `rawObjectExists` defaults to true (object present).
+    upload.mediaStatus = "processing";
     await upload.save();
 
     const body = await controller.create(
@@ -160,6 +164,257 @@ describe("#create", () => {
     expect((body as any).isDuplicate).toEqual(true);
     expect((body as any).id).toEqual(upload.id);
     expect((body as any).filePath).toEqual(upload.filePath);
+  });
+
+  // -----------------------------------------------------------------------
+  // BUG-032: duplicate short-circuit must verify the raw S3 object exists
+  // (and the row isn't failed) before skipping the re-upload.
+  // -----------------------------------------------------------------------
+
+  /**
+   * Helper: insert an upload row with the given hash/status so a subsequent
+   * POST with the same fileHash hits the duplicate branch.
+   */
+  async function createDuplicateFixture(
+    ip: string,
+    fileHash: string,
+    mediaStatus: Upload["mediaStatus"],
+    failureReason: string | null = null,
+  ): Promise<Upload> {
+    // getOrCreate (not create) — tests that already created a location at
+    // this address must not trip the unique constraint on full_address.
+    const [location] = await Location.getOrCreateFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    const upload = new Upload();
+    upload.ipAddress = ip;
+    upload.filePath = `chicago-il-${fileHash}.jpg`;
+    upload.rawFilePath = upload.filePath;
+    upload.rawBucket = "raw.polls.pizza";
+    upload.location = location;
+    upload.fileHash = fileHash;
+    upload.mediaStatus = mediaStatus;
+    upload.failureReason = failureReason;
+    await upload.save();
+    return upload;
+  }
+
+  it("short-circuits as duplicate when the raw object exists and row is processing", async () => {
+    const ip = "127.0.0.1";
+    const upload = await createDuplicateFixture(ip, "dup-ok", "processing");
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip,
+        method: "POST",
+        body: {
+          address: "1234 Street City ST 12345",
+          fileName: "dumb.jpg",
+          fileHash: "dup-ok",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    // Unchanged duplicate behavior: no presigned POST, client skips the S3 upload.
+    expect((body as any).isDuplicate).toEqual(true);
+    expect((body as any).presigned).toEqual({ url: null, fields: {} });
+    expect((body as any).id).toEqual(upload.id);
+    expect((body as any).filePath).toEqual(upload.filePath);
+
+    // Row untouched.
+    const reloaded = await Upload.findOne({ where: { id: upload.id } });
+    expect(reloaded!.mediaStatus).toEqual("processing");
+  });
+
+  it("re-presigns when the raw object is missing (failed browser POST stranded the row)", async () => {
+    const aws = require("../lib/aws");
+    const ip = "127.0.0.1";
+    const upload = await createDuplicateFixture(
+      ip,
+      "dup-missing",
+      "processing",
+    );
+    // HeadObject 404: the bytes never landed.
+    aws.rawObjectExists.mockResolvedValueOnce(false);
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip,
+        method: "POST",
+        body: {
+          address: "1234 Street City ST 12345",
+          fileName: "dumb.jpg",
+          fileHash: "dup-missing",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    // Client must re-POST the bytes: real presigned payload for the SAME row.
+    expect((body as any).isDuplicate).toEqual(false);
+    expect((body as any).id).toEqual(upload.id);
+    expect((body as any).filePath).toEqual(upload.filePath);
+    expect((body as any).presigned.url).toEqual(
+      "https://s3.bucket.com/launchpad",
+    );
+    expect((body as any).presigned.fields.key).toEqual(upload.filePath);
+
+    // Row reset for a fresh attempt.
+    const reloaded = await Upload.findOne({ where: { id: upload.id } });
+    expect(reloaded!.mediaStatus).toEqual("processing");
+    expect(reloaded!.failureReason).toBeNull();
+  });
+
+  it("fails open to a re-presign when HeadObject errors (non-404)", async () => {
+    const aws = require("../lib/aws");
+    const ip = "127.0.0.1";
+    const upload = await createDuplicateFixture(ip, "dup-err", "processing");
+    // A 403/network/5xx HeadObject failure must NOT strand the row —
+    // fail open toward re-upload.
+    aws.rawObjectExists.mockRejectedValueOnce(
+      Object.assign(new Error("Access Denied"), {
+        name: "AccessDenied",
+        $metadata: { httpStatusCode: 403 },
+      }),
+    );
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip,
+        method: "POST",
+        body: {
+          address: "1234 Street City ST 12345",
+          fileName: "dumb.jpg",
+          fileHash: "dup-err",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    expect((body as any).isDuplicate).toEqual(false);
+    expect((body as any).id).toEqual(upload.id);
+    expect((body as any).presigned.url).toEqual(
+      "https://s3.bucket.com/launchpad",
+    );
+
+    const reloaded = await Upload.findOne({ where: { id: upload.id } });
+    expect(reloaded!.mediaStatus).toEqual("processing");
+    expect(reloaded!.failureReason).toBeNull();
+  });
+
+  it("re-presigns a previously failed row without consulting S3 (pipeline saw bad bytes)", async () => {
+    const aws = require("../lib/aws");
+    const ip = "127.0.0.1";
+    const upload = await createDuplicateFixture(
+      ip,
+      "dup-failed",
+      "failed",
+      "VipsJpeg: premature end of JPEG image",
+    );
+
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip,
+        method: "POST",
+        body: {
+          address: "1234 Street City ST 12345",
+          fileName: "dumb.jpg",
+          fileHash: "dup-failed",
+        },
+      }),
+      http_mocks.createResponse(),
+      () => undefined,
+    );
+
+    // A failed row means the pipeline saw bad bytes — even a present object
+    // must not short-circuit. Re-POSTing the caller's local copy delivers
+    // complete bytes and is idempotent.
+    expect((body as any).isDuplicate).toEqual(false);
+    expect((body as any).id).toEqual(upload.id);
+    expect((body as any).presigned.url).toEqual(
+      "https://s3.bucket.com/launchpad",
+    );
+
+    // The mediaStatus check short-circuits before the S3 HeadObject.
+    expect(aws.rawObjectExists).not.toHaveBeenCalled();
+
+    const reloaded = await Upload.findOne({ where: { id: upload.id } });
+    expect(reloaded!.mediaStatus).toEqual("processing");
+    expect(reloaded!.failureReason).toBeNull();
+  });
+
+  it("rate-limits a duplicate re-upload like a fresh upload", async () => {
+    const ip = "127.0.0.2";
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    // Five fresh rows plus the stranded duplicate = 6 uploads in the window.
+    await Promise.all(
+      Array(5)
+        .fill(null)
+        .map(async (_, i) => {
+          const upload = new Upload();
+          upload.ipAddress = ip;
+          upload.filePath = `${i}-retry.png`;
+          upload.location = location;
+          upload.fileHash = `retry-${i}`;
+          await upload.save();
+        }),
+    );
+    const stranded = await createDuplicateFixture(
+      ip,
+      "retry-stranded",
+      "failed",
+      "Input Buffer is empty",
+    );
+    // NOTE: no rawObjectExists mock here — the stranded row is "failed", so
+    // the controller skips the S3 check entirely (short-circuits on
+    // mediaStatus before HeadObject).
+
+    const response = http_mocks.createResponse();
+    const body = await controller.create(
+      http_mocks.createRequest({
+        ip,
+        method: "POST",
+        body: {
+          address: "1234 Street City ST 12345",
+          fileName: "dumb.jpg",
+          fileHash: "retry-stranded",
+        },
+      }),
+      response,
+      () => undefined,
+    );
+
+    expect(response.statusCode).toEqual(429);
+    expect(body).toEqual({
+      errors: {
+        fileName:
+          "Whoops! You've had too many uploads recently - slow your roll",
+      },
+    });
+
+    // A 429 must not have disturbed the row — it stays failed and
+    // re-presignable once the decay window passes.
+    const reloaded = await Upload.findOne({ where: { id: stranded.id } });
+    expect(reloaded!.mediaStatus).toEqual("failed");
+    expect(reloaded!.failureReason).toEqual("Input Buffer is empty");
   });
 
   it("can create an upload on an existing location", async () => {
