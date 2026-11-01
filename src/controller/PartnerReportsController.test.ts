@@ -11,15 +11,12 @@ import {
   PARTNER_EMAILS,
 } from "../lib/partners";
 import { sendPartnerLoginEmail } from "../lib/mailgun";
-import { createStreetViewUpload } from "../lib/streetview";
 
 jest.mock("../lib/validator/geocode");
 jest.mock("../lib/mailgun");
-jest.mock("../lib/streetview");
 
 const controller = new PartnerReportsController();
 const mockedSendPartnerLoginEmail = sendPartnerLoginEmail as jest.Mock;
-const mockedCreateStreetViewUpload = createStreetViewUpload as jest.Mock;
 
 const validPartnerToken = async (email = PARTNER_EMAILS[0]) =>
   await packPartnerSession(email);
@@ -40,7 +37,6 @@ describe("PartnerReportsController", () => {
   beforeEach(() => {
     consoleLogSpy = jest.spyOn(console, "log").mockImplementation(() => {});
     mockedSendPartnerLoginEmail.mockReset().mockResolvedValue(undefined);
-    mockedCreateStreetViewUpload.mockReset().mockResolvedValue(null);
   });
 
   afterEach(() => {
@@ -139,7 +135,6 @@ describe("PartnerReportsController", () => {
 
       expect(response.statusCode).toEqual(401);
       expect(body).toEqual({ errors: ["Not authorized"] });
-      expect(mockedCreateStreetViewUpload).not.toHaveBeenCalled();
     });
 
     test("returns 401 for a garbage token", async () => {
@@ -198,13 +193,13 @@ describe("PartnerReportsController", () => {
       });
       expect(action!.userId).toEqual(PARTNER_EMAILS[0]);
 
-      // Street View fallback attempted (mock resolves null here)
-      expect(mockedCreateStreetViewUpload).toHaveBeenCalledTimes(1);
-      const [svAddress] = mockedCreateStreetViewUpload.mock.calls[0];
-      expect(svAddress.fullAddress).toEqual(address);
+      // No placeholder media: the report lands with no upload attached —
+      // report media feeds the social-post pipeline (feedbot), so a
+      // placeholder image would get tweeted as if it were a line photo.
+      expect(report!.upload).toBeFalsy();
     });
 
-    test("links the Street View upload when no photo is provided", async () => {
+    test("attaches the partner's uploaded media when provided", async () => {
       const address = "5335 S Kimbark Ave Chicago IL 60615";
       const [upload] = await Upload.createOrReject("127.0.0.1", {
         fileExt: "jpg",
@@ -219,11 +214,12 @@ describe("PartnerReportsController", () => {
         },
         fileHash: "aabbccdd",
       });
-      mockedCreateStreetViewUpload.mockResolvedValue(upload);
 
       const request = await authorizedRequest({
         address,
         waitTime: "3+ hours",
+        url: `https://base-next.polls.pizza/uploads/${upload.filePath.split("/").pop()}`,
+        uploadId: upload.id,
       });
       const response = http_mocks.createResponse();
 
@@ -253,7 +249,6 @@ describe("PartnerReportsController", () => {
       await controller.create(request, response, () => undefined);
 
       expect(response.statusCode).toEqual(200);
-      expect(mockedCreateStreetViewUpload).not.toHaveBeenCalled();
       const report = await Report.findOne({
         where: { reportURL: "https://twitter.com/test/status/456" },
       });

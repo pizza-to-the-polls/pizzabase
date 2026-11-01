@@ -4,7 +4,6 @@ import { packPartnerSession, PARTNER_EMAILS } from "../../lib/partners";
 
 jest.mock("../../lib/validator/geocode");
 jest.mock("../../lib/mailgun");
-jest.mock("../../lib/streetview");
 
 describe("Partner reports API (via Lambda handler)", () => {
   afterEach(async () => {

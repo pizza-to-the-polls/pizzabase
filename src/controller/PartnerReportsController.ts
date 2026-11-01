@@ -14,7 +14,6 @@ import {
   unpackPartnerSession,
 } from "../lib/partners";
 import { sendPartnerLoginEmail } from "../lib/mailgun";
-import { createStreetViewUpload } from "../lib/streetview";
 
 /**
  * Trusted partner report flow (staging rollout, 2026-10-30).
@@ -28,8 +27,8 @@ import { createStreetViewUpload } from "../lib/streetview";
  * banned-phone check, dedup, Action logged as "trusted report" attributed
  * to the partner, location auto-validated, normal Zapier webhooks. Two
  * partner-specific relaxations, per the partner form spec:
- *   - photo/video optional — when absent, a Google Street View image of
- *     the address is pulled through the normal media pipeline instead
+ *   - photo/video optional — no placeholder is attached when absent (report
+ *     media feeds the social-post pipeline; see the note in #create)
  *   - contact info optional
  * waitTime stays required — it is the signal volunteers act on.
  */
@@ -96,19 +95,12 @@ export class PartnerReportsController {
       return { errors };
     }
 
-    // No photo from the partner: pull a Street View image of the location
-    // through the normal media pipeline so the record still has media.
-    // Failures fall back to the plain trusted-report flow.
-    if (!request.body?.url && !request.body?.uploadId) {
-      try {
-        extra.upload = await createStreetViewUpload(
-          normalizedAddress,
-          request.ip,
-        );
-      } catch (e) {
-        notifyBugsnag(e as Error);
-      }
-    }
+    // No photo from the partner: no placeholder attachment. An earlier
+    // revision attached a Google Street View image of the location here, but
+    // report media rides the same pipeline feedbot sources social posts
+    // from (collectMedia → uploads), so a dated map capture would get
+    // tweeted as if it were a line photo (Nina, #dev 2026-10-31). The
+    // report just lands media-less; feedbot posts text-only.
 
     if (isValidPhone(contactInfo)) {
       if (await BannedPhoneNumber.isBanned(contactInfo)) {
