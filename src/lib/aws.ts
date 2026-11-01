@@ -1,4 +1,4 @@
-import { S3Client } from "@aws-sdk/client-s3";
+import { S3Client, HeadObjectCommand } from "@aws-sdk/client-s3";
 import { createPresignedPost } from "@aws-sdk/s3-presigned-post";
 import { Upload } from "../entity/Upload";
 import { UPLOAD_CONTENT_TYPES } from "./validator";
@@ -55,4 +55,30 @@ export const presignUpload = async (upload: Upload): Promise<Presigned> => {
     filePath,
     id,
   };
+};
+
+/**
+ * BUG-032: verifies the raw S3 object for an upload actually exists before
+ * the duplicate-upload short-circuit may skip a re-POST. A matching fileHash
+ * proves nothing about the bytes when the browser's direct-to-S3 POST failed
+ * (flaky cellular), so the controller must HeadObject the raw key first.
+ *
+ * Fail-open semantics: any HeadObject failure — 404 (object missing) or any
+ * non-404 error (403/network/5xx) — returns false so the caller re-issues a
+ * presigned POST. Re-POSTing identical bytes to the same key is idempotent,
+ * so a redundant overwrite is far safer than stranding a bucket-less row.
+ */
+export const rawObjectExists = async (upload: Upload): Promise<boolean> => {
+  // Legacy rows have no rawBucket/rawFilePath recorded — fall back to the
+  // configured raw bucket and the original filePath key.
+  const bucket = upload.rawBucket || RAW_UPLOADS_BUCKET;
+  const key = upload.rawFilePath || upload.filePath;
+  try {
+    await s3Client.send(
+      new HeadObjectCommand({ Bucket: bucket, Key: key }) as any,
+    );
+    return true;
+  } catch {
+    return false;
+  }
 };
