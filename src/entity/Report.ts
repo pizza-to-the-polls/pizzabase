@@ -261,6 +261,7 @@ export class Report extends BaseEntity {
       contactRole,
       canDistribute,
       upload,
+      skippedAt,
     }: {
       waitTime?: string;
       canDistribute?: boolean;
@@ -268,6 +269,13 @@ export class Report extends BaseEntity {
       contactLastName?: string;
       contactRole?: string;
       upload?: Upload | null;
+      /**
+       * Pre-set skip (SB 22: Georgia reports are stored but auto-skipped at
+       * creation). Setting it before the INSERT means the row is never live
+       * — no window where a skipped report presents as an open line, so no
+       * order or volunteer announcement can attach to it.
+       */
+      skippedAt?: Date | null;
     } = {},
   ): Promise<
     [
@@ -290,7 +298,7 @@ export class Report extends BaseEntity {
     report.location = location;
 
     const truck = await location.activeTruck();
-    if (truck) report.truck = truck;
+    if (truck && !skippedAt) report.truck = truck;
 
     const willReceive = !(await location.hasDistributor()) && !!canDistribute;
     report.canDistribute = canDistribute ? 1 : 0;
@@ -299,13 +307,17 @@ export class Report extends BaseEntity {
     report.contactLastName = contactLastName ?? null;
     report.contactRole = contactRole ?? null;
     if (upload) report.upload = upload;
+    // Pre-skipped reports (Georgia/SB 22) are never live: inherit neither
+    // the prior order nor the truck, so nothing links the skipped row to a
+    // delivery and the report stays an isolated data point.
+    report.skippedAt = skippedAt ?? null;
 
     const reportExists =
       !isNewLocation &&
       (await this.findOne({
         where: { reportURL, location: { id: location.id } },
       }));
-    if (reportExists) report.order = reportExists.order;
+    if (reportExists && !skippedAt) report.order = reportExists.order;
 
     await report.save();
 

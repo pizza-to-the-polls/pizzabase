@@ -5,7 +5,15 @@ import { Action } from "../entity/Action";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { validateReport } from "../lib/validator";
 import { isValidPhone } from "../lib/validator/normalizeContact";
-import { zapNewReport, zapNewLocation } from "../lib/zapier";
+import { zapNewReport, zapNewLocation, zapSkipReport } from "../lib/zapier";
+import {
+  applyAutoSkip,
+  autoSkipPayload,
+  evaluateAutoSkip,
+  georgiaAutoSkipDecision,
+  isAutoSkipEnabled,
+  AutoSkipDecision,
+} from "../lib/auto-skip";
 import { notifyBugsnag } from "../lib/notifyBugsnag";
 import {
   findPartnerUser,
@@ -114,12 +122,15 @@ export class PartnerReportsController {
     }
 
     const [report, { alreadyOrdered, isUnique, hasTruck, willReceive }] =
-      await Report.createNewReport(
-        contactInfo,
-        reportURL,
-        normalizedAddress,
-        extra,
-      );
+      await Report.createNewReport(contactInfo, reportURL, normalizedAddress, {
+        ...extra,
+        // SB 22: Georgia reports are accepted and stored but auto-skipped at
+        // creation — skippedAt lands on the INSERT itself, so the report is
+        // never live, whatever the partner's authorization level.
+        ...(georgiaAutoSkipDecision(normalizedAddress)
+          ? { skippedAt: new Date() }
+          : {}),
+      });
 
     // Who validated what: the report row carries the FK to the partner.
     // Set before attachStreetViewUrl's save so it persists in the same write.
@@ -137,7 +148,25 @@ export class PartnerReportsController {
     await Action.log(report, "trusted report", partnerEmail);
     await report.location.validate(partnerEmail);
 
-    if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
+    // Auto-skip (no volunteer triage needed) when any condition holds:
+    // Georgia (SB 22 compliance — unconditional, not flag-gated; partner
+    // authorization must not unskip), pizza ordered for this location within
+    // the last hour, or the reported line under an hour. The heuristics are
+    // flag-gated (AUTO_SKIP_REPORTS).
+    const georgiaSkip = georgiaAutoSkipDecision(normalizedAddress);
+    let autoSkip: AutoSkipDecision | null = georgiaSkip;
+    if (!autoSkip && isAutoSkipEnabled() && !hasTruck && !alreadyOrdered) {
+      autoSkip = await evaluateAutoSkip(report);
+    }
+
+    if (autoSkip) {
+      await applyAutoSkip(report, autoSkip);
+      // Partner contacts are placeholder emails — isValidPhone is false, so
+      // no submitter text fires here. Kept for parity with the public path.
+      if (isValidPhone(report.contactInfo)) {
+        await zapSkipReport(report, autoSkipPayload(autoSkip));
+      }
+    } else if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
@@ -148,7 +177,8 @@ export class PartnerReportsController {
     return {
       address: report.location.fullAddress,
       hasTruck,
-      willReceive,
+      // An auto-skipped report will not receive an order.
+      willReceive: autoSkip ? false : willReceive,
       alreadyOrdered,
     };
   }

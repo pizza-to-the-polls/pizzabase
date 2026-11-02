@@ -225,6 +225,53 @@ describe("PartnerReportsController", () => {
       expect(report!.upload).toBeFalsy();
     });
 
+    test("Georgia address creates and auto-skips under partner auth (SB 22)", async () => {
+      await seedPartnerUser();
+      const address = "206 Washington St SW Atlanta GA 30334";
+      const request = await authorizedRequest({
+        address,
+        waitTime: "1-2 hours",
+      });
+      const response = http_mocks.createResponse();
+
+      const body = await controller.create(request, response, () => undefined);
+
+      // Partner authorization may create the report but never unskips it.
+      expect(response.statusCode).toEqual(200);
+      expect(body).toEqual({
+        address,
+        hasTruck: false,
+        willReceive: false,
+        alreadyOrdered: false,
+      });
+
+      const location = await Location.findOne({
+        where: { fullAddress: address },
+      });
+      expect(location).toBeTruthy();
+
+      const report = await Report.findOne({
+        where: { location: { id: location.id } },
+      });
+      expect(report).toBeTruthy();
+      expect(report.skippedAt).toBeTruthy();
+      expect(report.order).toBeFalsy();
+      expect(report.truck).toBeFalsy();
+
+      const open = await Report.openReports(location);
+      expect(open.map((r) => r.id)).not.toContain(report.id);
+
+      const action = await Action.findOne({
+        where: { entityId: report.id, entityType: "Report" },
+        order: { id: "DESC" },
+      });
+      expect(action.actionType).toEqual("auto-skipped (georgia)");
+
+      // No volunteer zaps — and no skip Zap either: the partner's contact is
+      // the trusted placeholder email, not a phone to text.
+      expect((global.fetch as jest.Mock).mock.calls.length).toBe(0);
+    });
+
     test("attaches the partner's uploaded media when provided", async () => {
       await seedPartnerUser();
       const address = "5335 S Kimbark Ave Chicago IL 60615";

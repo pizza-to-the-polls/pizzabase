@@ -11,7 +11,6 @@ import {
   ADDRESS_ERROR,
   URL_ERROR,
   CONTACT_ERROR,
-  GEORGIA_ERROR,
 } from "../lib/validator/constants";
 
 import { buildTestData } from "../tests/factories";
@@ -99,7 +98,7 @@ describe("#create", () => {
     );
   });
 
-  test("Rejects Georgia line reports with 422, citing SB 22", async () => {
+  test("Georgia line reports are created but auto-skipped (SB 22)", async () => {
     const url = "http://twitter.com/something/status/123";
     const address = "206 Washington St SW Atlanta GA 30334";
 
@@ -118,23 +117,98 @@ describe("#create", () => {
 
     const body = await controller.create(request, response, () => undefined);
 
-    expect(body).toEqual({ errors: { address: GEORGIA_ERROR } });
-    expect(response.statusCode).toEqual(422);
+    // Accepted and stored — the 422 went away with #392. But SB 22 means it
+    // must never reach the volunteer pipeline, so it's skipped at creation.
+    expect(response.statusCode).toEqual(200);
+    expect(body).toEqual({
+      address,
+      hasTruck: false,
+      willReceive: false,
+      alreadyOrdered: false,
+      autoSkipped: true,
+      skipReason: "georgia",
+    });
 
-    // FEAT-004: the structured log carries field NAMES only, never values.
-    expect(consoleLogSpy).toHaveBeenCalledWith(
-      JSON.stringify({
-        event: "report_validation_failed",
-        fields: ["address"],
-        authed: false,
-      }),
+    // The row exists — the line data is valuable — with skippedAt set.
+    const report = await Report.findOne({
+      where: { reportURL: url },
+      relations: ["location"],
+    });
+    expect(report).toBeTruthy();
+    expect(report.skippedAt).toBeTruthy();
+    expect(report.order).toBeFalsy();
+    expect(report.truck).toBeFalsy();
+
+    // The location exists too, but the report is not a live line there.
+    expect(report.location.fullAddress).toEqual(address);
+    const open = await Report.openReports(report.location);
+    expect(open.map((r) => r.id)).not.toContain(report.id);
+
+    // Audit trail consistent with the manual/auto skip path.
+    const action = await Action.findOne({
+      where: { entityId: report.id, entityType: "Report" },
+      order: { id: "DESC" },
+    });
+    expect(action.actionType).toEqual("auto-skipped (georgia)");
+    expect(action.userId).toEqual("pizza-to-the-polls");
+
+    // Volunteer zaps never fired; the skip Zap did (real phone submitter).
+    const calls = (global.fetch as jest.Mock).mock.calls;
+    const zapUrls = calls.map(([zapUrl]) => zapUrl);
+    expect(zapUrls).not.toContain(process.env.ZAP_NEW_REPORT);
+    expect(zapUrls).not.toContain(process.env.ZAP_NEW_LOCATION);
+    expect(calls.length).toBe(1);
+    expect(zapUrls[0]).toEqual(process.env.ZAP_SKIP_REPORT);
+    const parsed = JSON.parse(calls[0][1].body);
+    expect(parsed.hook).toEqual("ZAP_SKIP_REPORT");
+    expect(parsed.autoSkip).toEqual({ reason: "georgia", lastOrder: null });
+  });
+
+  test("Georgia report at a trucked location is pre-skipped and inherits no truck", async () => {
+    const url = "http://twitter.com/something/status/ga-truck";
+    const address = "206 Washington St SW Atlanta GA 30334";
+
+    const location = await Location.createFromAddress({
+      latitude: 33.75,
+      longitude: -84.39,
+      fullAddress: address,
+      address: "206 Washington St SW",
+      city: "Atlanta",
+      state: "GA",
+      zip: "30334",
+    });
+    const truck = await location.assignTruck("scott", "atlanta-ga");
+
+    const request = http_mocks.createRequest({
+      method: "POST",
+      body: {
+        url,
+        contact: "555-234-2345",
+        address,
+        waitTime: "1-2 hours",
+      },
+    });
+
+    const response = http_mocks.createResponse();
+    const body = await controller.create(request, response, () => undefined);
+
+    expect(response.statusCode).toEqual(200);
+    // The location HAS a truck — but hasTruck in the response reflects the
+    // location state, and the skip overrides everything else.
+    expect(body.autoSkipped).toBe(true);
+    expect(body.skipReason).toEqual("georgia");
+    expect(body.willReceive).toBe(false);
+
+    // The skipped row never linked the truck (and no truck zap fired).
+    const report = await Report.findOne({ where: { reportURL: url } });
+    expect(report).toBeTruthy();
+    expect(report.skippedAt).toBeTruthy();
+    expect(report.truck).toBeFalsy();
+    expect((global.fetch as jest.Mock).mock.calls.length).toBe(1);
+    expect((global.fetch as jest.Mock).mock.calls[0][0]).toEqual(
+      process.env.ZAP_SKIP_REPORT,
     );
-
-    // Nothing was created: no report, no location.
-    expect(await Report.findOne({ where: { reportURL: url } })).toBeNull();
-    expect(
-      await Location.findOne({ where: { fullAddress: address } }),
-    ).toBeNull();
+    expect(truck).toBeTruthy();
   });
 
   test("Trusted reporters can override valdiation", async () => {

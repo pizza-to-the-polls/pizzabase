@@ -3,12 +3,7 @@ import { NormalAddress, OverrideAddress } from "./types";
 import { normalizeURL } from "./normalizeURL";
 import { normalizeContact } from "./normalizeContact";
 import { Upload } from "../../entity/Upload";
-import {
-  CONTACT_ERROR,
-  ADDRESS_ERROR,
-  URL_ERROR,
-  GEORGIA_ERROR,
-} from "./constants";
+import { CONTACT_ERROR, ADDRESS_ERROR, URL_ERROR } from "./constants";
 import { v4 as uuidv4 } from "uuid";
 
 interface ValidationError {
@@ -22,8 +17,9 @@ interface ValidationError {
 /**
  * Georgia Senate Bill 22 (2025) makes it a crime to give anything of value —
  * explicitly including food and beverages — to voters waiting in line at or
- * near a polling place, so Pizza to the Polls cannot accept line reports
- * from Georgia, authorized or not.
+ * near a polling place. Georgia reports are accepted and stored (the line
+ * data is valuable) but auto-skipped at creation so they never enter the
+ * volunteer pipeline; this predicate drives that auto-skip decision.
  *
  * `state` is a two-letter code from Google geocoding ("GA") or from a
  * trusted addressOverride (validated against the state table first).
@@ -95,9 +91,6 @@ export const validateReport = async (
   );
   if (!normalizedAddress) {
     errors.address = ADDRESS_ERROR;
-  } else if (isGeorgiaAddress(normalizedAddress)) {
-    // SB 22 — Georgia line reports cannot be accepted, no exceptions.
-    errors.address = GEORGIA_ERROR;
   }
 
   // Validate uploadId: url filePath must match upload filePath
