@@ -13,10 +13,9 @@
  *   FFMPEG_PATH       path to an ffmpeg binary (default: `ffmpeg` on PATH)
  *   RENDER_FONT_FILE  optional TTF for drawtext (as the lambda sets it)
  *
- * Output lands in a fresh /tmp/clip-smoke-* directory: clip.mp4, clip.srt,
- * poster.jpg. Open clip.mp4 and check the 9:16 crop, the bottom-third
- * clean 9:16 video, and the 2s branded
- * end-card on the tail.
+ * Output lands in a fresh /tmp/clip-smoke-* directory: clip.mp4 and
+ * poster.jpg. Open clip.mp4 and check the clean 9:16 crop and the 2s
+ * branded end-card on the tail.
  */
 import * as fs from "fs/promises";
 import * as path from "path";
@@ -53,7 +52,6 @@ async function main(): Promise<void> {
     fontFile: process.env.RENDER_FONT_FILE || null,
   });
 
-  await fs.writeFile(plan.srtPath, plan.sidecarSrt, "utf8");
   for (const file of plan.textFiles) {
     await fs.writeFile(file.path, file.content, "utf8");
   }
@@ -62,7 +60,7 @@ async function main(): Promise<void> {
   await runFfmpeg(bin, plan.posterExtractArgs);
   await runFfmpeg(bin, plan.clipRenderArgs);
 
-  for (const artifact of ["clip.mp4", "poster.jpg", "clip.srt"]) {
+  for (const artifact of ["clip.mp4", "poster.jpg"]) {
     const stat = await fs.stat(path.join(outputDir, artifact));
     console.log(`  ${artifact}  ${(stat.size / 1024).toFixed(0)} KB`);
   }

@@ -131,7 +131,6 @@ function seedOutputs(clipId: number): void {
   const dir = renderWorkDir(clipId);
   fs.mkdirSync(dir, { recursive: true });
   fs.writeFileSync(path.join(dir, "clip.mp4"), Buffer.from("fake-video-bytes"));
-  fs.writeFileSync(path.join(dir, "clip.srt"), Buffer.from("fake-srt-bytes"));
   fs.writeFileSync(
     path.join(dir, "poster.jpg"),
     Buffer.from("fake-jpeg-bytes"),
