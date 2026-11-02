@@ -33,7 +33,7 @@ provider:
     # UTF-8 stringified — required for the Street View image proxy
     # (GET /reports/:id/streetview) whose image/jpeg bytes would otherwise
     # be mangled into replacement chars (EF BF BD). Glob supported.
-    BINARY_CONTENT_TYPES: 'image/*'
+    BINARY_CONTENT_TYPES: "image/*"
 
     # Public base URL of THIS deployment (stage-aware, set per deploy in
     # CI): trusted no-photo reports persist a Street View proxy permalink
