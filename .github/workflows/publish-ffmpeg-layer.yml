@@ -24,6 +24,9 @@ jobs:
           role-to-assume: arn:aws:iam::320802729995:role/pizzabase-deploy
           aws-region: us-west-2
 
+      - name: Install packing tools (upx)
+        run: sudo apt-get update -q && sudo apt-get install -y -q upx-ucl
+
       - name: Build + assert the ffmpeg layer (drawtext, BUG-034)
         run: bash scripts/build-ffmpeg-layer.sh
 

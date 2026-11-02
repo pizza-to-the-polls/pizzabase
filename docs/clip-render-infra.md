@@ -16,15 +16,14 @@ reports.polls.pizza (EXISTING, processed)      pizzabase app lambda
       ▼                                               ▼
   renderClip (ffmpeg layer)  ◄──── async invoke { clipId } ──── clip stays queued
       │  reads Clip.kit + Upload.processedFilePath             if invoke fails
-      │  renders 1080x1920 clip + captions + poster + kit
+      │  renders 1080x1920 clip + poster + kit
       ▼
   s3://reports.polls.pizza/clips/{clipId}/
-      ├── clip.mp4     (9:16, H.264/AAC, ≤90s, burned-in caption + lower third + end-card)
-      ├── clip.srt     (sidecar captions)
+      ├── clip.mp4     (9:16, H.264/AAC, ≤90s, clean video + brand-only end-card)
       ├── poster.jpg   (first frame, 9:16 crop)
-      └── kit.json     (publish kit: caption, hashtags, platforms, asset keys)
+      └── kit.json     (publish kit: platforms, asset keys)
 
-  On success: clips.status = 'ready', outputPaths = { video, captions, poster, kit }
+  On success: clips.status = 'ready', outputPaths = { video, poster, kit }
   On failure: clips.status = 'rejected' + failureReason
   Over daily budget (RENDER_DAILY_BUDGET, default 50): clip stays queued, nothing renders
 ```
@@ -38,10 +37,12 @@ layer** and its fonts.
 ## 1. Build the ffmpeg Lambda layer
 
 `renderClip` runs the static ffmpeg binary from a Lambda layer at
-`/opt/bin/ffmpeg`. The binary must include **libfreetype** (drawtext text
-overlays — captions, lower third, end-card). The static builds from
-johnvansickle.com include freetype; no libass is needed (captions are burned
-in with `drawtext` + generated text files, not the `subtitles` filter).
+`/opt/bin/ffmpeg`. The binary must include **libfreetype** (the `drawtext`
+filter used by the end-card text overlays) and **libx264** (the clip
+encoder). The johnvansickle 7.0.2 static build pinned in ffmpeg:1 shipped
+WITHOUT freetype — every text-overlay render failed with
+`No such filter: 'drawtext'` (BUG-034). The layer now uses the **BtbN
+FFmpeg-Builds linux64-gpl** variant, which is configured with both.
 
 `scripts/build-ffmpeg-layer.sh` automates this:
 
@@ -51,16 +52,21 @@ bash scripts/build-ffmpeg-layer.sh
 
 The script:
 
-1. Downloads the latest amd64 static ffmpeg build
-   (johnvansickle.com/ffmpeg — GPL build with freetype/fontconfig).
+1. Downloads the BtbN n8.1 linux64-gpl static ffmpeg build
+   (drawtext/libfreetype + libx264 enabled).
 2. Downloads the DejaVu Sans Bold TTF (used by every drawtext filter) into
    `/opt/fonts/`.
-3. Zips `bin/ffmpeg` + `fonts/DejaVuSans-Bold.ttf` into `ffmpeg-layer.zip`.
-4. Publishes it:
+3. **Asserts the staged binary actually exposes `drawtext`** and that
+   `fonts/DejaVuSans-Bold.ttf` exists — the build fails (exit 1) otherwise,
+   so a drawtext-less layer can never be zipped/published again (BUG-034).
+4. Zips `bin/ffmpeg` + `fonts/DejaVuSans-Bold.ttf` into `ffmpeg-layer.zip`.
+5. Publish it as a NEW layer version (never overwrite an existing version —
+   functions pin exact version numbers):
 
 ```bash
 aws lambda publish-layer-version \
   --layer-name ffmpeg \
+  --description "BtbN n8.1 linux64-gpl static ffmpeg (drawtext/libx264) + DejaVu Sans Bold" \
   --zip-file fileb://ffmpeg-layer.zip \
   --compatible-runtimes nodejs22.x \
   --region us-west-2
@@ -77,9 +83,19 @@ aws lambda list-layer-versions \
 ```
 
 `serverless.yml` references
-`arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:1`. Bump the
-version suffix (or set the ARN directly) whenever the layer changes — the
-same pattern as the `sharp` layer used by `on-media-format`.
+`arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:4` for
+`renderClip` and `compileClips`. Bump the version suffix (or set the ARN
+directly) whenever the layer changes — the same pattern as the `sharp` layer
+used by `on-media-format`. `on-media-format` itself stays pinned to
+`ffmpeg:3` (BtbN lgpl — HEIF rotation); do not touch it.
+
+The current versions:
+
+| Layer    | Build                        | Used by                         | drawtext? |
+| -------- | ---------------------------- | ------------------------------- | --------- |
+| ffmpeg:1 | johnvansickle 7.0.2 static   | (retired — lacked drawtext)     | **No**    |
+| ffmpeg:3 | BtbN n8.1 linux64-lgpl (UPX) | on-media-format (HEIF rotation) | No        |
+| ffmpeg:4 | BtbN n8.1 linux64-gpl        | renderClip, compileClips        | **Yes**   |
 
 ### 1b. Verify the binary inside the layer
 
@@ -90,8 +106,14 @@ docker run --rm -v "$PWD:/work" --entrypoint /bin/bash \
       /opt/bin/ffmpeg -version | head -2"
 ```
 
-Expected: `ffmpeg version ...` with `--enable=libfreetype` in the
-configuration line.
+Expected: `ffmpeg version n8.1...` and a `drawtext` line in the filters
+list:
+
+```bash
+unzip -p ffmpeg-layer.zip bin/ffmpeg > /tmp/ffmpeg && chmod +x /tmp/ffmpeg
+/tmp/ffmpeg -hide_banner -filters | grep drawtext
+#  ... T.. drawtext          Draw text on top of video frames ...
+```
 
 ---
 
@@ -109,7 +131,7 @@ Managed by serverless.yml (no manual steps):
 | `RENDER_DAILY_BUDGET` | `50` (env override)              | Daily cost guardrail: max clips that reach `ready` per UTC day. Over budget → clip stays queued. |
 
 `/tmp` usage at these settings: source MP4 (≤90s transcode ≈ 60MB) + output
-MP4/SRT/poster ≈ 150MB total — comfortably inside the default 512MB
+MP4/poster ≈ 150MB total — comfortably inside the default 512MB
 ephemeral storage. If the limit is ever raised (longer clips), set
 `ephemeralStorageSize` on the function or raise memory further.
 
@@ -131,7 +153,7 @@ env in `.github/workflows/deploy.yml`.
 
 1. `POST /clips` (ClipsController) validates the upload is clean + ready,
    creates the Clip with `status: queued` and a kit
-   (`caption`, `hashtags`, `city`, `state`, `reportedAt`, `shortUrlSlug`),
+   (`city`, `state`, `reportedAt`),
    then fires `invokeRenderClip(clipId)` without awaiting.
 2. `renderClip` loads the clip **and skips unless status is queued**
    (double-invoke idempotency; `POST /clips/:id/requeue` is the way back in).
@@ -146,12 +168,12 @@ UTC day)` ≥ `RENDER_DAILY_BUDGET` → log + leave queued.
    pipeline): duration > 90s or undetectable → `rejected` + failureReason.
    (The upload-side check is 90s at upload time; this is defense in depth.)
 7. ffmpeg runs twice (args built by the pure `src/lib/clipTemplate.ts`):
-   poster extraction, then the main render — 1080x1920 center-crop,
-   burned-in caption (bottom third, max 2 lines), `CITY, ST` + `reported
-H:MM AM/PM` lower third, 2s dark branded end-card composited over the
-   tail (with the short-URL slug when kit.shortUrlSlug is present).
+   poster extraction, then the main render — 1080x1920 center-crop, clean
+   video (no captions, no overlays, no QR, no short URL), with a 2s
+   brand-only end-card composited over the tail (`drawtext` + generated
+   text files via the layer font).
 8. Bundle uploaded to `clips/{clipId}/` and the clip is marked `ready` with
-   `outputPaths = { video, captions, poster, kit }` (bare S3 keys).
+   `outputPaths = { video, poster, kit }` (bare S3 keys).
 
 ---
 
@@ -171,19 +193,19 @@ mocks the S3/ffmpeg boundaries. To verify the actual pixels locally:
 ### 4b. Run the render smoke script
 
 `scripts/renderClipSmoke.ts` builds the same plan the lambda would, writes
-the caption/lower-third/end-card text files, and runs your local ffmpeg:
+the end-card drawtext text files, and runs your local ffmpeg:
 
 ```bash
-npx ts-node scripts/renderClipSmoke.ts sample.mp4 "The line is around the block!"
+npx ts-node scripts/renderClipSmoke.ts sample.mp4
 ```
 
-Output lands in a fresh `/tmp/clip-smoke-*` directory: `clip.mp4`,
-`clip.srt`, `poster.jpg`. Open `clip.mp4` and check:
+Output lands in a fresh `/tmp/clip-smoke-*` directory: `clip.mp4` and
+`poster.jpg`. Open `clip.mp4` and check:
 
 - 1080x1920 (9:16), source center-cropped;
-- caption in the bottom third (≤2 lines);
-- `CITY, ST` + `reported H:MM AM/PM` lower third above the caption;
-- last ~2s replaced by the dark "Pizza to the Polls / polls.pizza" end-card.
+- clean video — no caption, lower third, or other overlay on the photos;
+- last ~2s replaced by the dark "Pizza to the Polls / polls.pizza" end-card
+  (video sources only; photo clips render without an end-card).
 
 ### 4c. Run inside Docker (matches the Lambda layer environment)
 
@@ -223,7 +245,7 @@ aws logs tail /aws/lambda/pizzabase-prod-renderClip --region us-west-2 --follow
 
 # 3. Check the bundle landed
 aws s3 ls s3://reports.polls.pizza/clips/<clipId>/
-#   → clip.mp4, clip.srt, poster.jpg, kit.json
+#   → clip.mp4, poster.jpg, kit.json
 
 # 4. Check the clip reached ready
 curl -H 'Authorization: Basic <api-key>' \
@@ -242,6 +264,97 @@ pizzabase-prod-renderClip --payload '{"clipId":<id>}'` twice → second run
   logs "not queued — skipping".
 
 ---
+
+## 6. BUG-034 runbook — publish ffmpeg:4, deploy, requeue rejected clips
+
+ffmpeg:1 (johnvansickle 7.0.2-static) was compiled without libfreetype, so
+its binary has no `drawtext` filter and every clip render that composites
+the end-card failed with `ffmpeg exited with code 8` /
+`No such filter: 'drawtext'` (33 of 189 prod clips rejected). Evidence and
+fix:
+
+```bash
+# Evidence: the deployed ffmpeg:1 binary lacks drawtext (read-only check)
+aws --profile ptp-agent lambda get-layer-version \
+  --layer-name ffmpeg --version-number 1 --region us-west-2
+# → download the CodeSha zip, unzip, then:
+./bin/ffmpeg -hide_banner -filters | grep drawtext
+#   (no output — filter absent; that is the bug)
+```
+
+`scripts/build-ffmpeg-layer.sh` now pins the BtbN n8.1 linux64-gpl build and
+**fails the build** if the staged binary lacks `drawtext` or the
+`DejaVuSans-Bold.ttf` font. A drawtext-less layer can never be published
+again.
+
+### 6a. Publish the new layer (human/CI — needs publish creds)
+
+1. Build the zip: `bash scripts/build-ffmpeg-layer.sh` (assertions pass).
+2. Publish as the next free version:
+
+```bash
+aws lambda publish-layer-version \
+  --layer-name ffmpeg \
+  --description "BtbN n8.1 linux64-gpl static ffmpeg (drawtext/libx264) + DejaVu Sans Bold — BUG-034" \
+  --zip-file fileb://ffmpeg-layer.zip \
+  --compatible-runtimes nodejs22.x \
+  --region us-west-2
+# → note the returned Version number; serverless.yml pins ffmpeg:4
+```
+
+3. If the published number is not 4, bump the `layer:ffmpeg:N` refs on
+   `renderClip` + `compileClips` in `serverless.yml` (leave
+   `on-media-format` at `ffmpeg:3`).
+
+### 6b. Deploy and smoke-test
+
+```bash
+npx serverless deploy --stage prod
+npx ts-node scripts/renderClipSmoke.ts sample.mp4   # local pixel check against the new binary
+aws logs tail /aws/lambda/pizzabase-prod-renderClip --region us-west-2 --follow
+```
+
+Then re-render one rejected clip end-to-end before mass-requeueing:
+
+```bash
+aws lambda invoke --function-name pizzabase-prod-renderClip \
+  --payload '{"clipId":463}' --region us-west-2
+```
+
+### 6c. Requeue the drawtext-rejected clips (human — prod DB is read-only for agents)
+
+```sql
+-- Before: list the clips that failed on the drawtext-less binary
+SELECT id, status, failure_reason FROM clips
+WHERE status = 'rejected'
+  AND failure_reason LIKE '%exit%code 8%';
+
+BEGIN;
+
+UPDATE clips
+SET status = 'queued', failure_reason = NULL
+WHERE status = 'rejected'
+  AND failure_reason LIKE '%exit%code 8%';
+
+-- After: confirm they are queued
+SELECT id, status, failure_reason FROM clips
+WHERE status = 'queued'
+  AND failure_reason IS NULL;
+
+COMMIT;
+```
+
+Each requeued clip renders on the next renderClip invocation (requeue
+endpoint or a direct lambda invoke per clip). Known affected IDs from the
+incident logs: 463, 598, 601, 602 — pull the full list from the pre-update
+SELECT.
+
+> **Note (follow-up, not part of BUG-034):** clip 694 was rejected with
+> `Upload has no processed media to render from` — consistent with
+> `sweepStaleUploads` (BUG-028) marking the upload failed mid-render. If
+> other clips share this failure signature, file a follow-up issue for the
+> sweep/render race (e.g. check `media_status` in the renderClip handler or
+> hold the upload reference in a transaction).
 
 ## Summary
 
