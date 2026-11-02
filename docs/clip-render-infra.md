@@ -196,7 +196,7 @@ mocks the S3/ffmpeg boundaries. To verify the actual pixels locally:
 the end-card drawtext text files, and runs your local ffmpeg:
 
 ```bash
-npx ts-node scripts/renderClipSmoke.ts sample.mp4 "The line is around the block!"
+npx ts-node scripts/renderClipSmoke.ts sample.mp4
 ```
 
 Output lands in a fresh `/tmp/clip-smoke-*` directory: `clip.mp4` and
