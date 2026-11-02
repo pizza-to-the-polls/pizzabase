@@ -57,7 +57,12 @@ test -x "$FFMPEG_BIN" || {
 
 echo "==> Locating DejaVu Sans Bold font..."
 mkdir -p "$WORKDIR/stage/bin" "$WORKDIR/stage/fonts"
-SYSTEM_FONT=$(find /usr/share/fonts -name "DejaVuSans-Bold.ttf" 2>/dev/null | head -n 1)
+# find exits 1 when /usr/share/fonts is absent (macOS) — guard it so
+# set -euo pipefail doesn't kill the script on the no-system-font path.
+SYSTEM_FONT=""
+if [ -d /usr/share/fonts ]; then
+  SYSTEM_FONT=$(find /usr/share/fonts -name "DejaVuSans-Bold.ttf" 2>/dev/null | head -n 1 || true)
+fi
 if [ -n "$SYSTEM_FONT" ]; then
   echo "Using system font: $SYSTEM_FONT"
   cp "$SYSTEM_FONT" "$WORKDIR/stage/fonts/DejaVuSans-Bold.ttf"
