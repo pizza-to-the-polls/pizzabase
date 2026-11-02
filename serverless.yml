@@ -57,9 +57,10 @@ provider:
     ZAP_NEW_UPLOAD: ${env:ZAP_NEW_UPLOAD}
     ZAP_NEW_CLIP: ${env:ZAP_NEW_CLIP, ''}
     ZAP_SKIP_REPORT: ${env:ZAP_SKIP_REPORT}
-    # Report auto-skip feature flag (src/lib/auto-skip.ts) — unset/off by
-    # default; enable per-stage in CI env when we're ready to roll it out.
-    AUTO_SKIP_REPORTS: ${env:AUTO_SKIP_REPORTS, ''}
+    # Report auto-skip feature flag (src/lib/auto-skip.ts) — enabled by
+    # default (#393); set AUTO_SKIP_REPORTS=false/0 in CI env to force off
+    # per stage. Staged/prod both picked this up on the merge deploy.
+    AUTO_SKIP_REPORTS: ${env:AUTO_SKIP_REPORTS, 'true'}
     ZAP_ORDER_REPORT: ${env:ZAP_ORDER_REPORT}
     ZAP_CANCEL_ORDER_REPORT: ${env:ZAP_CANCEL_ORDER_REPORT}
     ZAP_TRUCK_REPORT: ${env:ZAP_TRUCK_REPORT}

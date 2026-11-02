@@ -47,13 +47,14 @@ export enum AutoSkipReasons {
 export const AUTO_SKIP_ACTOR = "pizza-to-the-polls";
 
 /**
- * Feature flag — the heuristic auto-skip path is opt-in until it's proven on
- * staging. Unset (or "false"/"0") → reports flow to volunteer triage
- * exactly as before. Flipped via provider env in serverless.yml, so it's a
- * redeploy (or an env flip in CI) to turn on, not a code change.
+ * Feature flag — the heuristic auto-skip path (recent_order,
+ * line_under_an_hour). ON by default since the enable flip (#393):
+ * serverless.yml passes 'true' unless the deploy env overrides. Set
+ * AUTO_SKIP_REPORTS=false (or "0") in CI env to force off per stage
+ * — a redeploy, not a code change.
  *
- * Only the heuristic reasons (recent_order, line_under_an_hour) are gated;
- * the georgia skip is unconditional compliance, not a triage heuristic.
+ * Only the heuristic reasons are gated; the georgia skip is
+ * unconditional compliance, not a triage heuristic.
  */
 export const isAutoSkipEnabled = (): boolean => {
   const flag = (process.env.AUTO_SKIP_REPORTS || "").trim().toLowerCase();
