@@ -28,6 +28,13 @@ provider:
     AURORA_RESOURCE_ARN: ${env:AURORA_RESOURCE_ARN}
     AURORA_SECRET_ARN: ${env:AURORA_SECRET_ARN}
 
+    # Extra MediaTypes/binary handling: responses with these Content-Types
+    # are base64-encoded through serverless-http (AWS provider) instead of
+    # UTF-8 stringified — required for the Street View image proxy
+    # (GET /reports/:id/streetview) whose image/jpeg bytes would otherwise
+    # be mangled into replacement chars (EF BF BD). Glob supported.
+    BINARY_CONTENT_TYPES: 'image/*'
+
     # Public base URL of THIS deployment (stage-aware, set per deploy in
     # CI): trusted no-photo reports persist a Street View proxy permalink
     # against it (lib/streetview.ts) so external reportURL surfaces resolve.
