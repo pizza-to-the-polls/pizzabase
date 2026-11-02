@@ -100,11 +100,17 @@ provider:
     # Social posting delivery target (#213): 'live' posts to the real
     # platforms; 'slack' posts the rendered preview to a Slack incoming
     # webhook instead (staging shim). Anything else falls back to 'live'.
-    SOCIAL_POST_TARGET: ${env:SOCIAL_POST_TARGET, 'live'}
-    # Slack incoming webhook URL — required when SOCIAL_POST_TARGET=slack.
+    SOCIAL_POST_TARGET: ${env:SOCIAL_POST_TARGET, 'live'} # Slack incoming webhook URL — required when SOCIAL_POST_TARGET=slack.
     # Unset = slack delivery is skipped with a logged error (never blocks
     # the order response).
     SLACK_WEBHOOK_URL: ${env:SLACK_WEBHOOK_URL, ''}
+
+    # Edge IP blocklist (FEAT-007): when set, blocking/unblocking via
+    # /blocked-ips also adds/removes the raw address from this WAFv2 IP set
+    # so the web ACL attached to the prod API Gateway stage drops blocked
+    # traffic before it reaches the app Lambda. Default is the live prod
+    # set (created 2026-10-31); override via env if it is ever recreated.
+    WAF_BLOCKED_IPSET_ARN: ${env:WAF_BLOCKED_IPSET_ARN, 'arn:aws:wafv2:us-west-2:320802729995:regional/ipset/ptp-blocked-ips/da0493ec-7c55-4082-8d4d-f080f41a468b'}
 
   iamRoleStatements:
     - Effect: "Allow"
@@ -151,6 +157,16 @@ provider:
       Action:
         - "iam:PassRole"
       Resource: ${env:MEDIACONVERT_ROLE_ARN, '*'}
+    # Edge IP blocklist (FEAT-007): keep the blocked-ips WAFv2 IP set in
+    # sync when admins block/unblock via /blocked-ips. Scoped to the exact
+    # ptp-blocked-ips set (regional IP set ARNs carry a regional/ prefix in
+    # the resource id — a bare ...:ipset/*/* would never match).
+    - Effect: "Allow"
+      Action:
+        - "wafv2:GetIPSet"
+        - "wafv2:UpdateIPSet"
+      Resource:
+        - "arn:aws:wafv2:us-west-2:320802729995:regional/ipset/ptp-blocked-ips/da0493ec-7c55-4082-8d4d-f080f41a468b"
 
 package:
   patterns:
