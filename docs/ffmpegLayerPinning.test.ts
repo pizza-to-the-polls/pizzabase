@@ -106,14 +106,12 @@ describe("ffmpeg layer pinning (BUG-034)", () => {
       expect(ffmpegLayerVersions("on-media-format")).toEqual([3]);
     });
 
-    it("renderClip points drawtext at the layer font and binary", () => {
-      // The end-card drawtext filters use fontfile=/opt/fonts/…; the lambda
-      // must pass the layer's font and ffmpeg paths through as env vars.
+    it("renderClip runs the layer binary and passes no font env", () => {
+      // The render is overlay-free (user media only) — no drawtext, so no
+      // font env. Only the ffmpeg binary path is wired through.
       const block = functionBlock("renderClip");
-      expect(block).toContain(
-        "RENDER_FONT_FILE: /opt/fonts/DejaVuSans-Bold.ttf",
-      );
       expect(block).toContain("FFMPEG_PATH: /opt/bin/ffmpeg");
+      expect(block).not.toContain("RENDER_FONT_FILE");
     });
   });
 
@@ -150,9 +148,9 @@ describe("ffmpeg layer pinning (BUG-034)", () => {
     });
 
     it("stages the binary under bin/ and the font under fonts/", () => {
-      // The lambda reads FFMPEG_PATH=/opt/bin/ffmpeg and
-      // RENDER_FONT_FILE=/opt/fonts/DejaVuSans-Bold.ttf — the zip layout
-      // must keep that contract.
+      // The lambda reads FFMPEG_PATH=/opt/bin/ffmpeg; the font ships in
+      // the layer for any future drawtext use — the zip layout must keep
+      // that contract.
       const stageLayout =
         'mkdir -p "$WORKDIR/stage/bin" "$WORKDIR/stage/fonts"';
       expect(buildScript).toContain(stageLayout);

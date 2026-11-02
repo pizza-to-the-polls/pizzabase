@@ -11,10 +11,8 @@
 import {
   buildRenderPlan,
   buildKitJson,
-  escapeFilterPath,
   ClipRenderInput,
   MAX_SOURCE_DURATION_SECONDS,
-  END_CARD_SECONDS,
   TARGET_HEIGHT,
   TARGET_WIDTH,
 } from "./clipTemplate";
@@ -30,7 +28,6 @@ function renderInput(
     inputPath: "/tmp/render/input.mp4",
     outputDir: "/tmp/render",
     assetPrefix: "clips/42",
-    fontFile: "/opt/fonts/DejaVuSans-Bold.ttf",
     ...overrides,
   };
 }
@@ -69,130 +66,57 @@ describe("buildRenderPlan", () => {
         "128k",
         "-pix_fmt",
         "yuv420p",
-        "-map",
-        "0:a?",
         "-movflags",
         "+faststart",
       ]),
     );
     const tIndex = args.indexOf("-t");
     expect(args[tIndex + 1]).toBe("45");
-    // Audio for the clip comes from the source video via the lavfi end-card
-    // input as the second video source only.
-    const lavfiIndex = args.indexOf("-i", args.indexOf("-f"));
-    expect(args[lavfiIndex - 1]).toBe("lavfi");
-    expect(args[lavfiIndex + 1]).toBe("color=c=0x101418:size=1080x1920");
     expect(TARGET_WIDTH).toBe(1080);
     expect(TARGET_HEIGHT).toBe(1920);
   });
 
-  it("caps the render at 90s and places the end-card before the tail", () => {
+  it("caps the render at 90s", () => {
     const plan = buildRenderPlan(
       renderInput({ sourceDuration: MAX_SOURCE_DURATION_SECONDS + 60 }),
     );
 
     expect(plan.renderedDurationSeconds).toBe(90);
-    expect(plan.endCardStartSeconds).toBe(90 - END_CARD_SECONDS);
     const tIndex = plan.clipRenderArgs.indexOf("-t");
     expect(plan.clipRenderArgs[tIndex + 1]).toBe("90");
-    expect(plan.clipRenderArgs.join(" ")).toContain("enable='gte(t,88)'");
   });
 
-  it("does not extend short sources and clamps the end-card to t=0", () => {
+  it("does not extend short sources", () => {
     const plan = buildRenderPlan(renderInput({ sourceDuration: 1 }));
 
     const tIndex = plan.clipRenderArgs.indexOf("-t");
     expect(plan.clipRenderArgs[tIndex + 1]).toBe("1");
-    expect(plan.endCardStartSeconds).toBe(0);
-    expect(plan.clipRenderArgs.join(" ")).toContain("enable='gte(t,0)'");
   });
 
-  it("center-crops to 9:16 and overlays the end-card in the filtergraph", () => {
+  it("center-crops to 9:16 with a plain -vf chain", () => {
     const plan = buildRenderPlan(renderInput({ sourceDuration: 45 }));
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
+    const vfIndex = plan.clipRenderArgs.indexOf("-vf");
+    const vf = plan.clipRenderArgs[vfIndex + 1];
 
-    expect(graph).toContain(
-      "scale=1080:1920:force_original_aspect_ratio=increase",
+    expect(vf).toBe(
+      "scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1",
     );
-    expect(graph).toContain("crop=1080:1920");
-    expect(graph).toContain("setsar=1");
-    expect(graph).toContain("[0:v]");
-    expect(graph).toContain("[1:v]");
-    expect(graph).toMatch(
-      /\[base\]\[card\]overlay=0:0:enable='gte\(t,43\)'\[out\]/,
-    );
+    expect(plan.clipRenderArgs).not.toContain("-filter_complex");
   });
 
-  it("renders clean video: no caption or lower-third overlays on the photos", () => {
+  it("renders only user-submitted media: no overlays, no branding", () => {
     const plan = buildRenderPlan(renderInput());
 
-    // Only end-card text files exist — nothing is burned onto the photos.
-    const overlayFiles = plan.textFiles.filter(
-      (f) => !f.path.includes("endcard-"),
-    );
-    expect(overlayFiles).toHaveLength(0);
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).not.toContain("caption-line");
-    expect(graph).not.toContain("lowerthird");
-    // The base chain is pure geometry: scale, crop, setsar — no drawtext.
-    const base = graph.split(";")[0];
-    expect(base).toBe(
-      "[0:v]scale=1080:1920:force_original_aspect_ratio=increase,crop=1080:1920,setsar=1[base]",
-    );
-  });
-
-  it("builds the brand-only end-card (no QR, no URL line)", () => {
-    const plan = buildRenderPlan(renderInput());
-
-    const brandFile = plan.textFiles.find((f) =>
-      f.path.endsWith("endcard-brand.txt"),
-    );
-    const siteFile = plan.textFiles.find((f) =>
-      f.path.endsWith("endcard-site.txt"),
-    );
-    expect(brandFile!.content).toBe("Pizza to the Polls");
-    expect(siteFile!.content).toBe("polls.pizza");
-    // No URL/QR artifacts survive the short-link removal.
-    expect(
-      plan.textFiles.find((f) => f.path.endsWith("endcard-url.txt")),
-    ).toBeUndefined();
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).not.toContain("[qr]");
-    expect(graph).toMatch(/\[base\]\[card\]overlay=0:0/);
-    // Exactly two ffmpeg inputs: source + lavfi end-card color.
-    expect(plan.clipRenderArgs.filter((a) => a === "-i")).toHaveLength(2);
-  });
-
-  it("passes the layer font to every drawtext filter when configured", () => {
-    const plan = buildRenderPlan(renderInput());
-
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    const drawtextCount = graph.split("drawtext=").length - 1;
-    expect(drawtextCount).toBeGreaterThan(0);
-    const fontRefs = graph.match(
-      /fontfile=\/opt\/fonts\/DejaVuSans-Bold\.ttf/g,
-    );
-    expect(fontRefs!.length).toBe(drawtextCount);
-  });
-
-  it("escapes path characters in filtergraph textfile references", () => {
-    const plan = buildRenderPlan(
-      renderInput({ outputDir: "/tmp/we ird:dir,x" }),
-    );
-
-    const graph =
-      plan.clipRenderArgs[plan.clipRenderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("textfile=/tmp/we ird\\:dir\\,x/endcard-brand.txt");
-  });
-
-  it("escapes filter paths via escapeFilterPath", () => {
-    expect(escapeFilterPath("/tmp/a/b.mp4")).toBe("/tmp/a/b.mp4");
-    expect(escapeFilterPath("C:\\x\\y.mp4")).toBe("C\\:\\\\x\\\\y.mp4");
-    expect(escapeFilterPath("a'b,c")).toBe("a\\'b\\,c");
+    const joined = plan.clipRenderArgs.join(" ");
+    // Nothing is composited onto the user's media.
+    expect(joined).not.toContain("drawtext");
+    expect(joined).not.toContain("overlay");
+    expect(joined).not.toContain("endcard");
+    expect(joined).not.toContain("caption");
+    expect(joined).not.toContain("lowerthird");
+    expect(joined).not.toContain("lavfi");
+    // Exactly one ffmpeg input: the user's source media.
+    expect(plan.clipRenderArgs.filter((a) => a === "-i")).toHaveLength(1);
   });
 });
 
@@ -230,7 +154,6 @@ describe("buildRenderPlan (photo mode)", () => {
     const plan = buildRenderPlan(renderInput({ sourceDuration: null }));
 
     expect(plan.renderedDurationSeconds).toBe(3);
-    expect(plan.endCardStartSeconds).toBe(0);
 
     const args = plan.clipRenderArgs;
     expect(args).toContain("-vf");
@@ -258,13 +181,15 @@ describe("buildRenderPlan (photo mode)", () => {
     expect(args).not.toContain("0:a?");
   });
 
-  it("photo clips get no end-card, no text files, no audio", () => {
+  it("photo clips render the still only: no overlays, no audio", () => {
     const plan = buildRenderPlan(renderInput({ sourceDuration: null }));
 
-    expect(plan.textFiles).toEqual([]);
-    expect(plan.clipRenderArgs.join(" ")).not.toContain("endcard");
     expect(plan.clipRenderArgs.join(" ")).not.toContain("overlay");
+    expect(plan.clipRenderArgs.join(" ")).not.toContain("drawtext");
     expect(plan.clipRenderArgs.join(" ")).not.toContain("-map");
+    // Silent: no audio codec args.
+    expect(plan.clipRenderArgs).not.toContain("aac");
+    expect(plan.clipRenderArgs).not.toContain("0:a?");
   });
 
   it("extracts the poster from the photo itself at 9:16", () => {
