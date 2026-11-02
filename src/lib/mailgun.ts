@@ -97,3 +97,43 @@ export const sendPartnerLoginEmail = async (
       "— Pizza to the Polls",
     ].join("\n"),
   });
+
+/**
+ * Welcome email for a newly approved partner (users row created via the
+ * admin API — pizza-eagle adds partners on request). Sent from
+ * UsersController.create on every sanctioned create path; never sent by
+ * the migration seed (raw SQL, no controller).
+ *
+ * Points at the sign-in page rather than a minted token on purpose: a
+ * welcome may be opened days later, and an expired magic link is a broken
+ * first experience. The page is evergreen — enter email, get a fresh link.
+ */
+export const sendPartnerWelcomeEmail = async (
+  to: string,
+  { organization }: { organization?: string | null },
+) =>
+  await sendPlainText({
+    from: "Pizza to the Polls <partners@polls.pizza>",
+    subject: "You're approved as a Pizza to the Polls partner",
+    to,
+    text: [
+      "Good news — you're approved as a trusted partner of Pizza to the Polls" +
+        (organization ? ` (${organization})` : "") +
+        ".",
+      "",
+      "What that means: when you report a line at a polling location, it skips our review queue and goes straight to the team that sends the pizza.",
+      "",
+      "To file a report:",
+      "1. Visit " +
+        (process.env.STATIC_SITE || "https://polls.pizza") +
+        "/partners/report",
+      "2. Enter your email — we'll send you a sign-in link, no password needed (links are valid for 24 hours, and you can always request a fresh one)",
+      "3. Pick the polling location and how long the wait is — that's all we need. Photos and on-site contact info are optional.",
+      "",
+      "You can file as many reports as you need during a shift, and each one is attributed to you.",
+      "",
+      "If you weren't expecting this, you can ignore this email.",
+      "",
+      "— Pizza to the Polls",
+    ].join("\n"),
+  });

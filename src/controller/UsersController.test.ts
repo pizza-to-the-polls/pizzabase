@@ -3,10 +3,13 @@ import * as http_mocks from "node-mocks-http";
 import { UsersController } from "./UsersController";
 import { User } from "../entity/User";
 import { Report } from "../entity/Report";
+import { sendPartnerWelcomeEmail } from "../lib/mailgun";
 
 jest.mock("../lib/validator/geocode");
+jest.mock("../lib/mailgun");
 
 const controller = new UsersController();
+const mockedSendPartnerWelcomeEmail = sendPartnerWelcomeEmail as jest.Mock;
 
 type Method = "GET" | "POST" | "PUT" | "DELETE";
 
@@ -36,6 +39,10 @@ const seedUser = async (email: string) => {
 describe("UsersController", () => {
   // jest.setup.ts afterEach already truncates every entity table
   // (dbHelper.cleanAll) between tests.
+
+  beforeEach(() => {
+    mockedSendPartnerWelcomeEmail.mockReset().mockResolvedValue(undefined);
+  });
 
   describe("auth", () => {
     test("index returns 401 without an API key", async () => {
