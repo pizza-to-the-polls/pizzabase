@@ -6,6 +6,16 @@ plugins:
 
 provider:
   name: aws
+  # REST-API binary support: API Gateway only decodes an isBase64Encoded
+  # response body when the request's Accept header matches a binaryMediaTypes
+  # entry — image/jpeg alone doesn't negotiate with Accept: */* or browsers'
+  # image/* accept lists. '*/*' matches every Accept, and the decode stays
+  # gated on isBase64Encoded (JSON endpoints unaffected). Pairs with
+  # BINARY_CONTENT_TYPES below (serverless-http base64-encodes image
+  # responses; request bodies arrive base64 and serverless-http decodes).
+  apiGateway:
+    binaryMediaTypes:
+      - "*/*"
   runtime: nodejs${file(.nvmrc)}.x
   # 120s: socialPost runs fire-and-forget in-process (lambda.ts holds the
   # invocation) and Threads video containers can take minutes to process.
