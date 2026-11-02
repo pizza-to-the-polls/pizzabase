@@ -19,7 +19,7 @@ reports.polls.pizza (EXISTING, processed)      pizzabase app lambda
       │  renders 1080x1920 clip + poster + kit
       ▼
   s3://reports.polls.pizza/clips/{clipId}/
-      ├── clip.mp4     (9:16, H.264/AAC, ≤90s, clean video + brand-only end-card)
+      ├── clip.mp4     (9:16, H.264/AAC, ≤90s, user-submitted media only — no overlays)
       ├── poster.jpg   (first frame, 9:16 crop)
       └── kit.json     (publish kit: platforms, asset keys)
 
@@ -121,14 +121,13 @@ unzip -p ffmpeg-layer.zip bin/ffmpeg > /tmp/ffmpeg && chmod +x /tmp/ffmpeg
 
 Managed by serverless.yml (no manual steps):
 
-| Setting               | Value                            | Why                                                                                              |
-| --------------------- | -------------------------------- | ------------------------------------------------------------------------------------------------ |
-| `timeout`             | 900s                             | Worst-case encode headroom (a 90s clip renders in ~1–3 min at 3009MB).                           |
-| `memorySize`          | 3009MB                           | ffmpeg encode throughput; also grants ~3GB heap for the source buffer.                           |
-| `layers`              | ffmpeg layer (above)             | Static ffmpeg + DejaVu font.                                                                     |
-| `FFMPEG_PATH`         | `/opt/bin/ffmpeg`                | Binary location inside the layer.                                                                |
-| `RENDER_FONT_FILE`    | `/opt/fonts/DejaVuSans-Bold.ttf` | Font for all drawtext filters.                                                                   |
-| `RENDER_DAILY_BUDGET` | `50` (env override)              | Daily cost guardrail: max clips that reach `ready` per UTC day. Over budget → clip stays queued. |
+| Setting               | Value                | Why                                                                                              |
+| --------------------- | -------------------- | ------------------------------------------------------------------------------------------------ |
+| `timeout`             | 900s                 | Worst-case encode headroom (a 90s clip renders in ~1–3 min at 3009MB).                           |
+| `memorySize`          | 3009MB               | ffmpeg encode throughput; also grants ~3GB heap for the source buffer.                           |
+| `layers`              | ffmpeg layer (above) | Static ffmpeg + DejaVu font.                                                                     |
+| `FFMPEG_PATH`         | `/opt/bin/ffmpeg`    | Binary location inside the layer.                                                                |
+| `RENDER_DAILY_BUDGET` | `50` (env override)  | Daily cost guardrail: max clips that reach `ready` per UTC day. Over budget → clip stays queued. |
 
 `/tmp` usage at these settings: source MP4 (≤90s transcode ≈ 60MB) + output
 MP4/poster ≈ 150MB total — comfortably inside the default 512MB

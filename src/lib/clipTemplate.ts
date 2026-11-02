@@ -1,32 +1,26 @@
 /**
- * Pure ffmpeg render template for the Clip Factory (render spec v1).
+ * Pure ffmpeg render template for the Clip Factory (render spec v3).
  *
  * buildRenderPlan() turns a clip's publish kit into the exact ffmpeg
- * invocations and asset files needed to package a moderated upload as a
- * vertical (1080x1920) social clip:
+ * invocations needed to package a moderated upload as a vertical
+ * (1080x1920) social clip containing ONLY the user-submitted media:
  *
  *   - clip.mp4   9:16 center-crop, H.264, ≤90s. Video sources render
- *                clean with a ~2s brand-only end-card at the tail; still
- *                photos render as a fixed 3s center-zoom clip (no end-card
- *                — a 2s card would swallow a 3s photo). No captions, no
- *                overlays, no QR, no short URL anywhere.
+ *                clean — no end-card, no captions, no lower third, no
+ *                QR, no branding of any kind burned in; still photos
+ *                render as a fixed 3s center-zoom clip.
  *   - poster.jpg first frame of the 9:16 render
  *   - kit.json   render kit (asset keys + report context)
  *
  * The module is intentionally pure: no fs, no ffmpeg, no clocks. The render
- * lambda (src/lambdas/renderClip.ts) writes the generated text files to disk
- * and executes the argument arrays. Keeping the args pure makes the render
- * contract unit-testable without running ffmpeg (see clipTemplate.test.ts).
- *
- * drawtext uses textfile= instead of text= everywhere: text can contain
- * quotes/colons/commas that are painful to escape through the ffmpeg
- * filtergraph parser — files sidestep escaping entirely.
+ * lambda (src/lambdas/renderClip.ts) executes the argument arrays. Keeping
+ * the args pure makes the render contract unit-testable without running
+ * ffmpeg (see clipTemplate.test.ts).
  */
 
 export const TARGET_WIDTH = 1080;
 export const TARGET_HEIGHT = 1920;
 export const MAX_SOURCE_DURATION_SECONDS = 90;
-export const END_CARD_SECONDS = 2;
 
 // Photo clips: a fixed 3-second center zoom per still (product sketch:
 // "3s/photo, zoom/pan"). Supersampled to 2x target before zoompan so the
@@ -41,7 +35,7 @@ const SUPERSAMPLE_HEIGHT = TARGET_HEIGHT * 2;
 export interface ClipRenderInput {
   city: string;
   state: string;
-  /** ISO timestamp from the report kit ("reported HH:MM" overlay). */
+  /** ISO timestamp from the report kit. */
   reportedAt: string;
   /**
    * Source duration in seconds for video (already verified ≤ MAX by the
@@ -54,13 +48,6 @@ export interface ClipRenderInput {
   outputDir: string;
   /** S3 key prefix for kit.json asset references, e.g. "clips/42". */
   assetPrefix: string;
-  /** Absolute path to a TTF for drawtext (Lambda layer font), or null. */
-  fontFile: string | null;
-}
-
-export interface ClipRenderTextFile {
-  path: string;
-  content: string;
 }
 
 export interface ClipRenderPlan {
@@ -68,27 +55,10 @@ export interface ClipRenderPlan {
   posterExtractArgs: string[];
   /** ffmpeg args producing clip.mp4 (the full render). */
   clipRenderArgs: string[];
-  /** Text files the handler must write for drawtext textfile= refs. */
-  textFiles: ClipRenderTextFile[];
   /** Serialized kit.json (already formatted). */
   kitJson: string;
   /** Duration the rendered clip will have (capped at MAX). */
   renderedDurationSeconds: number;
-  /** When the end-card overlay starts (renderedDuration - 2, min 0). */
-  endCardStartSeconds: number;
-}
-
-/**
- * Escape a filesystem path for use in an ffmpeg filter option. Applied to
- * every path interpolated into the filtergraph — outputDir is /tmp-based in
- * practice, but this keeps the builder correct for arbitrary locations.
- */
-export function escapeFilterPath(p: string): string {
-  return p
-    .replace(/\\/g, "\\\\")
-    .replace(/:/g, "\\:")
-    .replace(/'/g, "\\'")
-    .replace(/,/g, "\\,");
 }
 
 export interface KitJsonInput {
@@ -121,14 +91,11 @@ export function buildRenderPlan(input: ClipRenderInput): ClipRenderPlan {
   const renderedDuration = isPhoto
     ? PHOTO_CLIP_SECONDS
     : Math.min(input.sourceDuration as number, MAX_SOURCE_DURATION_SECONDS);
-  const endCardStart = Math.max(0, renderedDuration - END_CARD_SECONDS);
 
   const posterPath = `${input.outputDir}/poster.jpg`;
   const clipPath = `${input.outputDir}/clip.mp4`;
 
-  // ── Photo mode: fixed 3s center-zoom clip, silent, no end-card ──
-  // (A 2s end-card would swallow a 3s photo; compilations brand once via
-  // the video members and the channel post instead.)
+  // ── Photo mode: fixed 3s center-zoom clip, silent ──
   if (isPhoto) {
     const posterExtractArgs = [
       "-y",
@@ -189,68 +156,24 @@ export function buildRenderPlan(input: ClipRenderInput): ClipRenderPlan {
     return {
       posterExtractArgs,
       clipRenderArgs,
-      textFiles: [],
       kitJson,
       renderedDurationSeconds: renderedDuration,
-      endCardStartSeconds: 0,
     };
   }
 
-  const textFiles: ClipRenderTextFile[] = [];
-  const addTextFile = (name: string, content: string): string => {
-    const filePath = `${input.outputDir}/${name}`;
-    textFiles.push({ path: filePath, content });
-    return filePath;
-  };
-
-  const fontSpec = input.fontFile
-    ? `fontfile=${escapeFilterPath(input.fontFile)}:`
-    : "";
-
-  // ── Base video chain: clean 9:16 crop, no overlays on the photos ──
+  // ── Video mode: clean 9:16 crop of the user's media, nothing else ──
   const baseChain = [
     `scale=${TARGET_WIDTH}:${TARGET_HEIGHT}:force_original_aspect_ratio=increase`,
     `crop=${TARGET_WIDTH}:${TARGET_HEIGHT}`,
     "setsar=1",
   ];
 
-  // ── Branded end-card (composited over the last 2s) ──
-  // Brand + site text only: no QR, no short URL, no attribution (product
-  // direction — the donate close lives in the kit message instead).
-  const cardChain = ["format=yuv420p"];
-  const brandPath = addTextFile("endcard-brand.txt", "Pizza to the Polls");
-  cardChain.push(
-    `drawtext=textfile=${escapeFilterPath(brandPath)}:${fontSpec}` +
-      "fontcolor=white:fontsize=64:x=(w-text_w)/2:y=780",
-  );
-  const sitePath = addTextFile("endcard-site.txt", "polls.pizza");
-  cardChain.push(
-    `drawtext=textfile=${escapeFilterPath(sitePath)}:${fontSpec}` +
-      "fontcolor=0xB3B3B3:fontsize=40:x=(w-text_w)/2:y=900",
-  );
-  const filterSegments: string[] = [
-    `[0:v]${baseChain.join(",")}[base]`,
-    `[1:v]${cardChain.join(",")}[card]`,
-    `[base][card]overlay=0:0:enable='gte(t,${endCardStart})'[out]`,
-  ];
-  const filterComplex = filterSegments.join(";");
-
   const clipRenderArgs = [
     "-y",
     "-i",
     input.inputPath,
-    "-f",
-    "lavfi",
-    "-i",
-    `color=c=0x101418:size=${TARGET_WIDTH}x${TARGET_HEIGHT}`,
-  ];
-  clipRenderArgs.push(
-    "-filter_complex",
-    filterComplex,
-    "-map",
-    "[out]",
-    "-map",
-    "0:a?",
+    "-vf",
+    baseChain.join(","),
     "-c:v",
     "libx264",
     "-preset",
@@ -268,7 +191,7 @@ export function buildRenderPlan(input: ClipRenderInput): ClipRenderPlan {
     "-t",
     String(renderedDuration),
     clipPath,
-  );
+  ];
 
   const posterExtractArgs = [
     "-y",
@@ -296,9 +219,7 @@ export function buildRenderPlan(input: ClipRenderInput): ClipRenderPlan {
   return {
     posterExtractArgs,
     clipRenderArgs,
-    textFiles,
     kitJson,
     renderedDurationSeconds: renderedDuration,
-    endCardStartSeconds: endCardStart,
   };
 }

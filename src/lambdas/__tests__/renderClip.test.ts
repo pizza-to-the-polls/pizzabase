@@ -158,12 +158,10 @@ const reloadClip = async (id: number): Promise<Clip> =>
 beforeEach(() => {
   mockRunFfmpeg.mockResolvedValue(undefined);
   delete process.env.RENDER_DAILY_BUDGET;
-  delete process.env.RENDER_FONT_FILE;
 });
 
 afterEach(() => {
   delete process.env.RENDER_DAILY_BUDGET;
-  delete process.env.RENDER_FONT_FILE;
 });
 
 // ---------------------------------------------------------------------------
@@ -267,28 +265,26 @@ describe("happy path", () => {
     });
   });
 
-  it("passes the render template the clip's kit and a 90s cap", async () => {
+  it("renders the user's media only — no brand overlays", async () => {
     const upload = await makeUpload();
     const clip = await makeClip(upload);
     seedOutputs(clip.id);
     s3ServesSource(mp4Buffer(30));
 
-    process.env.RENDER_FONT_FILE = "/opt/fonts/Test.ttf";
     await handler({ clipId: clip.id });
 
-    const renderCall = mockRunFfmpeg.mock.calls[1];
-    const graph = renderCall[1][renderCall[1].indexOf("-filter_complex") + 1];
-    expect(graph).toContain("fontfile=/opt/fonts/Test.ttf");
-    expect(graph).toContain("endcard-brand.txt");
-    // Clean renders: nothing is burned onto the photos.
-    expect(graph).not.toContain("lowerthird");
-    expect(graph).not.toContain("caption-line");
+    const renderArgs = mockRunFfmpeg.mock.calls[1][1];
+    expect(renderArgs.join(" ")).not.toContain("endcard");
+    expect(renderArgs.join(" ")).not.toContain("drawtext");
+    expect(renderArgs.join(" ")).not.toContain("overlay");
+    expect(renderArgs).not.toContain("-filter_complex");
+    expect(renderArgs.filter((a: string) => a === "-i")).toHaveLength(1);
   });
 });
 
 // ---------------------------------------------------------------------------
-// End-card QR / short-link wiring — removed (product direction: no QR, no
-// short links). The end-card is brand-only; see clipTemplate.test.ts.
+// Brand overlays (end-card, QR, captions, lower third) — removed. The clip
+// contains only the user-submitted media; see clipTemplate.test.ts.
 // ---------------------------------------------------------------------------
 
 describe("photo mode", () => {
@@ -365,8 +361,8 @@ describe("photo mode", () => {
   });
 });
 
-describe("end-card wiring", () => {
-  it("renders a brand-only end-card with exactly two ffmpeg inputs", async () => {
+describe("brand overlays", () => {
+  it("renders a clean clip with exactly one ffmpeg input", async () => {
     const upload = await makeUpload();
     const clip = await makeClip(upload);
     seedOutputs(clip.id);
@@ -378,10 +374,8 @@ describe("end-card wiring", () => {
     expect(saved.status).toBe("ready");
     const renderArgs = mockRunFfmpeg.mock.calls[1][1];
     expect(renderArgs).not.toContain("endcard-qr.png");
-    expect(renderArgs.filter((a: string) => a === "-i")).toHaveLength(2);
-    const graph = renderArgs[renderArgs.indexOf("-filter_complex") + 1];
-    expect(graph).toContain("endcard-brand.txt");
-    expect(graph).not.toContain("[qr]");
+    expect(renderArgs.filter((a: string) => a === "-i")).toHaveLength(1);
+    expect(renderArgs).not.toContain("-filter_complex");
     expect(putCalls()).toHaveLength(3);
   });
 });

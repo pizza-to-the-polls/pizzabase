@@ -17,11 +17,12 @@
  *   4. Source media: a processed MP4 renders as video (defense-in-depth
  *      duration check: > 90s or undetectable → rejected); a processed
  *      still (webp/jpeg) renders as a fixed 3s center-zoom clip (photo
- *      mode — no duration, silent, no end-card).
+ *      mode — no duration, silent).
  *   5. Render via ffmpeg Lambda layer (args from the pure clipTemplate
- *      module): 1080x1920 center-crop. Videos render clean with a 2s
- *      brand-only end-card (no captions, no overlays, no QR), H.264/AAC,
- *      ≤90s; photos render as 3s H.264 zoom clips.
+ *      module): 1080x1920 center-crop. The clip contains ONLY the
+ *      user-submitted media — no end-card, no captions, no overlays, no
+ *      branding burned in. H.264/AAC, ≤90s; photos render as 3s H.264
+ *      zoom clips.
  *   6. Upload the bundle to clips/{clipId}/ (clip.mp4, poster.jpg,
  *      kit.json) and set status=ready with outputPaths.
  *   7. Any failure after the rendering transition → rejected + reason
@@ -249,12 +250,7 @@ export async function handler(event: { clipId?: number }): Promise<void> {
       inputPath,
       outputDir: workDir,
       assetPrefix: `clips/${clipId}`,
-      fontFile: process.env.RENDER_FONT_FILE || null,
     });
-
-    for (const file of plan.textFiles) {
-      await fs.writeFile(file.path, file.content, "utf8");
-    }
 
     await runFfmpeg(FFMPEG_BIN, plan.posterExtractArgs);
     await runFfmpeg(FFMPEG_BIN, plan.clipRenderArgs);
