@@ -1,0 +1,39 @@
+name: Publish ffmpeg layer
+
+# One-off (BUG-034): build the drawtext-capable ffmpeg layer on an x86_64
+# runner (Lambda arch; the bastion is aarch64) and publish it as the next
+# layer version. serverless.yml (renderClip/compileClips) points at
+# ffmpeg:4 — publish BEFORE merging #386.
+# Same OIDC deploy role as deploy.yml's "Ensure ffmpeg Lambda layer" step.
+
+on:
+  workflow_dispatch:
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    permissions:
+      id-token: write
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Configure AWS credentials (OIDC, pizzabase-deploy)
+        uses: aws-actions/configure-aws-credentials@v4
+        with:
+          role-to-assume: arn:aws:iam::320802729995:role/pizzabase-deploy
+          aws-region: us-west-2
+
+      - name: Build + assert the ffmpeg layer (drawtext, BUG-034)
+        run: bash scripts/build-ffmpeg-layer.sh
+
+      - name: Publish layer version
+        run: |
+          VER=$(aws lambda publish-layer-version \
+            --layer-name ffmpeg \
+            --description "BtbN n8.1 linux64-gpl static ffmpeg (drawtext/libx264) + DejaVu Sans Bold (BUG-034)" \
+            --zip-file fileb://ffmpeg-layer.zip \
+            --compatible-runtimes nodejs22.x \
+            --region us-west-2 \
+            --query Version --output text)
+          echo "PUBLISHED ffmpeg:$VER"
