@@ -79,6 +79,24 @@ test -f "$WORKDIR/stage/fonts/DejaVuSans-Bold.ttf" || {
 
 cp "$FFMPEG_BIN" "$WORKDIR/stage/bin/ffmpeg"
 
+# ── Shrink to fit the direct-publish cap (same recipe as ffmpeg:3) ──
+# PublishLayerVersion's request must stay under ~67MB; the raw BtbN gpl
+# binary is ~165MB zipped ~90MB. strip --strip-all + UPX --best gets the
+# binary to ~46MB (verified locally 2026-11-02) → zipped ~46–48MB, safely
+# under the cap. UPX adds ~1–2s cold-start unpack — fine on a 900s render.
+# Both tools are optional so the script still builds an (over-large) layer
+# without them; the zip-size assertion below is the hard gate.
+if command -v strip >/dev/null 2>&1; then
+  echo "==> Stripping symbols..."
+  strip --strip-all "$WORKDIR/stage/bin/ffmpeg" 2>/dev/null || true
+fi
+if command -v upx >/dev/null 2>&1; then
+  echo "==> UPX-packing..."
+  upx --best --lzma "$WORKDIR/stage/bin/ffmpeg" >/dev/null 2>&1 || {
+    echo "  (upx failed — continuing un-packed)" >&2
+  }
+fi
+
 # ── Build-time assertions (BUG-034): never publish a broken layer again ──
 
 echo "==> Asserting drawtext filter is available..."
@@ -107,4 +125,15 @@ echo "==> drawtext filter line (build evidence):"
 echo "==> Zipping layer..."
 (cd "$WORKDIR/stage" && zip -qr "$ORIG_DIR/ffmpeg-layer.zip" bin fonts)
 echo "==> Created $ORIG_DIR/ffmpeg-layer.zip"
+
+# Hard gate: the direct PublishLayerVersion API rejects requests over
+# 70167211 bytes (RequestEntityTooLargeException, seen 2026-11-02). Refuse
+# to hand off an oversized zip — fix the packing above instead.
+ZIP_BYTES=$(wc -c < "$ORIG_DIR/ffmpeg-layer.zip" | tr -d ' ')
+if [ "$ZIP_BYTES" -ge 70000000 ]; then
+  echo "FATAL: ffmpeg-layer.zip is $ZIP_BYTES bytes — over the ~70MB" >&2
+  echo "  PublishLayerVersion request cap. Needs more strip/UPX." >&2
+  exit 1
+fi
+echo "==> zip size: $ZIP_BYTES bytes (cap 70000000) — OK"
 echo "Next: aws lambda publish-layer-version --layer-name ffmpeg --zip-file fileb://ffmpeg-layer.zip --compatible-runtimes nodejs22.x --region us-west-2"
