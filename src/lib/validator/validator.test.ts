@@ -7,7 +7,6 @@ import {
   TWITTER_ERROR,
   OUR_TWITTER_ERROR,
   FACEBOOK_ERROR,
-  GEORGIA_ERROR,
 } from "./constants";
 
 jest.mock("./geocode");
@@ -93,18 +92,24 @@ test("validates the report is valid", async () => {
   });
 });
 
-test("rejects Georgia line reports with the SB 22 error", async () => {
-  const { errors } = await validateReport({
+test("Georgia line reports pass validation; auto-skip is downstream", async () => {
+  const { errors, normalizedAddress } = await validateReport({
     url: "http://twitter.com/something/status/123",
     contact: "555-234-2345",
     address: "206 Washington St SW Atlanta GA 30334",
   });
 
-  expect(errors).toEqual({ address: GEORGIA_ERROR });
+  // SB 22 is enforced by auto-skip at creation, not by validation — the
+  // report is accepted and stored, just never live.
+  expect(errors).toEqual({});
+  expect(normalizedAddress.state).toEqual("GA");
+  expect(normalizedAddress.fullAddress).toEqual(
+    "206 Washington St SW Atlanta GA 30334",
+  );
 });
 
-test("trusted reporters cannot override the Georgia block", async () => {
-  const { errors } = await validateReport(
+test("trusted reporters cannot override the Georgia auto-skip", async () => {
+  const { errors, normalizedAddress } = await validateReport(
     {
       address: "un-parseable",
       addressOverride: {
@@ -119,7 +124,10 @@ test("trusted reporters cannot override the Georgia block", async () => {
     true,
   );
 
-  expect(errors).toEqual({ address: GEORGIA_ERROR });
+  // Authorization may create the report but never unskips it — the
+  // georgia auto-skip applies to the trusted path too.
+  expect(errors).toEqual({});
+  expect(normalizedAddress.state).toEqual("GA");
 });
 
 test("link to tweet without a status is invalid", async () => {

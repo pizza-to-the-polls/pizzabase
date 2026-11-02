@@ -1,6 +1,7 @@
 import { lambdaPost, lambdaGet } from "../testLambdaHandler";
 import dbHelper from "../dbHelper";
-import { GEORGIA_ERROR } from "../../lib/validator/constants";
+import { Location } from "../../entity/Location";
+import { Report } from "../../entity/Report";
 
 jest.mock("../../lib/validator/geocode");
 
@@ -31,7 +32,7 @@ describe("Reports API (via Lambda handler)", () => {
     expect(response.statusCode).toBeLessThan(500);
   });
 
-  test("POST /report with a Georgia address returns 422 citing SB 22", async () => {
+  test("POST /report with a Georgia address creates and auto-skips the report", async () => {
     const response = await lambdaPost("/report", {
       url: "https://twitter.com/test/status/789",
       address: "206 Washington St SW Atlanta GA 30334",
@@ -40,9 +41,36 @@ describe("Reports API (via Lambda handler)", () => {
       canDistribute: true,
     });
 
-    expect(response.statusCode).toBe(422);
+    // Accepted (the SB 22 422 is gone) but auto-skipped at creation.
+    expect(response.statusCode).toBe(200);
     const body = JSON.parse(response.body);
-    expect(body.errors).toEqual({ address: GEORGIA_ERROR });
+    expect(body.autoSkipped).toBe(true);
+    expect(body.skipReason).toBe("georgia");
+    expect(body.willReceive).toBe(false);
+
+    const report = await Report.findOne({
+      where: { reportURL: "https://twitter.com/test/status/789" },
+    });
+    expect(report).toBeTruthy();
+    expect(report.skippedAt).toBeTruthy();
+    expect(report.order).toBeFalsy();
+    expect(report.truck).toBeFalsy();
+
+    // Volunteer zaps did not fire — the report never enters the pipeline.
+    const zapCalls = (global.fetch as jest.Mock).mock.calls.filter(
+      ([zapUrl]) =>
+        zapUrl === process.env.ZAP_NEW_REPORT ||
+        zapUrl === process.env.ZAP_NEW_LOCATION,
+    );
+    expect(zapCalls).toHaveLength(0);
+
+    // The public location view never presents it as a live line.
+    const location = await Location.findOne({
+      where: { fullAddress: body.address },
+    });
+    expect(location).toBeTruthy();
+    const open = await location.openReports();
+    expect(open.map((r) => r.id)).not.toContain(report.id);
   });
 
   test("GET /reports lists empty reports on fresh DB", async () => {

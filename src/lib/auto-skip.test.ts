@@ -3,11 +3,13 @@ import { Order, OrderTypes } from "../entity/Order";
 import { Report } from "../entity/Report";
 import { Location } from "../entity/Location";
 import { RECENT_ORDER_SKIP_WINDOW } from "../entity/constants";
+import { NormalAddress } from "../lib/validator";
 import {
   AutoSkipReasons,
   applyAutoSkip,
   autoSkipPayload,
   evaluateAutoSkip,
+  georgiaAutoSkipDecision,
   isAutoSkipEnabled,
   isLineUnderAnHour,
 } from "./auto-skip";
@@ -76,6 +78,37 @@ describe("isLineUnderAnHour", () => {
     expect(isLineUnderAnHour(waitTime as string | null | undefined)).toBe(
       expected,
     );
+  });
+});
+
+describe("georgiaAutoSkipDecision", () => {
+  test("GA address → georgia decision, no lastOrder", () => {
+    // A real Georgia normal-address shape (the file-level TEST_ADDRESS is
+    // Chicago IL — not GA — and must NOT be reused here).
+    const atlanta: NormalAddress = {
+      ...TEST_ADDRESS,
+      fullAddress: "123 Peachtree St NE Atlanta GA 30308",
+      address: "123 Peachtree St NE",
+      city: "Atlanta",
+      state: "GA",
+      zip: "30308",
+    };
+    expect(georgiaAutoSkipDecision(atlanta)).toEqual({
+      reason: AutoSkipReasons.georgia,
+      lastOrder: null,
+    });
+  });
+
+  test("Georgia zip with lowercase/whitespace state still skips (isGeorgiaAddress normalizes)", () => {
+    expect(georgiaAutoSkipDecision({ state: " ga " })).toEqual({
+      reason: AutoSkipReasons.georgia,
+      lastOrder: null,
+    });
+  });
+
+  test("non-GA address → null (falls through to the heuristics)", () => {
+    expect(georgiaAutoSkipDecision({ state: "IL" })).toBeNull();
+    expect(georgiaAutoSkipDecision({ state: "AL" })).toBeNull();
   });
 });
 
@@ -203,6 +236,36 @@ describe("evaluateAutoSkip", () => {
 
     const decision = await evaluateAutoSkip(report);
     expect(decision?.reason).toEqual(AutoSkipReasons.lineUnderAnHour);
+    expect(decision?.lastOrder).toBeNull();
+  });
+
+  test("GA address → georgia, and trumps a recent order", async () => {
+    const location = await Location.createFromAddress({
+      ...TEST_ADDRESS,
+      fullAddress: "14 Peachtree St Atlanta GA 30303",
+      address: "14 Peachtree St",
+      city: "Atlanta",
+      state: "GA",
+      zip: "30303",
+    });
+    await Order.placeOrder({ cost: 40, quantity: 4 }, location);
+
+    const [report] = await Report.createNewReport(
+      "+15550000007",
+      `http://twitter.com/status/georgia-${Math.random()}`,
+      {
+        ...TEST_ADDRESS,
+        fullAddress: "14 Peachtree St Atlanta GA 30303",
+        address: "14 Peachtree St",
+        city: "Atlanta",
+        state: "GA",
+        zip: "30303",
+      },
+      { waitTime: "Less than one hour" },
+    );
+
+    const decision = await evaluateAutoSkip(report);
+    expect(decision?.reason).toEqual(AutoSkipReasons.georgia);
     expect(decision?.lastOrder).toBeNull();
   });
 });

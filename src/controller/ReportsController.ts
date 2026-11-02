@@ -15,6 +15,7 @@ import {
   applyAutoSkip,
   autoSkipPayload,
   evaluateAutoSkip,
+  georgiaAutoSkipDecision,
   isAutoSkipEnabled,
   AutoSkipDecision,
 } from "../lib/auto-skip";
@@ -256,12 +257,15 @@ export class ReportsController {
     }
 
     const [report, { alreadyOrdered, isUnique, hasTruck, willReceive }] =
-      await Report.createNewReport(
-        contactInfo,
-        reportURL,
-        normalizedAddress,
-        extra,
-      );
+      await Report.createNewReport(contactInfo, reportURL, normalizedAddress, {
+        ...extra,
+        // SB 22: Georgia reports are accepted and stored (the line data is
+        // valuable) but auto-skipped at creation — skippedAt is set on the
+        // INSERT itself, so there is never a window where the report is live.
+        ...(georgiaAutoSkipDecision(normalizedAddress)
+          ? { skippedAt: new Date() }
+          : {}),
+      });
 
     // Trusted submissions without media get a Street View proxy URL as
     // their public reportURL (placeholder swaps in lib/streetview.ts).
@@ -282,14 +286,17 @@ export class ReportsController {
       await report.location.validate(request.body?.user);
     }
 
-    // Auto-skip (no volunteer triage needed) when either condition holds:
-    // pizza was ordered for this location within the last hour (the note
-    // tells the submitter when), or the reported line is under an hour (the
-    // note asks them to resubmit once it passes one). Flag-gated
-    // (AUTO_SKIP_REPORTS) — duplicates already linked to an order and truck
-    // locations take the normal flows either way.
-    let autoSkip: AutoSkipDecision | null = null;
-    if (isAutoSkipEnabled() && !hasTruck && !alreadyOrdered) {
+    // Auto-skip (no volunteer triage needed) when any condition holds:
+    // Georgia (SB 22 compliance — unconditional, not flag-gated, not
+    // bypassable by trusted auth), pizza ordered for this location within
+    // the last hour (the note tells the submitter when), or the reported
+    // line is under an hour (the note asks them to resubmit once it passes
+    // one). The heuristics are flag-gated (AUTO_SKIP_REPORTS); duplicates
+    // already linked to an order and truck locations take the normal flows
+    // either way.
+    const georgiaSkip = georgiaAutoSkipDecision(normalizedAddress);
+    let autoSkip: AutoSkipDecision | null = georgiaSkip;
+    if (!autoSkip && isAutoSkipEnabled() && !hasTruck && !alreadyOrdered) {
       autoSkip = await evaluateAutoSkip(report);
     }
 
