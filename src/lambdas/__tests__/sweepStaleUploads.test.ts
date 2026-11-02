@@ -9,6 +9,15 @@
  * database so the media_status/failure_reason transitions are verified
  * end-to-end, including the 2-hour grace period (backdated via raw SQL,
  * since created_at is a create-date column).
+ *
+ * BUG-035 / issue #394 regression coverage: the sweep's stale-row fetch
+ * must filter media_status in SQL (inlined enum literal), select only the
+ * four columns it touches, and page/cap the response — the pre-fix
+ * full-entity load of every historical row blew the Aurora Data API's
+ * 1 MB single-response cap, so every hourly prod run failed before a
+ * single S3 HEAD. Tests here seed prod-shaped bulk fixtures (rows large
+ * enough to exceed 1 MB serialized) and assert they are neither returned
+ * nor touched by the sweep.
  */
 import { Upload } from "../../entity/Upload";
 
@@ -20,6 +29,13 @@ let sweepStaleUploads: () => Promise<{
 }>;
 let FAILURE_REASON_ABSENT: string;
 let FAILURE_REASON_EMPTY: string;
+let SWEEP_BATCH_SIZE: number;
+let SWEEP_MAX_BATCHES: number;
+let fetchStaleUploadBatch: (
+  cutoff: Date,
+  afterId: number,
+  batchSize?: number,
+) => Promise<Upload[]>;
 
 const mockS3Send = jest.fn();
 
@@ -65,6 +81,41 @@ const backdate = async (upload: Upload, hoursAgo = 3): Promise<void> => {
   ]);
 };
 
+let bulkCounter = 0;
+
+/**
+ * Seed n bulk rows in one INSERT (per-row save() round trips would be far
+ * too slow at 600–1,500 rows), then backdate the whole batch past the
+ * grace window in one UPDATE keyed on the unique fileHash tag.
+ */
+const bulkInsertUploads = async (
+  n: number,
+  mediaStatus: "processing" | "ready" | "failed",
+  opts: { processedPayloadBytes?: number } = {},
+): Promise<void> => {
+  bulkCounter += 1;
+  const tag = `bulk-${bulkCounter}`;
+  const rows = Array.from({ length: n }, (_, i) => ({
+    ipAddress: "127.0.0.1",
+    filePath: `uploads/${tag}-${i}.jpg`,
+    fileHash: `${tag}-hash-${i}`,
+    rawFilePath: `uploads/${tag}-${i}.jpg`,
+    rawBucket: "raw.polls.pizza",
+    mediaStatus,
+    processedFilePath:
+      opts.processedPayloadBytes && mediaStatus === "ready"
+        ? { jpeg: `${"p".repeat(opts.processedPayloadBytes)}/${tag}/${i}` }
+        : null,
+  }));
+  await Upload.insert(rows as any);
+  // Backdate every row past the 2-hour grace in one statement.
+  await Upload.createQueryBuilder()
+    .update()
+    .set({ createdAt: new Date(Date.now() - 3 * 60 * 60 * 1000) } as any)
+    .where("file_hash LIKE :like", { like: `${tag}-hash-%` })
+    .execute();
+};
+
 const reload = async (id: number): Promise<Upload> => {
   return (await Upload.findOne({ where: { id } }))!;
 };
@@ -82,6 +133,9 @@ beforeAll(async () => {
   sweepStaleUploads = mod.sweepStaleUploads;
   FAILURE_REASON_ABSENT = mod.FAILURE_REASON_ABSENT;
   FAILURE_REASON_EMPTY = mod.FAILURE_REASON_EMPTY;
+  SWEEP_BATCH_SIZE = mod.SWEEP_BATCH_SIZE;
+  SWEEP_MAX_BATCHES = mod.SWEEP_MAX_BATCHES;
+  fetchStaleUploadBatch = mod.fetchStaleUploadBatch;
 });
 
 beforeEach(() => {
@@ -287,4 +341,107 @@ describe("sweepStaleUploads", () => {
     expect(reloaded.mediaStatus).toBe("ready");
     expect(reloaded.failureReason).toBeNull();
   });
+
+  // BUG-035 / #394: the stale-row fetch must filter media_status in SQL
+  // (inlined enum literal) and select only the sweep's columns. A JS-side
+  // filter would still have returned the ready/fresh rows from the DB.
+  it("fetches only stale processing rows, only the sweep's columns", async () => {
+    const staleProcessing = await makeProcessingUpload();
+    await backdate(staleProcessing);
+    // Fresh processing row — inside the grace window; must not be returned.
+    await makeProcessingUpload();
+    // Historical row in the bulk that broke the 1 MB cap.
+    uploadCounter += 1;
+    const staleReady = new Upload();
+    staleReady.ipAddress = "127.0.0.1";
+    staleReady.filePath = `uploads/sweep-test-${uploadCounter}-ready.jpg`;
+    staleReady.fileHash = `sweep-test-hash-${uploadCounter}-ready`;
+    staleReady.rawFilePath = staleReady.filePath;
+    staleReady.rawBucket = "raw.polls.pizza";
+    staleReady.mediaStatus = "ready";
+    await staleReady.save();
+    await backdate(staleReady);
+
+    const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const rows = await fetchStaleUploadBatch(cutoff, 0);
+
+    expect(rows.map((r) => r.id)).toEqual([staleProcessing.id]);
+    expect(rows[0].mediaStatus).toBe("processing");
+    expect(rows[0].rawBucket).toBe("raw.polls.pizza");
+    expect(rows[0].rawFilePath).toBe(staleProcessing.rawFilePath);
+    // Sparse select: the old full-entity query loaded these; this one does
+    // not — a future field read would surface as an undefined, visible
+    // change instead of silent over-fetching.
+    expect(rows[0].filePath).toBeUndefined();
+    expect(rows[0].ipAddress).toBeUndefined();
+  });
+
+  it("sweeps a backlog larger than one batch across batches", async () => {
+    const total = SWEEP_BATCH_SIZE + 100; // 600 with the current constants
+    await bulkInsertUploads(total, "processing");
+    mockS3Send.mockImplementation(async () => {
+      throw { name: "NotFound" };
+    });
+
+    // Pre-check the keyset cursor: exactly one full batch, then the rest.
+    const cutoff = new Date(Date.now() - 2 * 60 * 60 * 1000);
+    const first = await fetchStaleUploadBatch(cutoff, 0);
+    expect(first).toHaveLength(SWEEP_BATCH_SIZE);
+    const rest = await fetchStaleUploadBatch(
+      cutoff,
+      first[first.length - 1].id,
+    );
+    expect(rest).toHaveLength(total - SWEEP_BATCH_SIZE);
+
+    const result = await sweepStaleUploads();
+    // The whole backlog fits inside the per-invocation cap.
+    expect(result.stale).toEqual(
+      Math.min(total, SWEEP_MAX_BATCHES * SWEEP_BATCH_SIZE),
+    );
+    expect(result).toEqual({
+      stale: total,
+      failed: total,
+      absent: total,
+      empty: 0,
+    });
+    expect(headCalls()).toHaveLength(total);
+
+    const [{ failed }] = await Upload.query(
+      "SELECT COUNT(*)::INT AS failed FROM uploads WHERE media_status = 'failed' AND failure_reason = $1",
+      [FAILURE_REASON_ABSENT],
+    );
+    expect(Number(failed)).toEqual(total);
+  }, 60_000);
+
+  it("never touches the historical ready/failed bulk that broke the 1 MB cap", async () => {
+    const readyCount = 1_200;
+    const failedCount = 300;
+    await bulkInsertUploads(readyCount, "ready", {
+      processedPayloadBytes: 700,
+    });
+    await bulkInsertUploads(failedCount, "failed");
+
+    // The fixture is prod-shaped: a full-entity fetch of these rows would
+    // be > 1 MB of JSON — exactly what the Data API used to reject before
+    // every S3 HEAD. (row_to_json measures the logical uncompressed text
+    // the driver would ship, unlike pg_column_size which TOAST compresses.)
+    const [{ bytes }] = await Upload.query(
+      "SELECT SUM(octet_length(row_to_json(t)::text))::BIGINT AS bytes FROM uploads t",
+    );
+    expect(Number(bytes)).toBeGreaterThan(1_000_000);
+
+    const result = await sweepStaleUploads();
+
+    expect(result).toEqual({ stale: 0, failed: 0, absent: 0, empty: 0 });
+    expect(headCalls()).toHaveLength(0); // nothing even HEADed
+    expect(await Upload.count({ where: { mediaStatus: "ready" } })).toEqual(
+      readyCount,
+    );
+    expect(await Upload.count({ where: { mediaStatus: "failed" } })).toEqual(
+      failedCount,
+    );
+    expect(
+      await Upload.count({ where: { failureReason: FAILURE_REASON_ABSENT } }),
+    ).toEqual(0);
+  }, 60_000);
 });
