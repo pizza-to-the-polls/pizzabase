@@ -18,7 +18,11 @@ enum ZapHooks {
   ZAP_TRUCK_REPORT = "ZAP_TRUCK_REPORT",
 }
 
-const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
+const zapReport = async (
+  report: Report,
+  hook: ZapHooks,
+  extra: Record<string, unknown> = {},
+): Promise<void> =>
   zapAny(
     {
       report: report.asJSONPrivate(),
@@ -39,6 +43,7 @@ const zapReport = async (report: Report, hook: ZapHooks): Promise<void> =>
       // never gates or rejects the submission.
       locationHasLiveReport: await report.location.hasLiveReport(report.id),
       locationValidatedRecently: report.location.isValidatedRecently(),
+      ...extra,
     },
     hook,
   );
@@ -359,7 +364,10 @@ const zapOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_ORDER_REPORT);
 export const zapCancelOrderReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_CANCEL_ORDER_REPORT);
-export const zapSkipReport = async (report: Report) =>
-  zapReport(report, ZapHooks.ZAP_SKIP_REPORT);
+export const zapSkipReport = async (
+  report: Report,
+  autoSkip?: Record<string, unknown>,
+): Promise<void> =>
+  zapReport(report, ZapHooks.ZAP_SKIP_REPORT, autoSkip ? { autoSkip } : {});
 const zapTruckReport = async (report: Report) =>
   zapReport(report, ZapHooks.ZAP_TRUCK_REPORT);

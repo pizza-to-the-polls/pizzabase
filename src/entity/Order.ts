@@ -9,11 +9,14 @@ import {
   CreateDateColumn,
   UpdateDateColumn,
   Index,
+  IsNull,
+  MoreThan,
 } from "typeorm";
 import { NormalAddress } from "../lib/validator";
 import { Location } from "./Location";
 import { Report } from "./Report";
 import { Action } from "./Action";
+import { RECENT_ORDER_SKIP_WINDOW } from "./constants";
 
 export enum OrderTypes {
   pizzas = "pizzas",
@@ -148,6 +151,27 @@ export class Order extends BaseEntity {
     const [location] = await Location.getOrCreateFromAddress(address);
 
     return await this.placeOrder(orderParams, location);
+  }
+
+  /**
+   * Most recent non-cancelled order placed for `location` within
+   * `withinMs` (default: RECENT_ORDER_SKIP_WINDOW). Drives report
+   * auto-skip (src/lib/auto-skip.ts): a fresh report at a location that
+   * was ordered for inside the window doesn't need volunteer triage —
+   * pizza is already on the way.
+   */
+  static async recentForLocation(
+    location: Location,
+    withinMs: number = RECENT_ORDER_SKIP_WINDOW,
+  ): Promise<Order | null> {
+    return await this.findOne({
+      where: {
+        location: { id: location.id },
+        cancelledAt: IsNull(),
+        createdAt: MoreThan(new Date(Number(new Date()) - withinMs)),
+      },
+      order: { createdAt: "DESC" },
+    });
   }
 
   static async placeOrder(
