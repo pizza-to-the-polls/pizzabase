@@ -9,8 +9,15 @@ import { isValidPhone } from "../lib/validator/normalizeContact";
 import { BannedPhoneNumber } from "../entity/BannedPhoneNumber";
 import { BlockedIp } from "../entity/BlockedIp";
 import { ipHash } from "../lib/ip-blocklist";
-import { zapNewReport, zapNewLocation } from "../lib/zapier";
+import { zapNewReport, zapNewLocation, zapSkipReport } from "../lib/zapier";
 import { cdnUrlFromStoredUrl } from "../lib/media-cdn";
+import {
+  applyAutoSkip,
+  autoSkipPayload,
+  evaluateAutoSkip,
+  isAutoSkipEnabled,
+  AutoSkipDecision,
+} from "../lib/auto-skip";
 import {
   StreetViewImage,
   attachStreetViewUrl,
@@ -242,6 +249,8 @@ export class ReportsController {
           hasTruck: false,
           willReceive: false,
           alreadyOrdered: false,
+          autoSkipped: false,
+          skipReason: null,
         };
       }
     }
@@ -273,7 +282,25 @@ export class ReportsController {
       await report.location.validate(request.body?.user);
     }
 
-    if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
+    // Auto-skip (no volunteer triage needed) when either condition holds:
+    // pizza was ordered for this location within the last hour (the note
+    // tells the submitter when), or the reported line is under an hour (the
+    // note asks them to resubmit once it passes one). Flag-gated
+    // (AUTO_SKIP_REPORTS) — duplicates already linked to an order and truck
+    // locations take the normal flows either way.
+    let autoSkip: AutoSkipDecision | null = null;
+    if (isAutoSkipEnabled() && !hasTruck && !alreadyOrdered) {
+      autoSkip = await evaluateAutoSkip(report);
+    }
+
+    if (autoSkip) {
+      await applyAutoSkip(report, autoSkip);
+      // The skip Zap texts the submitter — only real phone numbers get a
+      // note (trusted/Retool reports use placeholder contacts).
+      if (isValidPhone(report.contactInfo)) {
+        await zapSkipReport(report, autoSkipPayload(autoSkip));
+      }
+    } else if ((isUnique || willReceive) && !hasTruck && !alreadyOrdered) {
       if (report.location.validatedAt) {
         await zapNewReport(report);
       } else {
@@ -284,8 +311,12 @@ export class ReportsController {
     return {
       address: report.location.fullAddress,
       hasTruck,
-      willReceive,
+      // An auto-skipped report will not receive an order — keep the
+      // frontend's distributor confirmation from promising one.
+      willReceive: autoSkip ? false : willReceive,
       alreadyOrdered,
+      autoSkipped: !!autoSkip,
+      skipReason: autoSkip?.reason ?? null,
     };
   }
 }

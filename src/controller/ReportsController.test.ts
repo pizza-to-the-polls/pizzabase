@@ -165,6 +165,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: false,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toEqual(200);
 
@@ -221,6 +223,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: true,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toEqual(200);
 
@@ -291,6 +295,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: true,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toBe(200);
 
@@ -357,6 +363,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: false,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toBe(200);
 
@@ -398,6 +406,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: false,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toBe(200);
 
@@ -455,6 +465,8 @@ describe("#create", () => {
       hasTruck: true,
       willReceive: false,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toBe(200);
 
@@ -502,6 +514,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: false,
       alreadyOrdered: true,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toBe(200);
 
@@ -539,6 +553,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: false,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toEqual(200);
 
@@ -583,6 +599,8 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: true,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toEqual(200);
 
@@ -639,11 +657,255 @@ describe("#create", () => {
       hasTruck: false,
       willReceive: false,
       alreadyOrdered: false,
+      autoSkipped: false,
+      skipReason: null,
     });
     expect(response.statusCode).toBe(200);
 
     const newReport = await Report.findOne({ where: { reportURL: url } });
     expect(newReport.location.id).toBe(canonicalLoc.id);
+  });
+
+  describe("auto-skip (flag off — default)", () => {
+    test("a recent order does NOT auto-skip; report flows to volunteer triage", async () => {
+      const url = "http://twitter.com/flagoff/status/123";
+      const address = "5335 S Kimbark Ave Chicago IL 60615";
+      const contact = "555-234-2345";
+
+      const location = await Location.createFromAddress({
+        latitude: 41.79907,
+        longitude: -87.58413,
+        fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      });
+      location.validatedAt = new Date();
+      await location.save();
+
+      // Order placed for this location moments ago — with the flag on this
+      // would auto-skip; flag off it must not.
+      await Order.placeOrder({ cost: 50, quantity: 5 }, location);
+
+      const request = http_mocks.createRequest({
+        method: "POST",
+        body: {
+          url,
+          contact,
+          address,
+          waitTime: "Less than one hour",
+          canDistribute: true,
+        },
+      });
+
+      const response = http_mocks.createResponse();
+      const body = await controller.create(request, response, () => undefined);
+
+      expect(body).toEqual({
+        address,
+        hasTruck: false,
+        willReceive: true,
+        alreadyOrdered: false,
+        autoSkipped: false,
+        skipReason: null,
+      });
+      expect(response.statusCode).toBe(200);
+
+      // Not skipped, and the volunteer new-report Zap fired instead.
+      const report = await Report.findOne({ where: { reportURL: url } });
+      expect(report.skippedAt).toBeFalsy();
+      const calls = (global.fetch as jest.Mock).mock.calls;
+      expect(calls.length).toBe(1);
+      expect(calls[0][0]).toEqual(process.env.ZAP_NEW_REPORT);
+    });
+  });
+
+  describe("auto-skip (AUTO_SKIP_REPORTS on)", () => {
+    beforeEach(() => {
+      process.env.AUTO_SKIP_REPORTS = "true";
+    });
+
+    afterEach(() => {
+      // Suites share one Node process (maxWorkers: 1) — never leak the
+      // flag into later test files.
+      delete process.env.AUTO_SKIP_REPORTS;
+    });
+
+    test("auto-skips a report at a location ordered for within the last hour", async () => {
+      const url = "http://twitter.com/recentorder/status/123";
+      const address = "5335 S Kimbark Ave Chicago IL 60615";
+      const contact = "555-234-2345";
+
+      const location = await Location.createFromAddress({
+        latitude: 41.79907,
+        longitude: -87.58413,
+        fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+        address: "5335 S Kimbark Ave",
+        city: "Chicago",
+        state: "IL",
+        zip: "60615",
+      });
+      location.validatedAt = new Date();
+      await location.save();
+
+      const order = await Order.placeOrder(
+        { cost: 50, quantity: 5, restaurant: "Pequod's" },
+        location,
+      );
+
+      const request = http_mocks.createRequest({
+        method: "POST",
+        body: {
+          url,
+          contact,
+          address,
+          waitTime: "1-2 hours",
+          canDistribute: true,
+        },
+      });
+
+      const response = http_mocks.createResponse();
+      const body = await controller.create(request, response, () => undefined);
+
+      expect(body).toEqual({
+        address,
+        hasTruck: false,
+        // auto-skipped → will not receive, even as a willing distributor
+        willReceive: false,
+        alreadyOrdered: false,
+        autoSkipped: true,
+        skipReason: "recent_order",
+      });
+      expect(response.statusCode).toBe(200);
+
+      const report = await Report.findOne({ where: { reportURL: url } });
+      expect(report).toBeTruthy();
+      expect(report.skippedAt).toBeTruthy();
+
+      // skippedAt set → the report is no longer open → a future order for the
+      // location won't link it ("skip" semantics).
+      const open = await Report.openReports(report.location);
+      expect(open.map((r) => r.id)).not.toContain(report.id);
+
+      // Audit trail for what happened and why.
+      const action = await Action.findOne({
+        where: { entityId: report.id, entityType: "Report" },
+        order: { id: "DESC" },
+      });
+      expect(action.actionType).toEqual("auto-skipped (recent_order)");
+
+      // The skip Zap fired (it texts the submitter when we ordered); the
+      // new-report volunteer Zap did not.
+      const calls = (global.fetch as jest.Mock).mock.calls;
+      expect(calls.length).toBe(1);
+      const [zapUrl, { body: zapBody }] = calls[0];
+      expect(zapUrl).toEqual(process.env.ZAP_SKIP_REPORT);
+      const parsed = JSON.parse(zapBody);
+      expect(parsed.hook).toEqual("ZAP_SKIP_REPORT");
+      // createdAt crossed the wire as an ISO string — reload from the DB so
+      // the expectation compares string-to-string, not Date-to-string.
+      const savedOrder = await Order.findOneByOrFail({ id: order.id });
+      expect(parsed.autoSkip).toEqual({
+        reason: "recent_order",
+        lastOrder: {
+          createdAt: savedOrder.createdAt.toISOString(),
+          quantity: savedOrder.quantity,
+          orderType: savedOrder.orderType,
+          restaurant: savedOrder.restaurant,
+        },
+      });
+    });
+
+    test("auto-skips a sub-hour line and zaps the resubmit note", async () => {
+      const url = "http://twitter.com/shortline/status/123";
+      const address = "5335 S Kimbark Ave Chicago IL 60615";
+      const contact = "555-234-2345";
+
+      const request = http_mocks.createRequest({
+        method: "POST",
+        body: {
+          url,
+          contact,
+          address,
+          waitTime: "Less than one hour",
+          canDistribute: true,
+        },
+      });
+
+      const response = http_mocks.createResponse();
+      const body = await controller.create(request, response, () => undefined);
+
+      expect(body).toEqual({
+        address,
+        hasTruck: false,
+        willReceive: false,
+        alreadyOrdered: false,
+        autoSkipped: true,
+        skipReason: "line_under_an_hour",
+      });
+      expect(response.statusCode).toBe(200);
+
+      const report = await Report.findOne({ where: { reportURL: url } });
+      expect(report).toBeTruthy();
+      expect(report.skippedAt).toBeTruthy();
+      expect(report.order).toBeFalsy();
+
+      const action = await Action.findOne({
+        where: { entityId: report.id, entityType: "Report" },
+        order: { id: "DESC" },
+      });
+      expect(action.actionType).toEqual("auto-skipped (line_under_an_hour)");
+
+      // Skip Zap only — no lastOrder for this reason; no volunteer Zap.
+      const calls = (global.fetch as jest.Mock).mock.calls;
+      expect(calls.length).toBe(1);
+      const [zapUrl, { body: zapBody }] = calls[0];
+      expect(zapUrl).toEqual(process.env.ZAP_SKIP_REPORT);
+      const parsed = JSON.parse(zapBody);
+      expect(parsed.autoSkip).toEqual({
+        reason: "line_under_an_hour",
+        lastOrder: null,
+      });
+    });
+
+    test("trusted report with a placeholder contact auto-skips without a submitter text", async () => {
+      const request = http_mocks.createRequest({
+        method: "POST",
+        body: {
+          waitTime: "Less than one hour",
+          addressOverride: {
+            address: "123 Placeholder Way",
+            city: "city",
+            state: "WA",
+            zip: "12345",
+            latitude: "420",
+            longitude: "-420",
+          },
+        },
+        headers: { Authorization: `Basic ${process.env.GOOD_API_KEY}` },
+      });
+
+      const response = http_mocks.createResponse();
+      const body = await controller.create(request, response, () => undefined);
+
+      expect(body.autoSkipped).toBe(true);
+      expect(body.skipReason).toEqual("line_under_an_hour");
+
+      // Skipped and audited, but the skip Zap never fired — there is no real
+      // phone to text (trusted contacts are placeholder emails).
+      expect((global.fetch as jest.Mock).mock.calls.length).toBe(0);
+      const report = await Report.findOne({
+        where: { contactInfo: "trusted@example.com" },
+        order: { id: "DESC" },
+      });
+      expect(report.skippedAt).toBeTruthy();
+      const action = await Action.findOne({
+        where: { entityId: report.id, entityType: "Report" },
+        order: { id: "DESC" },
+      });
+      expect(action.actionType).toEqual("auto-skipped (line_under_an_hour)");
+    });
   });
 
   test("links upload to report when uploadId matches url", async () => {
