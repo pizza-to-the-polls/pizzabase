@@ -2,6 +2,7 @@ import { NextFunction, Request, Response } from "express";
 import { BlockedIp } from "../entity/BlockedIp";
 import { checkAuthorization, findOr404 } from "./helper";
 import { ipHash } from "../lib/ip-blocklist";
+import { updateWafIpSet } from "../lib/waf";
 
 export class BlockedIpsController {
   async index(request: Request, response: Response, _next: NextFunction) {
@@ -67,6 +68,13 @@ export class BlockedIpsController {
 
     await block.save();
 
+    // Edge enforcement (FEAT-007): also add the raw IP to the WAFv2 IP set
+    // so the web ACL drops this address before it reaches the Lambda. The
+    // raw IP goes only to the WAF API — never to the DB (hash only) and
+    // never to the logs. Best-effort: updateWafIpSet never throws, so a WAF
+    // failure cannot fail the DB block that already succeeded.
+    await updateWafIpSet(ip, "ADD");
+
     return block.asJSON();
   }
 
@@ -86,6 +94,21 @@ export class BlockedIpsController {
     if (!block) return;
 
     await block.remove();
+
+    // Edge enforcement (FEAT-007): remove the raw IP from the WAFv2 IP set
+    // as well. The DB stores only the hash, so the caller must supply the
+    // address being unblocked; it is only forwarded when it hashes to the
+    // entry being deleted (never logged, never persisted). Best-effort: a
+    // WAF failure must not fail the unblock.
+    const { ip } = request.body;
+    const hash = ipHash(ip || "");
+    if (hash && hash === block.ipHash) {
+      await updateWafIpSet(ip, "REMOVE");
+    } else if (process.env.WAF_BLOCKED_IPSET_ARN) {
+      console.warn(
+        "blocked-ips: delete without a matching raw ip; WAF IP set entry left in place",
+      );
+    }
 
     return { success: true };
   }
