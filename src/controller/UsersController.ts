@@ -3,6 +3,8 @@ import { NextFunction, Request, Response } from "express";
 import { User } from "../entity/User";
 import { findOr404, isAuthorized } from "./helper";
 import { normalizeEmail } from "../lib/partners";
+import { notifyBugsnag } from "../lib/notifyBugsnag";
+import { sendPartnerWelcomeEmail } from "../lib/mailgun";
 
 /**
  * Known-user CRUD (the users table behind trusted/partner reports).
@@ -14,6 +16,10 @@ import { normalizeEmail } from "../lib/partners";
  * inbound token, the thread is the audit trail. reports.trusted_by
  * references these rows (ON DELETE SET NULL), and partner magic links
  * verify against this table on every submit.
+ *
+ * create() also sends the partner welcome email (Mailgun) — never blocking
+ * the create; the response carries welcomeEmailSent so the operator can
+ * follow up when Mailgun is down.
  */
 export class UsersController {
   async index(request: Request, response: Response, next: NextFunction) {
@@ -69,8 +75,22 @@ export class UsersController {
     user.admin = request.body?.admin === true;
     await user.save();
 
+    // Welcome email — never blocks the create: the row is what grants
+    // access, so a Mailgun outage must not fail the request. Surface the
+    // send result instead, so the operator (pizza-eagle's answer in Slack)
+    // can follow up by pointing the partner at the sign-in page.
+    let welcomeEmailSent = true;
+    try {
+      await sendPartnerWelcomeEmail(user.email, {
+        organization: user.organization,
+      });
+    } catch (e) {
+      notifyBugsnag(e as Error);
+      welcomeEmailSent = false;
+    }
+
     response.status(201);
-    return user.asJSON();
+    return { ...user.asJSON(), welcomeEmailSent };
   }
 
   async update(request: Request, response: Response, next: NextFunction) {
