@@ -1,12 +1,11 @@
 import { normalizeAddress } from "./normalizeAddress";
 import { NormalAddress } from "./types";
 import { GeocodingError } from "./geocode";
-import { FILE_HASH_ERROR, FILE_TYPE_ERROR, ADDRESS_ERROR } from "./constants";
+import { FILE_HASH_ERROR, FILE_TYPE_ERROR } from "./constants";
 import { UPLOAD_CONTENT_TYPES } from "./constants";
 
 interface ValidationError {
   fileName?: string;
-  address?: string;
   _geocoding?: string;
 }
 
@@ -39,10 +38,14 @@ export const validateUpload = async ({
   }
 
   try {
+    // BUG-037: a null geocode is NOT a client error — it means the geocoder
+    // could not normalize the address to a full street address (locality-only
+    // Places picks like "Miami, FL, USA", route-level partial matches,
+    // ZERO_RESULTS). Photo uploads do not need a rooftop-precise address: the
+    // Location link is a convenience (uploads.location_id is nullable since
+    // #341) and /report independently validates the address the user submits
+    // (validateReport). Only system-level geocoding failures surface here.
     const normalizedAddress = await normalizeAddress(address);
-    if (!normalizedAddress) {
-      errors.address = ADDRESS_ERROR;
-    }
     return { errors, fileExt, fileHash, normalizedAddress };
   } catch (e) {
     if (e instanceof GeocodingError) {

@@ -3,7 +3,13 @@ import * as http_mocks from "node-mocks-http";
 import { UploadsController } from "./UploadsController";
 import { Upload } from "../entity/Upload";
 import { Location } from "../entity/Location";
-import { FILE_TYPE_ERROR, ADDRESS_ERROR } from "../lib/validator/constants";
+import { FILE_TYPE_ERROR } from "../lib/validator/constants";
+import {
+  LOCALITY_ONLY_ADDRESSES,
+  PARTIAL_MATCH_ADDRESS,
+  UNNORMALIZABLE_ADDRESSES,
+  stubGeocode,
+} from "../tests/fixtures/geocode";
 import { AppDataSource } from "../data-source";
 
 import {
@@ -43,9 +49,10 @@ describe("#create", () => {
       response,
       () => undefined,
     );
+    // BUG-037: a missing/invalid address is no longer an error at all —
+    // only the file problem is reported.
     expect(body).toEqual({
       errors: {
-        address: ADDRESS_ERROR,
         fileName: FILE_TYPE_ERROR,
       },
     });
@@ -511,9 +518,115 @@ describe("#create", () => {
             "Address verification is temporarily unavailable. Please try again later.",
         },
       });
+      // A system-level geocoding failure must not create any rows.
+      expect(await Upload.count()).toEqual(0);
     } finally {
       mockModule.geocode = originalGeocode;
     }
+  });
+
+  // -----------------------------------------------------------------------
+  // BUG-037: geocoder-unnormalizable addresses (locality-only Places picks,
+  // route-level partial matches) must NOT 422 the upload — the photo is
+  // stored without a location and /report validates its own address.
+  // -----------------------------------------------------------------------
+  describe("BUG-037: unnormalizable addresses", () => {
+    let restoreGeocode: (() => void) | null = null;
+
+    afterEach(() => {
+      restoreGeocode?.();
+      restoreGeocode = null;
+    });
+
+    it.each(LOCALITY_ONLY_ADDRESSES)(
+      "creates a location-less upload for the locality-only pick %s",
+      async (address) => {
+        restoreGeocode = stubGeocode(async () => null);
+        const getOrCreate = jest.spyOn(Location, "getOrCreateFromAddress");
+
+        const response = http_mocks.createResponse();
+        const body = (await controller.create(
+          http_mocks.createRequest({
+            ip: "127.0.0.1",
+            method: "POST",
+            body: {
+              address,
+              fileName: "photo.jpeg",
+              fileHash: `hash-${address}`,
+            },
+          }),
+          response,
+          () => undefined,
+        )) as any;
+
+        expect(response.statusCode).toEqual(200);
+        expect(body.isDuplicate).toEqual(false);
+        expect(body.presigned.url).toEqual("https://s3.bucket.com/launchpad");
+        expect(body.filePath).toMatch(
+          /^uploads\/unknown-location-[0-9a-f]{8}\.jpeg$/,
+        );
+
+        // Row persisted with no location and matching raw path.
+        const upload = await Upload.findOne({ where: { id: body.id } });
+        expect(upload!.location).toBeNull();
+        expect(upload!.filePath).toEqual(body.filePath);
+        expect(upload!.rawFilePath).toEqual(body.filePath);
+        expect(getOrCreate).not.toHaveBeenCalled();
+        expect(await Location.count()).toEqual(0);
+      },
+    );
+
+    it("creates a location-less upload for a partial-match street address", async () => {
+      restoreGeocode = stubGeocode(async () => null);
+
+      const response = http_mocks.createResponse();
+      const body = (await controller.create(
+        http_mocks.createRequest({
+          ip: "127.0.0.1",
+          method: "POST",
+          body: {
+            address: PARTIAL_MATCH_ADDRESS,
+            fileName: "photo.jpeg",
+            fileHash: "hash-partial-match",
+          },
+        }),
+        response,
+        () => undefined,
+      )) as any;
+
+      expect(response.statusCode).toEqual(200);
+      expect(body.filePath).toMatch(
+        /^uploads\/unknown-location-[0-9a-f]{8}\.jpeg$/,
+      );
+
+      const upload = await Upload.findOne({ where: { id: body.id } });
+      expect(upload!.location).toBeNull();
+    });
+
+    it("creates no Location rows across all unnormalizable addresses", async () => {
+      restoreGeocode = stubGeocode(async () => null);
+
+      for (const [i, address] of UNNORMALIZABLE_ADDRESSES.entries()) {
+        const body = (await controller.create(
+          http_mocks.createRequest({
+            ip: "127.0.0.1",
+            method: "POST",
+            body: {
+              address,
+              fileName: "photo.jpeg",
+              fileHash: `hash-all-${i}`,
+            },
+          }),
+          http_mocks.createResponse(),
+          () => undefined,
+        )) as any;
+
+        expect(body.filePath).toMatch(/^uploads\/unknown-location-/);
+      }
+
+      expect(await Location.count()).toEqual(0);
+      expect(await Upload.count()).toEqual(UNNORMALIZABLE_ADDRESSES.length);
+    });
   });
 });
 
