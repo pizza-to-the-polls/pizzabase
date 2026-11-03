@@ -87,7 +87,11 @@ export class Report extends BaseEntity {
   @Index()
   truck: Truck;
 
-  @ManyToOne(() => Upload, { nullable: true })
+  // Eager like location/order/truck: asJSON gates reportURL on the linked
+  // upload's mediaStatus (issue #402), so every read path — locations index,
+  // reports index/show, order reports — needs the upload row in the same
+  // round trip. LEFT JOIN on the indexed upload_id column, single row.
+  @ManyToOne(() => Upload, { eager: true, nullable: true })
   @JoinColumn({ name: "upload_id" })
   @Index()
   upload: Upload | null;
@@ -129,9 +133,22 @@ export class Report extends BaseEntity {
   asJSON(showPrivate: boolean = false) {
     if (showPrivate) return this.asJSONPrivate();
 
-    const { createdAt, id, reportURL, waitTime } = this;
+    const { createdAt, id, reportURL, waitTime, upload } = this;
 
-    return { createdAt, id, reportURL, waitTime };
+    // Issue #402: only advertise reportURL when the linked upload's media
+    // actually made it through the pipeline. The /uploads/:slug route 302s
+    // to the media CDN for `ready` uploads and 404s everything else, so a
+    // report whose upload is processing/failed/none must not hand clients a
+    // dead image link. Reports without any upload keep whatever reportURL
+    // they hold (twitter/streetview/partner URLs — no upload to check).
+    const uploadReady = !upload || upload.mediaStatus === "ready";
+
+    return {
+      createdAt,
+      id,
+      reportURL: uploadReady ? reportURL : null,
+      waitTime,
+    };
   }
 
   asJSONPrivate() {
@@ -203,11 +220,9 @@ export class Report extends BaseEntity {
         },
       ],
       order: { createdAt: "DESC" },
-      // Load the linked web upload so the MMS inbound controller can check
-      // its source IP against the blocklist (BUG-029). LEFT JOIN on the
-      // indexed upload_id column — negligible next to the eager location
-      // and order joins. Sole caller is TwilioInboundController.inbound().
-      relations: ["upload"],
+      // The linked web upload rides along eagerly (issue #402), so the MMS
+      // inbound controller can check its source IP against the blocklist
+      // (BUG-029) without an extra round trip.
     });
 
     return report ?? null;
@@ -220,8 +235,8 @@ export class Report extends BaseEntity {
    * text) as a reportURL — so a non-numeric string can never produce a NaN
    * id query (BUG-017).
    *
-   * The web upload relation is loaded eagerly so callers get the report's
-   * original upload (reports.upload_id) in the same round trip.
+   * The web upload relation is eager (issue #402), so callers get the
+   * report's original upload (reports.upload_id) in the same round trip.
    */
   static async findByIdOrReportUrl(
     idOrAddress: string,
@@ -231,7 +246,6 @@ export class Report extends BaseEntity {
       where: /^\d+$/.test(trimmed)
         ? { id: Number(trimmed) }
         : { reportURL: idOrAddress },
-      relations: ["upload"],
     });
   }
 

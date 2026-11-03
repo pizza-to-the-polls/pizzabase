@@ -2,7 +2,7 @@ import { AppDataSource } from "../data-source";
 import { Report } from "./Report";
 import { Location } from "./Location";
 import { Order } from "./Order";
-import { Upload } from "./Upload";
+import { Upload, MediaStatus } from "./Upload";
 import { NormalAddress } from "../lib/validator";
 
 const ADDRESS: NormalAddress = {
@@ -297,6 +297,108 @@ describe("Report entity", () => {
       expect(
         await Report.findByIdOrReportUrl("HTTP://TWITTER.COM/R/NO-MATCH"),
       ).toBeNull();
+    });
+  });
+
+  describe("#asJSON", () => {
+    // Issue #402: reportURL is the web-upload URL for reports submitted via
+    // the upload flow, and /uploads/:slug 302s to the media CDN only when
+    // the upload's media_status is 'ready'. Everything else 404s, so the
+    // API must not advertise a dead image link.
+    const UPLOAD_URL = "https://polls.pizza/uploads/chicago-il-asjson.jpg";
+
+    const makeReportWithUpload = async (mediaStatus: MediaStatus) => {
+      // Distinct IP per call — createOrReject rate-limits uploads per IP and
+      // the whole suite shares the database.
+      const statusIndex = ["none", "processing", "ready", "failed"].indexOf(
+        mediaStatus,
+      );
+      const ip = `192.0.2.${11 + statusIndex}`;
+      const [report] = await Report.createNewReport(PHONE, UPLOAD_URL, ADDRESS);
+      const [upload] = await Upload.createOrReject(ip, {
+        fileExt: "jpg",
+        normalizedAddress: ADDRESS,
+        // Unique per test — fileHash is unique-keyed and createOrReject
+        // returns an existing row on a hash match.
+        fileHash: `asjson-${mediaStatus}-hash`,
+      });
+      upload.mediaStatus = mediaStatus;
+      await upload.save();
+
+      report.upload = upload;
+      await report.save();
+
+      // Reload so the eager relation is exercised, as API read paths do.
+      const reloaded = await Report.findOneOrFail({
+        where: { id: report.id },
+      });
+      return { report: reloaded, upload };
+    };
+
+    it("serializes reportURL as null when the linked upload failed to process", async () => {
+      const { report } = await makeReportWithUpload("failed");
+
+      expect(report.upload).not.toBeNull();
+      expect(report.upload!.mediaStatus).toEqual("failed");
+      expect(report.asJSON().reportURL).toBeNull();
+    });
+
+    it("serializes reportURL as null while the linked upload is still processing", async () => {
+      const { report } = await makeReportWithUpload("processing");
+
+      expect(report.asJSON().reportURL).toBeNull();
+    });
+
+    it("serializes reportURL as null when the linked upload has no media", async () => {
+      const { report } = await makeReportWithUpload("none");
+
+      expect(report.asJSON().reportURL).toBeNull();
+    });
+
+    it("serializes reportURL when the linked upload is ready", async () => {
+      const { report } = await makeReportWithUpload("ready");
+
+      expect(report.upload!.mediaStatus).toEqual("ready");
+      expect(report.asJSON().reportURL).toEqual(UPLOAD_URL);
+    });
+
+    it("serializes reportURL unchanged for reports with no upload (twitter/partner/streetview URLs)", async () => {
+      await Report.createNewReport(
+        PHONE,
+        "http://twitter.com/r/no-upload",
+        ADDRESS,
+      );
+
+      // Reload as API read paths do, so the eager relation resolves
+      // (createNewReport returns the entity without relations hydrated,
+      // where upload is undefined rather than null).
+      const [report] = await Report.find({
+        where: { reportURL: "http://twitter.com/r/no-upload" },
+      });
+
+      expect(report).toBeDefined();
+      expect(report.upload).toBeNull();
+      expect(report.asJSON().reportURL).toEqual(
+        "http://twitter.com/r/no-upload",
+      );
+    });
+
+    it("gates reportURL through asJSONPrivate too (zap payload inherits the guard)", async () => {
+      const { report } = await makeReportWithUpload("failed");
+
+      expect(report.asJSONPrivate().reportURL).toBeNull();
+    });
+
+    it("eager-loads the upload on plain finds, so asJSON sees the status everywhere", async () => {
+      const { report, upload } = await makeReportWithUpload("ready");
+      const found = await Report.find({
+        where: { id: report.id },
+      });
+
+      expect(found).toHaveLength(1);
+      expect(found[0].upload).not.toBeNull();
+      expect(found[0].upload!.id).toEqual(upload.id);
+      expect(found[0].asJSON().reportURL).toEqual(UPLOAD_URL);
     });
   });
 });
