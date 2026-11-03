@@ -32,9 +32,11 @@ export class Upload extends BaseEntity {
   @UpdateDateColumn({ name: "updated_at" })
   updatedAt;
 
-  // Nullable for orphan MMS media (issue #341): senders with no matched
-  // recent report still get their media stored — just without a location.
-  // Web uploads and matched MMS replies always carry a location.
+  // Nullable for orphan MMS media (issue #341) and for web uploads whose
+  // address the geocoder could not normalize to a full street address
+  // (BUG-037): senders who picked a locality-only Place or a partial-match
+  // street still get their media stored — just without a location. Matched
+  // MMS replies and fully-geocoded web uploads always carry a location.
   @ManyToOne((_type) => Location, (location) => location.reports, {
     eager: true,
     nullable: true,
@@ -133,7 +135,11 @@ export class Upload extends BaseEntity {
       fileExt,
       normalizedAddress,
       fileHash,
-    }: { fileExt: string; normalizedAddress: NormalAddress; fileHash: string },
+    }: {
+      fileExt: string;
+      normalizedAddress: NormalAddress | null;
+      fileHash: string;
+    },
   ): Promise<[Upload, boolean]> {
     const exists = await this.findOne({
       where: { fileHash },
@@ -154,16 +160,26 @@ export class Upload extends BaseEntity {
     }
     const upload = new this();
 
-    const [location] = await Location.getOrCreateFromAddress(normalizedAddress);
+    // BUG-037: an unnormalizable address (locality-only Places pick,
+    // route-level partial match, ZERO_RESULTS) no longer blocks the upload —
+    // the photo is stored without a location and /report independently
+    // validates the address the user submits.
+    const location = normalizedAddress
+      ? (await Location.getOrCreateFromAddress(normalizedAddress))[0]
+      : null;
     upload.location = location;
-    const { city, state } = location;
+
+    // The file path carries city/state when we have them; a location-less
+    // upload (orphan MMS, unnormalizable web address) falls back to a
+    // neutral prefix so the slug stays unique and hygienic.
+    const slug = location
+      ? `${location.city}-${location.state}`
+      : "unknown-location";
 
     upload.ipAddress = ipAddress;
     upload.fileHash = fileHash;
     upload.sightengineScore = null;
-    const generatedPath = `uploads/${city}-${state}-${
-      uuidv4().split("-")[0]
-    }.${fileExt}`
+    const generatedPath = `uploads/${slug}-${uuidv4().split("-")[0]}.${fileExt}`
       .toLowerCase()
       .replace(/\s/g, "-");
     upload.filePath = generatedPath;

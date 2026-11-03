@@ -49,6 +49,10 @@ export class UploadsController {
       };
     }
 
+    // BUG-037: `errors` can only contain fileName (client file problems) or
+    // _geocoding (system-level geocoder failure). A geocoder-unnormalizable
+    // address is not an error — `normalizedAddress` is simply null and the
+    // upload proceeds without a location.
     const { errors, ...uploadParams } = validated;
 
     if (Object.keys(errors).length > 0) {
