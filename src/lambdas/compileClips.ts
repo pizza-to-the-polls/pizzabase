@@ -14,6 +14,9 @@
  *      upload IS NOT NULL) with status in ready/approved/published and
  *      compiled_at NULL, oldest first. None found → log and exit (the
  *      "if there's new content" gate — empty runs never render or post).
+ *      At most MAX_MEMBERS_PER_COMPILATION members are compiled per run
+ *      (BUG-041); anything beyond the cap stays compiled_at NULL for the
+ *      next scheduled run.
  *   2. Download each member's rendered clip.mp4 from the processed bucket.
  *      A member missing its render output is skipped (logged), never
  *      fails the run; if nothing survives, exit like an empty run.
@@ -54,6 +57,17 @@ const FFMPEG_BIN = process.env.FFMPEG_PATH || "/opt/bin/ffmpeg";
 
 /** Clip statuses eligible for folding into a compilation. */
 export const COMPILABLE_STATUSES = ["ready", "approved", "published"];
+
+/**
+ * Cap on members folded into one compilation run. Each member's render is
+ * downloaded into /tmp before the concat (BUG-041: an election-day backlog
+ * of 250+ renders blew the Lambda's ephemeral disk — ffmpeg exited 228
+ * ENOSPC, the run failed, members stayed compiled_at NULL, and every
+ * 3-hourly retry re-downloaded the same ever-growing backlog). Compiling
+ * the oldest slice per run drains the backlog gradually; the next run
+ * picks up the remainder.
+ */
+export const MAX_MEMBERS_PER_COMPILATION = 12;
 
 /**
  * ffmpeg args re-encoding one member render into a uniform, silent
@@ -135,6 +149,16 @@ export async function runCompilation(): Promise<Clip | null> {
     return null;
   }
 
+  // Cap the run: download/normalize only the oldest slice. Everything
+  // beyond the cap stays compiled_at NULL for the next scheduled run.
+  const selected = candidates.slice(0, MAX_MEMBERS_PER_COMPILATION);
+  if (candidates.length > selected.length) {
+    console.log(
+      `[compile-clips] compiling ${selected.length} of ${candidates.length} pending ` +
+        "(capped per run to bound /tmp disk and run duration)",
+    );
+  }
+
   const workDir = path.join(os.tmpdir(), `clip-compile-${Date.now()}`);
   let compilation: Clip | null = null;
   try {
@@ -143,7 +167,7 @@ export async function runCompilation(): Promise<Clip | null> {
     // Download member renders; skip any clip without render output.
     const memberFiles: string[] = [];
     const members: Clip[] = [];
-    for (const clip of candidates) {
+    for (const clip of selected) {
       const videoKey = (clip.outputPaths || {}).video;
       if (!videoKey) {
         console.warn(

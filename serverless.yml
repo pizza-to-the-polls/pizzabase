@@ -322,6 +322,11 @@ functions:
     handler: build/lambdas/compileClips.handler
     timeout: 900
     memorySize: 3009
+    # Belt-and-braces for BUG-041: the member cap in compileClips.ts is the
+    # real fix, but this doubles /tmp (default 512MB → 2GB) so a larger
+    #-than-expected slice or stray temp files don't reproduce the ENOSPC
+    # ffmpeg exit 228.
+    ephemeralStorageSize: 2048
     layers:
       - arn:aws:lambda:us-west-2:${env:AWS_ACCOUNT_ID}:layer:ffmpeg:4
     environment:
