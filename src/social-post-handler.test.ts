@@ -32,6 +32,29 @@ describe("social-post-handler", () => {
     expect(socialPost).toHaveBeenCalledTimes(1);
     expect(socialPost).toHaveBeenCalledWith(
       expect.objectContaining({ id: order.id }),
+      { platforms: undefined },
+    );
+  });
+
+  it("passes a platforms subset through to socialPost", async () => {
+    const location = await Location.createFromAddress({
+      latitude: 41.79907,
+      longitude: -87.58413,
+      fullAddress: "5335 S Kimbark Ave Chicago IL 60615",
+      address: "5335 S Kimbark Ave",
+      city: "Chicago",
+      state: "IL",
+      zip: "60615",
+    });
+    const order = await Order.placeOrder({ quantity: 3, cost: 45.0 }, location);
+
+    (socialPost as jest.Mock).mockResolvedValueOnce(undefined);
+
+    await handler({ orderId: order.id, platforms: ["twitter"] });
+
+    expect(socialPost).toHaveBeenCalledWith(
+      expect.objectContaining({ id: order.id }),
+      { platforms: ["twitter"] },
     );
   });
 
