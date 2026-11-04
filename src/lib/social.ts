@@ -6,6 +6,17 @@ import { renderMessage } from "./message-templates";
 import { collectMedia } from "./media";
 import { socialEnabled } from "./social-config";
 
+export type SocialPlatform = "bluesky" | "twitter" | "threads";
+
+export interface SocialPostOptions {
+  /**
+   * Restrict posting to a subset of platforms (default: all three). Used by
+   * targeted retries — e.g. replaying X posts after a lifted spend cap
+   * without duplicating the Bluesky/Threads posts that already succeeded.
+   */
+  platforms?: SocialPlatform[];
+}
+
 /**
  * Slack staging shim (#213): when SOCIAL_POST_TARGET=slack, social posting
  * delivers the exact rendered message (plus media URLs and the target
@@ -77,14 +88,23 @@ async function postToSlack(
  * so that the quirky template text is consistent on Twitter, BlueSky, and
  * any future social network.
  *
- * Posts to all configured platforms concurrently. Individual failures
+ * Posts to all configured platforms concurrently (or the requested
+ * subset — see SocialPostOptions). Individual failures
  * are logged but never propagated, and the returned promise resolves only
  * once every platform attempt has settled — the standalone onSocialPost
  * Lambda freezes its container when the handler returns, so any promise
  * still pending here would be suspended mid-request and never complete.
  */
-export async function socialPost(order: Order): Promise<void> {
-  console.log(`socialPost: starting for order ${order.id}`);
+export async function socialPost(
+  order: Order,
+  options: SocialPostOptions = {},
+): Promise<void> {
+  const platforms = new Set<SocialPlatform>(
+    options.platforms ?? ["bluesky", "twitter", "threads"],
+  );
+  console.log(
+    `socialPost: starting for order ${order.id} (platforms: ${[...platforms].join(", ") || "none"})`,
+  );
 
   const text = renderMessage(order);
   console.log(`socialPost: rendered message (${text.length} chars)`);
@@ -112,7 +132,9 @@ export async function socialPost(order: Order): Promise<void> {
 
   const attempts: Promise<void>[] = [];
 
-  if (enabled.bluesky) {
+  if (!platforms.has("bluesky")) {
+    console.log("socialPost: bluesky → skipped (not requested)");
+  } else if (enabled.bluesky) {
     console.log("socialPost: bluesky → attempting…");
     attempts.push(
       blueskyPost(order, text, mediaUrls)
@@ -123,7 +145,9 @@ export async function socialPost(order: Order): Promise<void> {
     console.log("socialPost: bluesky → skipped (not configured)");
   }
 
-  if (enabled.twitter) {
+  if (!platforms.has("twitter")) {
+    console.log("socialPost: twitter → skipped (not requested)");
+  } else if (enabled.twitter) {
     console.log("socialPost: twitter → attempting…");
     attempts.push(
       twitterPost(order, text, mediaUrls)
@@ -135,13 +159,18 @@ export async function socialPost(order: Order): Promise<void> {
   }
 
   // Threads self-gates at runtime via getAccessToken() (token lives in DB,
-  // not frozen Lambda env vars), so it always attempts here.
-  console.log("socialPost: threads → attempting…");
-  attempts.push(
-    threadsPost(order, text, mediaUrls)
-      .then(() => console.log("socialPost: threads → completed"))
-      .catch((err) => console.error(`socialPost: threads → FAILED (${err})`)),
-  );
+  // not frozen Lambda env vars), so it always attempts here unless filtered
+  // out via options.platforms (used by targeted retries).
+  if (!platforms.has("threads")) {
+    console.log("socialPost: threads → skipped (not requested)");
+  } else {
+    console.log("socialPost: threads → attempting…");
+    attempts.push(
+      threadsPost(order, text, mediaUrls)
+        .then(() => console.log("socialPost: threads → completed"))
+        .catch((err) => console.error(`socialPost: threads → FAILED (${err})`)),
+    );
+  }
 
   await Promise.allSettled(attempts);
 }
