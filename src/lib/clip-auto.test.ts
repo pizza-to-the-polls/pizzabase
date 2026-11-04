@@ -260,6 +260,114 @@ describe("seedUnclippedOrderMedia", () => {
       expect(clip).toBeNull();
     }
   });
+
+  /**
+   * BUG-042 / issue #407 regression: the backstop must page its window
+   * scan (narrow select + take/skip) instead of loading every
+   * order-linked report as a full entity in one Data API response —
+   * election-day volume blew past the 1 MB cap and killed every run.
+   * A local Postgres can't reproduce the cap itself, so this drives the
+   * batching behavior directly: more fixtures than one batch holds must
+   * all seed across batches, each exactly once, and a re-run must seed
+   * nothing (idempotence holds across batch boundaries too).
+   */
+  it("seeds order-linked web uploads across batches (narrow select + take/skip), each exactly once", async () => {
+    const location = await makeLocation();
+    const order = await makeOrder(location);
+    // 25 ready web uploads → 3 scan batches at batchSize 10.
+    const COUNT = 25;
+    const uploadIds: number[] = [];
+    for (let i = 0; i < COUNT; i++) {
+      const upload = await makeUpload(location);
+      await makeOrderReport(location, order, upload);
+      uploadIds.push(upload.id);
+    }
+
+    const seeded = await seedUnclippedOrderMedia(10);
+
+    expect(seeded).toEqual(COUNT);
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(COUNT);
+    for (const id of uploadIds) {
+      const clip = await Clip.findOne({ where: { upload: { id } } });
+      expect(clip).not.toBeNull();
+      expect(clip?.status).toEqual("queued");
+    }
+
+    // Idempotent across batches: the second run seeds nothing.
+    const reseeded = await seedUnclippedOrderMedia(10);
+    expect(reseeded).toEqual(0);
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(COUNT);
+  });
+
+  /**
+   * Same batching guarantee for the MMS phase — plus double-seed
+   * prevention across batches: an upload that already has a clip (in
+   * any status) is skipped during the scan, never re-seeded.
+   */
+  it("seeds order-linked MMS uploads across batches and never double-seeds uploads that already have a clip", async () => {
+    const location = await makeLocation();
+    const order = await makeOrder(location);
+    const report = await makeOrderReport(location, order, null);
+
+    // An upload that already has a clip — any status counts for
+    // idempotence, so use a terminal one.
+    const alreadyClipped = await makeUpload(location);
+    alreadyClipped.report = report;
+    await alreadyClipped.save();
+    const priorClip = new Clip();
+    priorClip.upload = alreadyClipped;
+    priorClip.status = "published";
+    await priorClip.save();
+
+    // 15 ready MMS uploads → 2 scan batches at batchSize 10.
+    const COUNT = 15;
+    const mmsIds: number[] = [];
+    for (let i = 0; i < COUNT; i++) {
+      const mms = await makeUpload(location);
+      mms.report = report;
+      await mms.save();
+      mmsIds.push(mms.id);
+    }
+
+    const seeded = await seedUnclippedOrderMedia(10);
+
+    expect(seeded).toEqual(COUNT);
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(COUNT);
+    // The pre-clipped upload was never re-seeded.
+    const priorClips = await Clip.find({
+      where: { upload: { id: alreadyClipped.id } },
+    });
+    expect(priorClips).toHaveLength(1);
+    expect(priorClips[0].id).toEqual(priorClip.id);
+    for (const id of mmsIds) {
+      const clip = await Clip.findOne({ where: { upload: { id } } });
+      expect(clip).not.toBeNull();
+    }
+
+    // Idempotent across batches: the second run seeds nothing.
+    const reseeded = await seedUnclippedOrderMedia(10);
+    expect(reseeded).toEqual(0);
+    expect(mockInvokeRenderClip).toHaveBeenCalledTimes(COUNT);
+  });
+
+  it("never throws when the scan query fails — returns 0", async () => {
+    const qbSpy = jest
+      .spyOn(Report.getRepository(), "createQueryBuilder")
+      .mockImplementationOnce(() => {
+        throw new Error(
+          "UnsupportedResultException (simulated Data API failure)",
+        );
+      });
+
+    try {
+      const seeded = await seedUnclippedOrderMedia(10);
+
+      expect(seeded).toEqual(0);
+      expect(mockInvokeRenderClip).not.toHaveBeenCalled();
+    } finally {
+      qbSpy.mockRestore();
+    }
+  });
 });
 
 describe("seedClipsForRecentlyFedSkip", () => {

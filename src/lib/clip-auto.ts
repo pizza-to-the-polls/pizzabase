@@ -32,7 +32,7 @@
  * never throw: a failed seed just means the next scheduled run retries.
  */
 
-import { In, IsNull, MoreThan, Not } from "typeorm";
+import { In, MoreThan } from "typeorm";
 import { Clip } from "../entity/Clip";
 import { Location } from "../entity/Location";
 import { Order } from "../entity/Order";
@@ -246,6 +246,247 @@ export async function seedClipsForRecentlyFedSkip(
 }
 
 /**
+ * Rows fetched per backstop scan batch — 100 rows × a few sparse columns
+ * is a few KB, far under the Aurora Data API's 1 MB single-response cap.
+ * BUG-042 / issue #407: the backstop used to load EVERY order-linked
+ * report and upload in the 7-day window as FULL entities with their
+ * joined relations (eager location/order joins, exif_data and
+ * processed_file_path JSONB and all) in one ExecuteStatement response.
+ * Election-day volume (~950 uploads) blew past the cap →
+ * UnsupportedResultException on every scheduled run, so the backstop
+ * died before compiling anything. The fix (same shape as BUG-035 / #394
+ * in sweepStaleUploads):
+ *   - the window scan is a NARROW select (ids + mediaStatus only); full
+ *     entities are loaded only for the small set of actual seed
+ *     candidates, after a bulk existing-clip check;
+ *   - the scan is paged with take/skip, so no single response can exceed
+ *     the cap regardless of window volume;
+ *   - readiness stays filtered in JS (media_status is an enum column:
+ *     the Data API can't compare it to a text parameter), while the
+ *     order linkage becomes a SQL predicate via inner joins (a join, not
+ *     an enum-vs-text comparison, so it is Data API safe).
+ */
+export const SEED_BATCH_SIZE = 100;
+
+/** Per-backstop-run cap (batches per phase): one scheduled run scans at
+ * most SEED_MAX_BATCHES × SEED_BATCH_SIZE rows per phase; leftover
+ * backlog resumes on the next run (every seed commits independently, so
+ * each run makes durable progress). */
+export const SEED_MAX_BATCHES = 50;
+
+/**
+ * Bulk existing-clip check for one scan batch: which of these uploads
+ * already have ANY clip row (any status — idempotence means a clip in
+ * any state counts)? One IN(...) query per batch instead of a
+ * per-upload Clip.findOne keeps the seed phase at O(batch) queries, and
+ * keeps the full-entity load to uploads that would actually seed.
+ */
+async function uploadIdsWithClips(uploadIds: number[]): Promise<Set<number>> {
+  if (uploadIds.length === 0) return new Set();
+  const rows = await Clip.getRepository()
+    .createQueryBuilder("c")
+    .select("u.id", "uploadId")
+    .innerJoin("c.upload", "u")
+    .where("u.id IN (:...ids)", { ids: uploadIds })
+    .getRawMany();
+  return new Set(rows.map((row) => Number(row.uploadId)));
+}
+
+/**
+ * One raw scan row for the web phase: report id plus the linked web
+ * upload's id and mediaStatus. mediaStatus is a Postgres enum column —
+ * it is SELECTED here (selects are safe) but never COMPARED in SQL, and
+ * the readiness filter runs in JS after the batch comes back.
+ */
+interface WebScanRow {
+  reportId: number;
+  uploadId: number | null;
+  mediaStatus: string | null;
+}
+
+/**
+ * One batch of recent order-linked reports with their web upload
+ * (reports.upload_id): narrow getRawMany scan — only report id plus the
+ * upload's id and mediaStatus. The order linkage is a SQL predicate via
+ * an inner join on the report's order relation (a join, not an enum
+ * comparison, so it is Data API safe). Full entities are loaded per
+ * candidate by seedWebUploads.
+ */
+async function fetchWebBatch(
+  cutoff: Date,
+  offset: number,
+  batchSize: number,
+): Promise<WebScanRow[]> {
+  return Report.getRepository()
+    .createQueryBuilder("r")
+    .select("r.id", "reportId")
+    .addSelect("u.id", "uploadId")
+    .addSelect("u.mediaStatus", "mediaStatus")
+    .leftJoin("r.upload", "u")
+    .innerJoin("r.order", "o")
+    .where("r.created_at > :cutoff", { cutoff })
+    .orderBy("r.id", "ASC")
+    .take(batchSize)
+    .skip(offset)
+    .getRawMany();
+}
+
+/**
+ * One raw scan row for the MMS phase: upload id/mediaStatus plus the
+ * report id. The report→order linkage is a SQL predicate via inner
+ * joins on the report and its order.
+ */
+interface MmsScanRow {
+  uploadId: number;
+  reportId: number | null;
+  mediaStatus: string | null;
+}
+
+/**
+ * One batch of recent MMS uploads (uploads.report_id): narrow getRawMany
+ * scan — only upload id/mediaStatus plus the report id.
+ */
+async function fetchMmsBatch(
+  cutoff: Date,
+  offset: number,
+  batchSize: number,
+): Promise<MmsScanRow[]> {
+  return Upload.getRepository()
+    .createQueryBuilder("u")
+    .select("u.id", "uploadId")
+    .addSelect("u.mediaStatus", "mediaStatus")
+    .addSelect("r.id", "reportId")
+    .innerJoin("u.report", "r")
+    .innerJoin("r.order", "o")
+    .where("u.created_at > :cutoff", { cutoff })
+    .orderBy("u.id", "ASC")
+    .take(batchSize)
+    .skip(offset)
+    .getRawMany();
+}
+
+/**
+ * Backstop scan Phase A: web uploads riding on order-linked reports
+ * (reports.upload_id). Paged by take/skip (safe here — the scan mutates
+ * nothing these rows depend on, so offset windows stay stable). Per
+ * batch: JS-side readiness filter → bulk existing-clip check → full
+ * entity load only for actual seed candidates → seed. Bounded by
+ * SEED_MAX_BATCHES; leftover backlog resumes on the next scheduled run.
+ */
+async function seedWebUploads(
+  cutoff: Date,
+  batchSize: number,
+): Promise<number> {
+  let seeded = 0;
+  let offset = 0;
+  let hitCap = false;
+  for (let batch = 0; batch < SEED_MAX_BATCHES; batch++) {
+    const rows = await fetchWebBatch(cutoff, offset, batchSize);
+    if (rows.length === 0) break;
+    offset += batchSize;
+
+    // Readiness is filtered in JS: media_status is an enum column and
+    // the Aurora Data API can't compare it to a text bind parameter.
+    const seedable = rows.filter(
+      (row): row is WebScanRow & { uploadId: number } =>
+        row.uploadId !== null && row.mediaStatus === "ready",
+    );
+    const clippedIds = await uploadIdsWithClips(
+      seedable.map((row) => row.uploadId),
+    );
+    const candidateIds = seedable
+      .filter((row) => !clippedIds.has(row.uploadId))
+      .map((row) => row.reportId);
+
+    if (candidateIds.length > 0) {
+      // Full entities only for the actual seed candidates — the narrow
+      // scan rows don't carry the location/kit data seeding needs.
+      const candidates = await Report.find({
+        where: { id: In(candidateIds) },
+        relations: ["upload", "location"],
+      });
+      for (const report of candidates) {
+        if (
+          isSeedable(report.upload) &&
+          (await seedClipForUpload(report, report.upload))
+        ) {
+          seeded += 1;
+        }
+      }
+    }
+
+    if (rows.length < batchSize) break; // predicate exhausted
+    if (batch === SEED_MAX_BATCHES - 1) hitCap = true;
+  }
+  if (hitCap) {
+    console.warn(
+      `[clip-auto] Web-upload seed batch cap (${SEED_MAX_BATCHES} × ${batchSize}) reached — ` +
+        `remaining backlog resumes on the next scheduled run`,
+    );
+  }
+  return seeded;
+}
+
+/**
+ * Backstop scan Phase B: MMS uploads pointing back at order-linked
+ * reports (uploads.report_id). Same narrow-select + take/skip shape as
+ * Phase A; readiness is filtered in JS, order linkage in SQL via the
+ * report→order inner join.
+ */
+async function seedMmsUploads(
+  cutoff: Date,
+  batchSize: number,
+): Promise<number> {
+  let seeded = 0;
+  let offset = 0;
+  let hitCap = false;
+  for (let batch = 0; batch < SEED_MAX_BATCHES; batch++) {
+    const rows = await fetchMmsBatch(cutoff, offset, batchSize);
+    if (rows.length === 0) break;
+    offset += batchSize;
+
+    const seedable = rows.filter(
+      (row): row is MmsScanRow & { reportId: number } =>
+        row.reportId !== null && row.mediaStatus === "ready",
+    );
+    const clippedIds = await uploadIdsWithClips(
+      seedable.map((row) => row.uploadId),
+    );
+    const candidateIds = seedable
+      .filter((row) => !clippedIds.has(row.uploadId))
+      .map((row) => row.uploadId);
+
+    if (candidateIds.length > 0) {
+      // Full entities only for the actual seed candidates; report's
+      // eager location/order and upload's eager location load with it.
+      const candidates = await Upload.find({
+        where: { id: In(candidateIds) },
+        relations: ["report"],
+      });
+      for (const upload of candidates) {
+        if (
+          upload.report &&
+          upload.mediaStatus === "ready" &&
+          (await seedClipForUpload(upload.report, upload))
+        ) {
+          seeded += 1;
+        }
+      }
+    }
+
+    if (rows.length < batchSize) break; // predicate exhausted
+    if (batch === SEED_MAX_BATCHES - 1) hitCap = true;
+  }
+  if (hitCap) {
+    console.warn(
+      `[clip-auto] MMS-upload seed batch cap (${SEED_MAX_BATCHES} × ${batchSize}) reached — ` +
+        `remaining backlog resumes on the next scheduled run`,
+    );
+  }
+  return seeded;
+}
+
+/**
  * Backstop scan for the scheduled run: find recent order-linked media
  * that hasn't become a clip yet and seed it. Covers everything
  * placement-time seeding misses (MMS replies arriving after the order,
@@ -254,40 +495,23 @@ export async function seedClipsForRecentlyFedSkip(
  * skip-time only (see seedClipsForRecentlyFedSkip), so nothing skipped
  * before this shipped is ever revisited. Returns the number of clips
  * seeded. Never throws.
+ *
+ * Reads are batch-safe (BUG-042 / issue #407): narrow selects +
+ * take/skip paging keep every Data API response far under the 1 MB cap
+ * regardless of window volume — see SEED_BATCH_SIZE. `batchSize` is a
+ * parameter only so tests can exercise multi-batch paging cheaply;
+ * production callers use the default.
  */
-export async function seedUnclippedOrderMedia(): Promise<number> {
+export async function seedUnclippedOrderMedia(
+  batchSize: number = SEED_BATCH_SIZE,
+): Promise<number> {
   try {
     const cutoff = daysAgo(SEED_WINDOW_DAYS);
 
-    // Web uploads ride on reports (reports.upload_id); the report must
-    // have an order.
-    const reports = await Report.find({
-      where: { order: Not(IsNull()), createdAt: MoreThan(cutoff) },
-      relations: ["upload"],
-    });
+    const seeded =
+      (await seedWebUploads(cutoff, batchSize)) +
+      (await seedMmsUploads(cutoff, batchSize));
 
-    // MMS uploads point back at their report (uploads.report_id); the
-    // report's order is what makes them clip-worthy. mediaStatus and the
-    // order linkage are filtered in JS (Aurora Data API can't compare
-    // enum columns to text parameters, and nested relation filters on
-    // report.order aren't expressible here).
-    const mmsUploads = await Upload.find({
-      where: { report: Not(IsNull()), createdAt: MoreThan(cutoff) },
-      relations: { report: { order: true } },
-    });
-
-    let seeded = 0;
-    for (const report of reports) {
-      if (isSeedable(report.upload)) {
-        if (await seedClipForUpload(report, report.upload)) seeded += 1;
-      }
-    }
-    for (const upload of mmsUploads) {
-      if (!upload.report) continue;
-      if (upload.mediaStatus !== "ready") continue;
-      if (!upload.report.order) continue; // order linkage makes it clip-worthy
-      if (await seedClipForUpload(upload.report, upload)) seeded += 1;
-    }
     if (seeded > 0) {
       console.log(`[clip-auto] Backstop seeded ${seeded} new clip(s)`);
     }
