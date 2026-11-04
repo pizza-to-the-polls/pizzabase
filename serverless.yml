@@ -57,10 +57,11 @@ provider:
     ZAP_NEW_UPLOAD: ${env:ZAP_NEW_UPLOAD}
     ZAP_NEW_CLIP: ${env:ZAP_NEW_CLIP, ''}
     ZAP_SKIP_REPORT: ${env:ZAP_SKIP_REPORT}
-    # Report auto-skip feature flag (src/lib/auto-skip.ts) — enabled by
-    # default (#393); set AUTO_SKIP_REPORTS=false/0 in CI env to force off
-    # per stage. Staged/prod both picked this up on the merge deploy.
-    AUTO_SKIP_REPORTS: ${env:AUTO_SKIP_REPORTS, 'true'}
+    # Report auto-skip feature flag (src/lib/auto-skip.ts) — flipped back
+    # off post-election-day (#393's enable run is over): sub-hour lines and
+    # recently-delivered locations go through to volunteer triage again.
+    # Set AUTO_SKIP_REPORTS=true in CI env to re-enable per stage.
+    AUTO_SKIP_REPORTS: ${env:AUTO_SKIP_REPORTS, ''}
     ZAP_ORDER_REPORT: ${env:ZAP_ORDER_REPORT}
     ZAP_CANCEL_ORDER_REPORT: ${env:ZAP_CANCEL_ORDER_REPORT}
     ZAP_TRUCK_REPORT: ${env:ZAP_TRUCK_REPORT}
