@@ -113,12 +113,14 @@ function putCalls(): any[] {
 }
 
 let runCompilation: () => Promise<Clip | null>;
+let MAX_MEMBERS_PER_COMPILATION: number;
 
 beforeAll(async () => {
   // Imported after the mocks above so the module-level S3Client picks up
   // the mocked constructor.
   const mod = await import("../compileClips");
   runCompilation = mod.runCompilation;
+  MAX_MEMBERS_PER_COMPILATION = mod.MAX_MEMBERS_PER_COMPILATION;
 });
 
 beforeEach(() => {
@@ -275,5 +277,36 @@ describe("runCompilation", () => {
     expect(compilation!.kit).toMatchObject({
       memberClipIds: [approved.id, published.id],
     });
+  });
+
+  it("caps members per compilation to MAX_MEMBERS_PER_COMPILATION, oldest first", async () => {
+    // Election-day-shaped backlog (BUG-041): more compilable candidates
+    // than the per-run cap. makeMember inserts with ascending createdAt,
+    // so candidates arrive oldest-first.
+    const members: Clip[] = [];
+    for (let i = 0; i < MAX_MEMBERS_PER_COMPILATION + 3; i++) {
+      members.push(await makeMember({ video: `clips/cap-${i}/clip.mp4` }));
+    }
+    s3ServesMemberVideos();
+
+    const compilation = await runCompilation();
+
+    expect(compilation).toBeTruthy();
+    // Exactly the cap folded in — the OLDEST members, in createdAt order.
+    expect(compilation!.kit!.memberClipIds).toEqual(
+      members.slice(0, MAX_MEMBERS_PER_COMPILATION).map((m) => m.id),
+    );
+
+    // Capped members are marked compiled...
+    for (const member of members.slice(0, MAX_MEMBERS_PER_COMPILATION)) {
+      const reloaded = (await Clip.findOne({ where: { id: member.id } }))!;
+      expect(reloaded.compiledAt).toBeTruthy();
+    }
+    // ...and the remainder is left compiled_at NULL so the next
+    // scheduled run picks it up.
+    for (const member of members.slice(MAX_MEMBERS_PER_COMPILATION)) {
+      const reloaded = (await Clip.findOne({ where: { id: member.id } }))!;
+      expect(reloaded.compiledAt).toBeNull();
+    }
   });
 });
