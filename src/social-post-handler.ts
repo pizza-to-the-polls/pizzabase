@@ -2,6 +2,7 @@ import "reflect-metadata";
 import { initializeDataSource } from "./data-source";
 import { Order } from "./entity/Order";
 import { socialPost } from "./lib/social";
+import type { SocialPlatform } from "./lib/social";
 
 /**
  * Standalone Lambda handler for asynchronous social media posting.
@@ -15,6 +16,10 @@ import { socialPost } from "./lib/social";
  * the same exposure). A future improvement could guard by checking an
  * order-level "posts already fired" flag, but adding a "postsSentAt"
  * column to the Order entity and a quick check here is deferred.
+ *
+ * Event shape: `{ orderId, platforms? }`. `platforms` restricts posting to
+ * a subset of {bluesky, twitter, threads} for targeted retries (omitted by
+ * the main app — normal traffic posts to all platforms).
  */
 
 let dataSourcePromise: Promise<unknown> | null = null;
@@ -28,6 +33,7 @@ function getDataSource(): Promise<unknown> {
 
 export async function handler(event: {
   orderId: number;
+  platforms?: SocialPlatform[];
 }): Promise<{ success: boolean; orderId: number }> {
   await getDataSource();
 
@@ -37,7 +43,7 @@ export async function handler(event: {
     return { success: false, orderId: event.orderId };
   }
 
-  await socialPost(order);
+  await socialPost(order, { platforms: event.platforms });
 
   return { success: true, orderId: event.orderId };
 }

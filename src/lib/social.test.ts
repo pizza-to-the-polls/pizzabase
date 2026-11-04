@@ -130,6 +130,30 @@ describe("socialPost", () => {
     // Should not throw — fire-and-forget semantics
   });
 
+  it("posts only to the requested platforms when options.platforms is set", async () => {
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder, { platforms: ["twitter"] });
+
+    expect(twitterPost).toHaveBeenCalledTimes(1);
+    expect(blueskyPost).not.toHaveBeenCalled();
+    expect(threadsPost).not.toHaveBeenCalled();
+  });
+
+  it("posts to no platforms when options.platforms is empty", async () => {
+    (blueskyPost as jest.Mock).mockResolvedValue(undefined);
+    (twitterPost as jest.Mock).mockResolvedValue(undefined);
+    (threadsPost as jest.Mock).mockResolvedValue(undefined);
+
+    await socialPost(mockOrder, { platforms: [] });
+
+    expect(blueskyPost).not.toHaveBeenCalled();
+    expect(twitterPost).not.toHaveBeenCalled();
+    expect(threadsPost).not.toHaveBeenCalled();
+  });
+
   it("does not throw when twitterPost rejects", async () => {
     (blueskyPost as jest.Mock).mockResolvedValue(undefined);
     (twitterPost as jest.Mock).mockRejectedValue(new Error("Twitter down"));
