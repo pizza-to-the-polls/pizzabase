@@ -48,10 +48,10 @@ export const AUTO_SKIP_ACTOR = "pizza-to-the-polls";
 
 /**
  * Feature flag — the heuristic auto-skip path (recent_order,
- * line_under_an_hour). ON by default since the enable flip (#393):
- * serverless.yml passes 'true' unless the deploy env overrides. Set
- * AUTO_SKIP_REPORTS=false (or "0") in CI env to force off per stage
- * — a redeploy, not a code change.
+ * line_under_an_hour). OFF by default again (flipped off post-e-day,
+ * after #393's enable run): serverless.yml passes '' unless the deploy
+ * env overrides. Set AUTO_SKIP_REPORTS=true in CI env to re-enable
+ * per stage — a redeploy, not a code change.
  *
  * Only the heuristic reasons are gated; the georgia skip is
  * unconditional compliance, not a triage heuristic.
